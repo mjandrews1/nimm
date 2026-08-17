@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 16
+**Open Issues:** 15
 
 ---
 
@@ -34,13 +34,12 @@
    - Usage: nimm -d /path/to/db.mdb
    - Persistence verified across sessions
 
-5. **#22** Key encoding integration
-   - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
-   - **Blocks:** #23 (data structure integration)
+5. **#22** Key encoding integration ✅
+   - M-collation ordering (numeric before string)
+   - $ORDER and $QUERY now handle variable references
+   - Shared encodeKey from key_encoding.nim
 
-3. **#20** Wire special variables
-   - $IO, $DEVICE, $KEY, $X, $Y, $ZA, $ZB
-   - **Blocks:** #24 (REPL)
+6. **#23** Data structure integration
 
 ### Phase 3: Storage Integration
 **Goal:** Wire LMDB as backing store for globals
