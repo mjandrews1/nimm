@@ -34,6 +34,10 @@ type
     zstatus*: string        # $ZSTATUS - error status
     zerror*: string         # $ZERROR - error message
     errorStack*: seq[string] # Error propagation stack
+    # Tracing
+    tracingEnabled*: bool   # ZTRACE on/off
+    traceLog*: seq[string]  # Trace log entries
+    traceMaxEntries*: int   # Max trace log size
 
 proc getModeConfig*(mode: Mode): ModeConfig =
   ## Get configuration for a mode
@@ -65,6 +69,9 @@ proc newRuntime*(mode: Mode = nimm): Runtime =
   result.zstatus = ""
   result.zerror = ""
   result.errorStack = @[]
+  result.tracingEnabled = false
+  result.traceLog = @[]
+  result.traceMaxEntries = 10000
 
 proc parseLabels(routine: var Routine) =
   ## Parse labels from routine lines
@@ -227,3 +234,65 @@ proc reset*(rt: var Runtime) =
   rt.etrap = ""
   rt.currentRoutine = ""
   rt.currentLine = 0
+  rt.tracingEnabled = false
+  rt.traceLog.setLen(0)
+
+# --- Execution tracing (ZTRACE) ---
+
+proc enableTracing*(rt: var Runtime) =
+  ## Enable execution tracing
+  rt.tracingEnabled = true
+
+proc disableTracing*(rt: var Runtime) =
+  ## Disable execution tracing
+  rt.tracingEnabled = false
+
+proc isTracing*(rt: Runtime): bool =
+  ## Check if tracing is enabled
+  return rt.tracingEnabled
+
+proc traceCommand*(rt: var Runtime, routine: string, line: int, command: string) =
+  ## Log a command execution
+  if not rt.tracingEnabled:
+    return
+  
+  let entry = $line & ":" & routine & ":" & command
+  rt.traceLog.add(entry)
+  
+  # Trim if too large
+  if rt.traceLog.len > rt.traceMaxEntries:
+    rt.traceLog.delete(0)
+
+proc traceVariable*(rt: var Runtime, name: string, value: string) =
+  ## Log a variable access
+  if not rt.tracingEnabled:
+    return
+  
+  let entry = "VAR:" & name & "=" & value
+  rt.traceLog.add(entry)
+  
+  if rt.traceLog.len > rt.traceMaxEntries:
+    rt.traceLog.delete(0)
+
+proc traceFunction*(rt: var Runtime, name: string, args: string, result: string) =
+  ## Log a function call
+  if not rt.tracingEnabled:
+    return
+  
+  let entry = "FUNC:" & name & "(" & args & ")=" & result
+  rt.traceLog.add(entry)
+  
+  if rt.traceLog.len > rt.traceMaxEntries:
+    rt.traceLog.delete(0)
+
+proc getTraceLog*(rt: Runtime): seq[string] =
+  ## Get trace log entries
+  return rt.traceLog
+
+proc clearTraceLog*(rt: var Runtime) =
+  ## Clear trace log
+  rt.traceLog.setLen(0)
+
+proc traceLogLen*(rt: Runtime): int =
+  ## Get trace log length
+  return rt.traceLog.len
