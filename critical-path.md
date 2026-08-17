@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 17
+**Open Issues:** 16
 
 ---
 
@@ -29,7 +29,12 @@
 ### Phase 3: Storage Integration
 **Goal:** Wire LMDB as backing store for globals
 
-4. **#21** LMDB global store integration
+4. **#21** LMDB global store integration ✅
+   - Global variables (^ prefix) now backed by LMDB
+   - Usage: nimm -d /path/to/db.mdb
+   - Persistence verified across sessions
+
+5. **#22** Key encoding integration
    - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
    - **Blocks:** #23 (data structure integration)
 
