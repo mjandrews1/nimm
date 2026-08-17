@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 11
+**Open Issues:** 10
 
 ---
 
@@ -63,8 +63,9 @@
 ### Phase 5: Testing
 **Goal:** Comprehensive test coverage
 
-10. **#27** Unit tests for all modules
-    - **Blocks:** #28
+10. **#27** Unit tests for all modules ✅
+    - run_all_tests.nim — 19 test modules
+    - All 19 tests passing
 
 11. **#28** Integration tests
     - **Blocks:** #29
