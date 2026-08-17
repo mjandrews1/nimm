@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 19
+**Open Issues:** 18
 
 ---
 
@@ -29,7 +29,11 @@
    - $CASE, $FNUMBER, $ZSYSTEM
    - **Blocked:** #29 (conformance tests) — now unblocked
 
-2. **#19** Wire NI functions to evaluator
+2. **#19** Wire NI functions to evaluator ✅
+   - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
+   - **Blocked:** #23 (data structure integration) — now unblocked
+
+3. **#20** Wire special variables
    - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
    - **Blocks:** #23 (data structure integration)
 
