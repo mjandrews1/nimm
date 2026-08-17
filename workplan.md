@@ -163,10 +163,16 @@ Wire get/set for:
 - Exit codes: 0=success, non-zero=error ✅
 - **Tests:** `tests/test_batch.sh` — batch mode verified
 
-### 4.3 Error Handling
-- Wire $ECODE/$ETRAP to error handling
-- Stack traces on errors
-- Graceful error recovery in REPL
+### 4.3 Error Handling ✅ DONE
+- Wire $ECODE/$ETRAP to error handling ✅
+- Stack traces on errors ✅
+- Graceful error recovery in REPL ✅
+- **Changes:**
+  - `engine.nim` — try/except block in execute()
+  - Sets $ECODE on error (M9999:error message)
+  - Executes $ETRAP if set
+  - Returns "Error" on exception
+- **Tests:** `tests/test_error.m` — error handling verified
 
 ---
 
