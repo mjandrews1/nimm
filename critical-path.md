@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 10
+**Open Issues:** 9
 
 ---
 
@@ -67,8 +67,9 @@
     - run_all_tests.nim — 19 test modules
     - All 19 tests passing
 
-11. **#28** Integration tests
-    - **Blocks:** #29
+11. **#28** Integration tests ✅
+    - test_integration.nim — 29 integration tests
+    - All 29 tests passing
 
 12. **#29** Conformance tests
     - M/MUMPS standard compliance
