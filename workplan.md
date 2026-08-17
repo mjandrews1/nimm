@@ -54,8 +54,8 @@
 - Variable references: lookup in globals/locals
 - Special variables: dispatch to runtime
 
-### 1.3 Command Dispatch
-**File:** `engine.nim`
+### 1.3 Command Dispatch ✅ DONE
+**File:** `engine.nim` — 215 lines
 - SET (with $PIECE/$EXTRACT targets)
 - WRITE (with !, #, ?n format controls)
 - IF/ELSE
@@ -65,13 +65,8 @@
 - NEW (with scoping)
 - DO (label, label^routine)
 - GOTO (label, label^routine)
-- READ
-- HANG
-- LOCK
-- MERGE
-- XECUTE
-- BREAK
-- OPEN/USE/CLOSE
+- READ, HANG, LOCK, MERGE, XECUTE, BREAK, OPEN/USE/CLOSE
+- **Tests:** `tests/test_engine.nim` — 5 tests passing
 
 ### 1.4 Main Entry Point
 **File:** `main.nim`

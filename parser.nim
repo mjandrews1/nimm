@@ -832,7 +832,7 @@ proc parseNameList(p: var Parser): seq[string] =
 ## Design Decision: We only parse the variable names (not subscripts)
 ## for MERGE pairs. The standard allows MERGE A(1)=B(2) but this
 ## implementation simplifies to whole-variable MERGE.
-proc mergePairs(p: var Parser): seq[(string, string)] =
+proc parseMergePairs(p: var Parser): seq[(string, string)] =
   var pairs: seq[(string, string)] = @[]
   while true:
     let (dst, _) = parseVarRef(p)

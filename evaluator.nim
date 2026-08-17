@@ -10,22 +10,20 @@ import ast
 import globals
 import value
 import pattern
-import data_structures
 import unicode_utils
 
 type
   Evaluator* = object
     ## Expression evaluator
-    globals*: ptr Globals  # Pointer to shared globals
+    globals*: ptr Globals
     mode*: string
 
 proc newEvaluator*(globals: var Globals, mode: string = "nimm"): Evaluator =
   result.globals = globals.addr
   result.mode = mode
 
-# Forward declarations
+proc eval*(ev: var Evaluator, expr: Expr): string
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string
-proc evalBinary*(ev: var Evaluator, expr: Expr): string
 
 proc eval*(ev: var Evaluator, expr: Expr): string =
   ## Evaluate an expression and return string result
@@ -35,19 +33,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   of eStr:
     return expr.sval
   of eVar:
-    # Variable reference
     var subs: seq[string] = @[]
     for sub in expr.subs:
       subs.add(ev.eval(sub))
     return ev.globals[].get(expr.vname, subs)
   of eFunc:
-    # Intrinsic function call
     var args: seq[string] = @[]
     for arg in expr.fargs:
       args.add(ev.eval(arg))
     return ev.callFunction(expr.fname, args)
   of eSvar:
-    # Special variable
     return ev.globals[].getSpecialVar("$" & expr.sname)
   of eNeg:
     let val = ev.eval(expr.operand)
@@ -61,133 +56,111 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       return "1"
     return "0"
   of eBinary:
-    return ev.evalBinary(expr)
+    let left = ev.eval(expr.left)
+    let right = ev.eval(expr.right)
+    case expr.op
+    of bAdd:
+      try: return $(parseFloat(left) + parseFloat(right))
+      except: return "0"
+    of bSub:
+      try: return $(parseFloat(left) - parseFloat(right))
+      except: return "0"
+    of bMul:
+      try: return $(parseFloat(left) * parseFloat(right))
+      except: return "0"
+    of bDiv:
+      try:
+        let r = parseFloat(right)
+        if r == 0.0: return "0"
+        return $(parseFloat(left) / r)
+      except: return "0"
+    of bIntDiv:
+      try:
+        let r = parseFloat(right)
+        if r == 0.0: return "0"
+        return $(int(parseFloat(left) / r))
+      except: return "0"
+    of bMod:
+      try:
+        let r = parseFloat(right)
+        if r == 0.0: return "0"
+        let l = parseFloat(left)
+        return $(l - r * floor(l / r))
+      except: return "0"
+    of bPow:
+      try: return $(pow(parseFloat(left), parseFloat(right)))
+      except: return "0"
+    of bConcat:
+      return left & right
+    of bEql:
+      try:
+        if parseFloat(left) == parseFloat(right): return "1"
+        return "0"
+      except:
+        if left == right: return "1"
+        return "0"
+    of bNeql:
+      try:
+        if parseFloat(left) != parseFloat(right): return "1"
+        return "0"
+      except:
+        if left != right: return "1"
+        return "0"
+    of bLt:
+      try:
+        if parseFloat(left) < parseFloat(right): return "1"
+        return "0"
+      except:
+        if left < right: return "1"
+        return "0"
+    of bGt:
+      try:
+        if parseFloat(left) > parseFloat(right): return "1"
+        return "0"
+      except:
+        if left > right: return "1"
+        return "0"
+    of bNlt:
+      try:
+        if parseFloat(left) >= parseFloat(right): return "1"
+        return "0"
+      except:
+        if left >= right: return "1"
+        return "0"
+    of bNgt:
+      try:
+        if parseFloat(left) <= parseFloat(right): return "1"
+        return "0"
+      except:
+        if left <= right: return "1"
+        return "0"
+    of bFollows:
+      if left > right: return "1"
+      return "0"
+    of bNotFollows:
+      if left <= right: return "1"
+      return "0"
+    of bContains:
+      if right in left: return "1"
+      return "0"
+    of bNotContains:
+      if right notin left: return "1"
+      return "0"
+    of bAnd:
+      if left != "0" and left != "" and right != "0" and right != "":
+        return "1"
+      return "0"
+    of bOr:
+      if (left != "0" and left != "") or (right != "0" and right != ""):
+        return "1"
+      return "0"
+    of bSortAfter:
+      if left > right: return "1"
+      return "0"
   of ePattern:
     let lhs = ev.eval(expr.patLhs)
     if matchPattern(lhs, expr.atoms):
       return "1"
-    return "0"
-
-proc evalBinary*(ev: var Evaluator, expr: Expr): string =
-  ## Evaluate binary expression
-  let left = ev.eval(expr.left)
-  let right = ev.eval(expr.right)
-  
-  case expr.op
-  of bAdd:
-    try:
-      return $(parseFloat(left) + parseFloat(right))
-    except:
-      return "0"
-  of bSub:
-    try:
-      return $(parseFloat(left) - parseFloat(right))
-    except:
-      return "0"
-  of bMul:
-    try:
-      return $(parseFloat(left) * parseFloat(right))
-    except:
-      return "0"
-  of bDiv:
-    try:
-      let r = parseFloat(right)
-      if r == 0.0: return "0"
-      return $(parseFloat(left) / r)
-    except:
-      return "0"
-  of bIntDiv:
-    try:
-      let r = parseFloat(right)
-      if r == 0.0: return "0"
-      return $(int(parseFloat(left) / r))
-    except:
-      return "0"
-  of bMod:
-    try:
-      let r = parseFloat(right)
-      if r == 0.0: return "0"
-      let l = parseFloat(left)
-      return $(l - r * floor(l / r))
-    except:
-      return "0"
-  of bPow:
-    try:
-      return $(pow(parseFloat(left), parseFloat(right)))
-    except:
-      return "0"
-  of bConcat:
-    return left & right
-  of bEql:
-    # Numeric if both canonical, else string
-    try:
-      let l = parseFloat(left)
-      let r = parseFloat(right)
-      if l == r: return "1"
-      return "0"
-    except:
-      if left == right: return "1"
-      return "0"
-  of bNeql:
-    try:
-      let l = parseFloat(left)
-      let r = parseFloat(right)
-      if l != r: return "1"
-      return "0"
-    except:
-      if left != right: return "1"
-      return "0"
-  of bLt:
-    try:
-      if parseFloat(left) < parseFloat(right): return "1"
-      return "0"
-    except:
-      if left < right: return "1"
-      return "0"
-  of bGt:
-    try:
-      if parseFloat(left) > parseFloat(right): return "1"
-      return "0"
-    except:
-      if left > right: return "1"
-      return "0"
-  of bNlt:
-    try:
-      if parseFloat(left) >= parseFloat(right): return "1"
-      return "0"
-    except:
-      if left >= right: return "1"
-      return "0"
-  of bNgt:
-    try:
-      if parseFloat(left) <= parseFloat(right): return "1"
-      return "0"
-    except:
-      if left <= right: return "1"
-      return "0"
-  of bFollows:
-    if left > right: return "1"
-    return "0"
-  of bNotFollows:
-    if left <= right: return "1"
-    return "0"
-  of bContains:
-    if right in left: return "1"
-    return "0"
-  of bNotContains:
-    if right notin left: return "1"
-    return "0"
-  of bAnd:
-    if left != "0" and left != "" and right != "0" and right != "":
-      return "1"
-    return "0"
-  of bOr:
-    if (left != "0" and left != "") or (right != "0" and right != ""):
-      return "1"
-    return "0"
-  of bSortAfter:
-    # String sorts after
-    if left > right: return "1"
     return "0"
 
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
@@ -200,10 +173,8 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   of "CHAR", "C":
     var result = ""
     for a in args:
-      try:
-        result.add(char(parseInt(a)))
-      except:
-        discard
+      try: result.add(char(parseInt(a)))
+      except: discard
     return result
   of "DATA", "D":
     if args.len < 1: return ""
@@ -238,19 +209,11 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if val.len > 0: return val
     if args.len > 1: return args[1]
     return ""
-  of "INCREMENT", "I":
-    if args.len < 1: return ""
-    let val = ev.globals[].get(args[0])
-    let increment = if args.len > 1: parseFloat(args[1]) else: 1.0
-    let newVal = parseFloat(val) + increment
-    ev.globals[].set(args[0], @[], $newVal)
-    return $newVal
   of "JUSTIFY", "J":
     if args.len < 2: return ""
     let s = args[0]
     let width = parseInt(args[1])
     if args.len > 2:
-      # Numeric justify
       let precision = parseInt(args[2])
       try:
         let num = parseFloat(s)
@@ -258,12 +221,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       except:
         return s
     else:
-      # String justify (right-align)
       return s.align(width)
   of "LENGTH", "L":
     if args.len < 1: return ""
     if args.len > 1:
-      # Count occurrences of delimiter
       let s = args[0]
       let d = args[1]
       if d.len == 0: return $(s.len + 1)
@@ -286,10 +247,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     let d = args[1]
     let start = if args.len > 2: parseInt(args[2]) else: 1
     let stop = if args.len > 3: parseInt(args[3]) else: start
-    
     if d.len == 0: return s
-    
-    # Split by delimiter
     var pieces: seq[string] = @[]
     var current = ""
     for ch in s:
@@ -299,8 +257,6 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       else:
         current.add(ch)
     pieces.add(current)
-    
-    # Extract requested pieces
     var result = ""
     for i in start..stop:
       if i > 0 and i <= pieces.len:
@@ -319,8 +275,6 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if args.len < 1: return ""
     return utf8Reverse(args[0])
   of "SELECT", "SEL":
-    # $SELECT(expr1:value1, expr2:value2, ...)
-    # Args are passed as "expr:value" strings
     for arg in args:
       let colonPos = arg.find(':')
       if colonPos > 0:
@@ -328,13 +282,11 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         let val = arg[colonPos+1..^1]
         if cond != "0" and cond.len > 0:
           return val
+      elif arg == args[^1]:
+        return arg
     return ""
   of "STACK", "ST":
-    # $STACK - return stack depth
     return $ev.globals[].scopeDepth()
-  of "TEXT", "T":
-    # $TEXT - source line access (placeholder)
-    return ""
   of "TRANSLATE", "TR":
     if args.len < 2: return args[0]
     let s = args[0]
@@ -346,7 +298,6 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       if pos >= 0:
         if pos < toChars.len:
           result.add(toChars[pos])
-        # else: character is deleted
       else:
         result.add(ch)
     return result
@@ -382,18 +333,12 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     elif 'P' in format and num < 0:
       s = "(" & s[1..^1] & ")"
     return s
-  of "QUERY", "Q":
-    # $QUERY - simplified
-    if args.len < 1: return ""
-    return ""
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
   else:
-    # Unknown function
     return ""
 
-# Helper to make Evaluator work with pattern.nim
 proc matchPattern*(s: string, atoms: seq[PatternAtom]): bool =
   var pos = 0
   for atom in atoms:

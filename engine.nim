@@ -1,0 +1,215 @@
+# engine.nim — Command dispatch for nimm
+# Implements all M/MUMPS commands
+
+import strutils
+import tables
+import os
+import ast
+import globals
+import evaluator
+import runtime
+import parser
+
+type
+  Engine* = ref object
+    ## M/MUMPS command interpreter
+    globals*: ptr Globals
+    evaluator*: ptr Evaluator
+    runtime*: ptr Runtime
+    output*: string
+    testValue*: bool
+
+proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Runtime): Engine =
+  new(result)
+  result.globals = globals.addr
+  result.evaluator = evaluator.addr
+  result.runtime = runtime.addr
+  result.output = ""
+  result.testValue = false
+
+proc write*(eng: var Engine, s: string) =
+  eng.output.add(s)
+
+proc writeln*(eng: var Engine, s: string) =
+  eng.output.add(s & "\n")
+
+proc getOutput*(eng: Engine): string =
+  return eng.output
+
+proc clearOutput*(eng: var Engine) =
+  eng.output = ""
+
+proc parseLine*(code: string): Line
+
+proc execute*(eng: var Engine, line: Line): string =
+  ## Execute a line of M code (Line is already ref object)
+  if line == nil: return ""
+  result = ""
+
+  for cmdNode in line.cmds:
+    if cmdNode == nil: continue
+
+    # Check postconditional
+    if cmdNode.postcond != nil:
+      let cond = eng.evaluator[].eval(cmdNode.postcond)
+      if cond == "0" or cond == "":
+        continue
+
+    let cmd = cmdNode.cmd
+    if cmd == nil: continue
+
+    case cmd.kind
+    of CmdKind.cSet:
+      for item in cmd.setItems:
+        let value = eng.evaluator[].eval(item.value)
+        case item.target.kind
+        of SetKind.stVar:
+          var subs: seq[string] = @[]
+          for sub in item.target.tsubs:
+            subs.add(eng.evaluator[].eval(sub))
+          eng.globals[].set(item.target.tname, subs, value)
+        of SetKind.stPiece:
+          let varName = item.target.targetVar
+          let current = eng.globals[].get(varName)
+          let delim = eng.evaluator[].eval(item.target.targs[0])
+          let pieceNum = parseInt(eng.evaluator[].eval(item.target.targs[1]))
+          var pieces: seq[string] = @[]
+          var currentPiece = ""
+          for ch in current:
+            if delim.len > 0 and ch == delim[0]:
+              pieces.add(currentPiece)
+              currentPiece = ""
+            else:
+              currentPiece.add(ch)
+          pieces.add(currentPiece)
+          while pieces.len < pieceNum:
+            pieces.add("")
+          pieces[pieceNum - 1] = value
+          var joined = ""
+          for i, p in pieces:
+            if i > 0: joined.add(delim)
+            joined.add(p)
+          eng.globals[].set(varName, @[], joined)
+        of SetKind.stExtract:
+          let varName = item.target.targetVar
+          let current = eng.globals[].get(varName)
+          let startIdx = parseInt(eng.evaluator[].eval(item.target.targs[0])) - 1
+          let endIdx = if item.target.targs.len > 1:
+            parseInt(eng.evaluator[].eval(item.target.targs[1])) - 1
+          else:
+            startIdx
+          var res = ""
+          if startIdx > 0:
+            res.add(current[0..<min(startIdx, current.len)])
+          res.add(value)
+          if endIdx + 1 < current.len:
+            res.add(current[endIdx + 1..^1])
+          eng.globals[].set(varName, @[], res)
+
+    of CmdKind.cWrite:
+      for arg in cmd.writeArgs:
+        case arg.kind
+        of WriteKind.wrExpr:
+          let val = eng.evaluator[].eval(arg.wexpr)
+          eng.write(val)
+        of WriteKind.wrNewline:
+          eng.writeln("")
+        of WriteKind.wrFormFeed:
+          eng.write("\f")
+        of WriteKind.wrColumn:
+          eng.write(" ".repeat(arg.col))
+
+    of CmdKind.cIf:
+      if cmd.ifCond != nil:
+        let cond = eng.evaluator[].eval(cmd.ifCond)
+        eng.testValue = (cond != "0" and cond != "")
+        if eng.testValue and cmd.ifBody != nil:
+          result = eng.execute(cmd.ifBody)
+
+    of CmdKind.cFor:
+      if cmd.forSpec.varName == "":
+        # Argumentless FOR — loops until QUIT
+        while true:
+          if cmd.forBody != nil:
+            let r = eng.execute(cmd.forBody)
+            if r == "QUIT":
+              break
+      else:
+        let init = parseFloat(eng.evaluator[].eval(cmd.forSpec.initE))
+        let step = if cmd.forSpec.stepE != nil:
+          parseFloat(eng.evaluator[].eval(cmd.forSpec.stepE))
+        else: 1.0
+        let limit = if cmd.forSpec.limitE != nil:
+          parseFloat(eng.evaluator[].eval(cmd.forSpec.limitE))
+        else: 0.0
+        var current = init
+        while current <= limit:
+          eng.globals[].set(cmd.forSpec.varName, @[], $current)
+          if cmd.forBody != nil:
+            let r = eng.execute(cmd.forBody)
+            if r == "QUIT":
+              break
+          current += step
+
+    of CmdKind.cQuit:
+      if cmd.quitVal != nil:
+        return eng.evaluator[].eval(cmd.quitVal)
+      return "QUIT"
+
+    of CmdKind.cKill:
+      for killRef in cmd.killRefs:
+        if killRef.kind == eVar:
+          var subs: seq[string] = @[]
+          for sub in killRef.subs:
+            subs.add(eng.evaluator[].eval(sub))
+          eng.globals[].kill(killRef.vname, subs)
+
+    of CmdKind.cNew:
+      eng.globals[].pushScope()
+
+    of CmdKind.cDo:
+      for arg in cmd.doArgs:
+        if arg.kind == eVar:
+          let label = arg.vname
+          let routine = eng.runtime[].currentRoutine
+          if routine.len > 0:
+            let gotLine = eng.runtime[].getLine(routine, label, 0)
+            if gotLine.len > 0:
+              discard eng.execute(parseLine(gotLine))
+
+    of CmdKind.cGoto:
+      if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:
+        let label = cmd.gotoExpr.vname
+        let routine = eng.runtime[].currentRoutine
+        if routine.len > 0:
+          let gotLine = eng.runtime[].getLine(routine, label, 0)
+          if gotLine.len > 0:
+            result = eng.execute(parseLine(gotLine))
+
+    of CmdKind.cRead:
+      for varExpr in cmd.readVars:
+        if varExpr.kind == eVar:
+          let val = readLine(stdin)
+          eng.globals[].set(varExpr.vname, @[], val)
+
+    of CmdKind.cHang:
+      if cmd.hangExpr != nil:
+        let seconds = parseFloat(eng.evaluator[].eval(cmd.hangExpr))
+        os.sleep(int(seconds * 1000))
+
+    of CmdKind.cLock, CmdKind.cMerge, CmdKind.cBreak,
+       CmdKind.cOpen, CmdKind.cUse, CmdKind.cClose:
+      discard
+
+    of CmdKind.cXecute:
+      if cmd.xecExpr != nil:
+        let code = eng.evaluator[].eval(cmd.xecExpr)
+        result = eng.execute(parseLine(code))
+
+    else:
+      discard
+
+proc parseLine*(code: string): Line =
+  ## Parse a line of M code (Line is ref object)
+  var p = newParser(code)
+  return p.parseLine()
