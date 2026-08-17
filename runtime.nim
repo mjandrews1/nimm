@@ -28,6 +28,12 @@ type
     currentLine*: int
     mode*: Mode
     config*: ModeConfig
+    # Error handling
+    ecode*: string          # $ECODE - error code
+    etrap*: string          # $ETRAP - error trap expression
+    zstatus*: string        # $ZSTATUS - error status
+    zerror*: string         # $ZERROR - error message
+    errorStack*: seq[string] # Error propagation stack
 
 proc getModeConfig*(mode: Mode): ModeConfig =
   ## Get configuration for a mode
@@ -54,6 +60,11 @@ proc newRuntime*(mode: Mode = nimm): Runtime =
   result.currentLine = 0
   result.mode = mode
   result.config = getModeConfig(mode)
+  result.ecode = ""
+  result.etrap = ""
+  result.zstatus = ""
+  result.zerror = ""
+  result.errorStack = @[]
 
 proc parseLabels(routine: var Routine) =
   ## Parse labels from routine lines
@@ -153,3 +164,66 @@ proc getLine*(rt: Runtime, spec: string): string =
     routineName = rt.currentRoutine
   
   return rt.getLine(routineName, label, offset)
+
+# --- Error handling ---
+
+proc setError*(rt: var Runtime, code: string, message: string = "") =
+  ## Set error state
+  rt.ecode = code
+  rt.zerror = message
+  rt.zstatus = code & ":" & message
+  rt.errorStack.add(rt.zstatus)
+
+proc clearError*(rt: var Runtime) =
+  ## Clear error state
+  rt.ecode = ""
+  rt.zstatus = ""
+  rt.zerror = ""
+
+proc hasError*(rt: Runtime): bool =
+  ## Check if error state is set
+  return rt.ecode.len > 0
+
+proc getLastError*(rt: Runtime): string =
+  ## Get last error from stack
+  if rt.errorStack.len > 0:
+    return rt.errorStack[^1]
+  return ""
+
+proc popError*(rt: var Runtime): string =
+  ## Pop last error from stack
+  if rt.errorStack.len > 0:
+    result = rt.errorStack[^1]
+    rt.errorStack.setLen(rt.errorStack.len - 1)
+    if rt.errorStack.len > 0:
+      rt.zstatus = rt.errorStack[^1]
+    else:
+      rt.zstatus = ""
+  else:
+    result = ""
+
+proc setEtrap*(rt: var Runtime, expression: string) =
+  ## Set error trap expression
+  rt.etrap = expression
+
+proc getEtrap*(rt: Runtime): string =
+  ## Get error trap expression
+  return rt.etrap
+
+proc handle_error*(rt: var Runtime, code: string, message: string) =
+  ## Handle an error: set state and invoke trap if set
+  rt.setError(code, message)
+  
+  # If $ETRAP is set, we would invoke it here
+  # For now, just log the error
+  if rt.etrap.len > 0:
+    # TODO: Execute etrap expression
+    discard
+
+proc reset*(rt: var Runtime) =
+  ## Reset runtime state
+  rt.clearError()
+  rt.errorStack.setLen(0)
+  rt.etrap = ""
+  rt.currentRoutine = ""
+  rt.currentLine = 0
