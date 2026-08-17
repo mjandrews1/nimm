@@ -422,6 +422,24 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
         discard p.advance()
       else:
         break
+  elif name == "CASE":
+    # $CASE(expr, val1:result1, val2:result2, ..., :default)
+    # First arg is the expression to match
+    args.add parseExpr(p)
+    if p.peek() == tokComma:
+      discard p.advance()
+    # Remaining args are val:result pairs
+    while true:
+      let val = parseExpr(p)
+      if p.peek() == tokColon:
+        discard p.advance()
+      let result = parseExpr(p)
+      args.add val
+      args.add result
+      if p.peek() == tokComma:
+        discard p.advance()
+      else:
+        break
   else:
     # Normal function: comma-separated expressions
     while true:

@@ -38,6 +38,23 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       subs.add(ev.eval(sub))
     return ev.globals[].get(expr.vname, subs)
   of eFunc:
+    # Special handling for functions that need variable references
+    if expr.fname in ["INCREMENT", "INCR"]:
+      # $INCREMENT needs the variable name, not its value
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      let increment = if expr.fargs.len > 1:
+        parseFloat(ev.eval(expr.fargs[1]))
+      else: 1.0
+      let current = ev.globals[].get(varName)
+      var num = 0.0
+      try: num = parseFloat(current)
+      except: discard
+      let newVal = num + increment
+      ev.globals[].set(varName, @[], $newVal)
+      return $newVal
     var args: seq[string] = @[]
     for arg in expr.fargs:
       args.add(ev.eval(arg))
@@ -275,15 +292,17 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if args.len < 1: return ""
     return utf8Reverse(args[0])
   of "SELECT", "SEL":
-    for arg in args:
-      let colonPos = arg.find(':')
-      if colonPos > 0:
-        let cond = arg[0..<colonPos]
-        let val = arg[colonPos+1..^1]
-        if cond != "0" and cond.len > 0:
-          return val
-      elif arg == args[^1]:
-        return arg
+    # $SELECT(cond1:val1,cond2:val2,...) is flattened to [cond1, val1, cond2, val2, ...]
+    var i = 0
+    while i < args.len - 1:
+      let cond = args[i]
+      let val = args[i + 1]
+      if cond != "0" and cond.len > 0:
+        return val
+      i += 2
+    # If no condition matched, return last arg if odd number
+    if args.len mod 2 == 1:
+      return args[^1]
     return ""
   of "STACK", "ST":
     return $ev.globals[].scopeDepth()
@@ -302,18 +321,20 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         result.add(ch)
     return result
   of "CASE", "CAS":
-    if args.len < 2: return ""
+    # $CASE(expr, val1:result1, val2:result2, ..., :default)
+    # Flattened to [expr, val1, result1, val2, result2, ...]
+    if args.len < 3: return ""
     let expr = args[0]
-    for i in 1..<args.len:
-      let arg = args[i]
-      let colonPos = arg.find(':')
-      if colonPos > 0:
-        let val = arg[0..<colonPos]
-        let result = arg[colonPos+1..^1]
-        if expr == val:
-          return result
-      elif i == args.len - 1:
-        return arg
+    var i = 1
+    while i < args.len - 1:
+      let val = args[i]
+      let res = args[i + 1]
+      if expr == val:
+        return res
+      i += 2
+    # Check for default (last arg if odd number after expr)
+    if (args.len - 1) mod 2 == 1:
+      return args[^1]
     return ""
   of "FNUMBER", "FN":
     if args.len < 1: return ""
@@ -333,6 +354,19 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     elif 'P' in format and num < 0:
       s = "(" & s[1..^1] & ")"
     return s
+  of "QUERY", "Q":
+    if args.len < 1: return ""
+    # $QUERY returns next subscripted variable in collation order
+    # For local variables, use orderLocal
+    let varName = args[0]
+    let forward = if args.len > 1: parseInt(args[1]) >= 0 else: true
+    return ev.globals[].orderLocal(varName, @[], forward)
+  of "TEXT", "T":
+    if args.len < 1: return ""
+    # $TEXT returns a line of source code
+    # Format: label+offset^routine
+    # For now, return empty - needs runtime integration
+    return ""
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
