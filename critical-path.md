@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 20
+**Open Issues:** 19
 
 ---
 
@@ -22,11 +22,12 @@
 ### Phase 2: Function Integration
 **Goal:** Wire evaluator to call actual functions
 
-1. **#18** Wire intrinsic functions to evaluator
+1. **#18** Wire intrinsic functions to evaluator ✅
    - $ASCII, $CHAR, $DATA, $EXTRACT, $FIND, $GET, $INCREMENT
    - $JUSTIFY, $LENGTH, $ORDER, $PIECE, $QUERY, $RANDOM
    - $REVERSE, $SELECT, $STACK, $TEXT, $TRANSLATE
-   - **Blocks:** #29 (conformance tests)
+   - $CASE, $FNUMBER, $ZSYSTEM
+   - **Blocked:** #29 (conformance tests) — now unblocked
 
 2. **#19** Wire NI functions to evaluator
    - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
