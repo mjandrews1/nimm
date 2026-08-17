@@ -173,9 +173,19 @@ proc execute*(eng: var Engine, line: Line): string =
           let label = arg.vname
           let routine = eng.runtime[].currentRoutine
           if routine.len > 0:
-            let gotLine = eng.runtime[].getLine(routine, label, 0)
-            if gotLine.len > 0:
-              discard eng.execute(parseLine(gotLine))
+            # Execute from label until QUIT or next label
+            var offset = 0
+            while true:
+              let gotLine = eng.runtime[].getLine(routine, label, offset)
+              if gotLine.len == 0:
+                break
+              # Skip label lines (they start with a word followed by space or no space)
+              let parsed = parseLine(gotLine)
+              if parsed != nil and parsed.cmds.len > 0:
+                let r = eng.execute(parsed)
+                if r == "QUIT":
+                  break
+              offset.inc
 
     of CmdKind.cGoto:
       if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:

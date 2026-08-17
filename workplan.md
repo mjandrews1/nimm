@@ -68,14 +68,16 @@
 - READ, HANG, LOCK, MERGE, XECUTE, BREAK, OPEN/USE/CLOSE
 - **Tests:** `tests/test_engine.nim` — 5 tests passing
 
-### 1.4 Main Entry Point
-**File:** `main.nim`
-- CLI argument parsing
-- `-x 'CODE'` — execute code
+### 1.4 Main Entry Point ✅ DONE
+**File:** `main.nim` — 165 lines
+- CLI argument parsing (manual, no parseopt quirks)
+- `-x 'CODE'` — execute code directly
 - `-r file.m -e 'CODE'` — load routine and execute
-- `-d /path/to/db` — LMDB database path
+- `-d /path/to/db` — LMDB database path (placeholder)
 - `-m strict|rsm|nimm` — mode selection
 - `--repl` — interactive REPL mode
+- Fixed engine.nim DO command: executes label lines until QUIT
+- **Tests:** `tests/test.m` — routine with ENTRY/GREET labels
 
 ---
 
