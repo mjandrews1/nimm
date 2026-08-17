@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 12
+**Open Issues:** 11
 
 ---
 
@@ -43,7 +43,7 @@
    - All 9 data structures accessible via $NI_* functions
    - Array, Object, Stack, Queue, Set, Map, Sorted, Deque, Bag
 
-### Phase 4: Interactive/Batch Modes
+### Phase 4: Interactive/Batch Modes ✅ COMPLETE
 **Goal:** Make nimm usable as a tool
 
 7. **#24** Interactive REPL ✅
@@ -55,11 +55,10 @@
    - -r file.m -e 'CODE' pattern
    - Exit codes: 0=success, non-zero=error
 
-9. **#26** Error handling integration
-
-9. **#26** Error handling integration
-   - Wire $ECODE/$ETRAP from error_handling.nim
-   - **Blocks:** #29
+9. **#26** Error handling integration ✅
+   - try/except in engine.execute()
+   - $ECODE/$ETRAP wired
+   - Graceful error recovery
 
 ### Phase 5: Testing
 **Goal:** Comprehensive test coverage
