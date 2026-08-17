@@ -136,9 +136,15 @@ proc main() =
       let output = eng.getOutput()
       if output.len > 0:
         echo output
+      # Check for error indicators
+      if result.startsWith("Error") or result.startsWith("M Error"):
+        quit(1)
     except:
       echo "Error: " & getCurrentExceptionMsg()
       quit(1)
+  elif args.routineFile.len > 0:
+    # Routine loaded but no code to execute — just exit
+    discard
   else:
     # No code or REPL — show help
     echo "nimm M/MUMPS Interpreter"

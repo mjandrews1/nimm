@@ -157,10 +157,11 @@ Wire get/set for:
 - Special commands: /quit, /load, /clear, /history, /vars, /globals, /help ✅
 - **Tests:** Manual test — REPL verified with commands and history
 
-### 4.2 Batch Mode
-- Execute M routines from files
-- Support `-r file.m -e 'CODE'` pattern
-- Exit codes: 0=success, non-zero=error
+### 4.2 Batch Mode ✅ DONE
+- Execute M routines from files ✅
+- Support `-r file.m -e 'CODE'` pattern ✅
+- Exit codes: 0=success, non-zero=error ✅
+- **Tests:** `tests/test_batch.sh` — batch mode verified
 
 ### 4.3 Error Handling
 - Wire $ECODE/$ETRAP to error handling
