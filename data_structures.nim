@@ -1042,3 +1042,383 @@ proc findOverlapping(node: IntervalNode, interval: Interval): seq[Interval] =
 proc query*(it: NiIntervalTree, low, high: int): seq[Interval] =
   return findOverlapping(it.root, Interval(low: low, high: high))
 
+# --- NiSuffixArray ---
+type
+  NiSuffixArray* = object
+    ## Suffix array for string pattern matching
+    text*: string
+    sa*: seq[int]       # suffix array (sorted indices)
+    lcp*: seq[int]      # longest common prefix array
+
+proc buildSuffixArray*(text: string): seq[int] =
+  ## Build suffix array using prefix doubling
+  let n = text.len
+  var sa = newSeq[int](n)
+  var rank = newSeq[int](n)
+  var tmp = newSeq[int](n)
+  
+  for i in 0..<n:
+    sa[i] = i
+    rank[i] = int(text[i])
+  
+  var k = 1
+  while k < n:
+    # Create comparison pairs
+    var pairs = newSeq[(int, int, int)](n)
+    for i in 0..<n:
+      let ri = rank[i]
+      let rj = if i + k < n: rank[i + k] else: -1
+      pairs[i] = (ri, rj, i)
+    
+    # Sort by pairs (bubble sort for simplicity)
+    for i in 0..<n-1:
+      for j in 0..<n-i-1:
+        let cmp_r1 = pairs[j][0] - pairs[j+1][0]
+        let cmp_r2 = pairs[j][1] - pairs[j+1][1]
+        if cmp_r1 > 0 or (cmp_r1 == 0 and cmp_r2 > 0):
+          swap(pairs[j], pairs[j+1])
+    
+    # Extract sorted indices
+    for i in 0..<n:
+      sa[i] = pairs[i][2]
+    
+    # Update ranks
+    tmp[sa[0]] = 0
+    for i in 1..<n:
+      tmp[sa[i]] = tmp[sa[i-1]]
+      if pairs[i][0] != pairs[i-1][0] or pairs[i][1] != pairs[i-1][1]:
+        inc tmp[sa[i]]
+    
+    for i in 0..<n:
+      rank[i] = tmp[i]
+    
+    if rank[sa[n-1]] == n - 1:
+      break
+    k *= 2
+  
+  return sa
+
+proc buildLCP(text: string, sa: seq[int]): seq[int] =
+  ## Build LCP array from suffix array
+  let n = text.len
+  var rank = newSeq[int](n)
+  for i in 0..<n:
+    rank[sa[i]] = i
+  
+  result = newSeq[int](n)
+  var h = 0
+  for i in 0..<n:
+    if rank[i] > 0:
+      let j = sa[rank[i] - 1]
+      while i + h < n and j + h < n and text[i + h] == text[j + h]:
+        inc h
+      result[rank[i]] = h
+      if h > 0: dec h
+
+proc newSuffixArray*(text: string): NiSuffixArray =
+  result.text = text
+  result.sa = buildSuffixArray(text)
+  result.lcp = buildLCP(text, result.sa)
+
+proc search*(sa: NiSuffixArray, pattern: string): seq[int] =
+  ## Search for pattern in suffix array
+  result = @[]
+  let n = sa.text.len
+  let m = pattern.len
+  if m == 0 or m > n: return
+  
+  # Binary search for first occurrence
+  var lo = 0
+  var hi = n
+  while lo < hi:
+    let mid = (lo + hi) div 2
+    let suffix = sa.text[sa.sa[mid]..^1]
+    let cmpLen = min(m, suffix.len)
+    let cmp = suffix[0..<cmpLen].cmp(pattern[0..<cmpLen])
+    if cmp < 0:
+      lo = mid + 1
+    else:
+      hi = mid
+  
+  # Collect all matches
+  var i = lo
+  while i < n:
+    let suffix = sa.text[sa.sa[i]..^1]
+    if suffix.len >= m and suffix[0..<m] == pattern:
+      result.add(sa.sa[i])
+    else:
+      let cmpLen = min(m, suffix.len)
+      if suffix[0..<cmpLen].cmp(pattern[0..<cmpLen]) > 0:
+        break
+    inc i
+
+# --- NiWaveletTree ---
+type
+  WaveletNode = ref object
+    low*, high*: int
+    bits*: seq[int]  # bit vector (cumulative count)
+    left*, right*: WaveletNode
+
+  NiWaveletTree* = object
+    ## Wavelet tree for range queries on sequences
+    root*: WaveletNode
+    minVal*, maxVal*: int
+    data*: seq[int]
+
+proc buildWavelet(data: seq[int], lo, hi: int): WaveletNode =
+  if data.len == 0: return nil
+  
+  if lo >= hi:
+    # Leaf node - all values are the same
+    var node = WaveletNode(low: lo, high: hi)
+    node.bits = newSeq[int](data.len + 1)
+    for i in 0..<data.len:
+      node.bits[i + 1] = node.bits[i] + 1
+    return node
+  
+  let mid = (lo + hi) div 2
+  var node = WaveletNode(low: lo, high: hi)
+  node.bits = newSeq[int](data.len + 1)
+  
+  var leftData, rightData: seq[int] = @[]
+  for i in 0..<data.len:
+    node.bits[i + 1] = node.bits[i]
+    if data[i] <= mid:
+      leftData.add(data[i])
+      inc node.bits[i + 1]
+    else:
+      rightData.add(data[i])
+  
+  node.left = buildWavelet(leftData, lo, mid)
+  node.right = buildWavelet(rightData, mid + 1, hi)
+  return node
+
+proc newWaveletTree*(data: seq[int]): NiWaveletTree =
+  result.data = data
+  if data.len == 0:
+    result.minVal = 0
+    result.maxVal = 0
+  else:
+    result.minVal = data[0]
+    result.maxVal = data[0]
+    for v in data:
+      if v < result.minVal: result.minVal = v
+      if v > result.maxVal: result.maxVal = v
+  result.root = buildWavelet(data, result.minVal, result.maxVal)
+
+proc rank*(node: WaveletNode, pos: int, val: int): int =
+  ## Count occurrences of val in [0, pos]
+  if node == nil or pos < 0: return 0
+  if node.low == node.high:
+    return pos + 1  # All values at this level match
+  let mid = (node.low + node.high) div 2
+  if val <= mid:
+    let newpos = node.bits[pos + 1] - 1
+    return rank(node.left, newpos, val)
+  else:
+    let newpos = pos - node.bits[pos + 1]
+    return rank(node.right, newpos, val)
+
+proc rangeRank*(wt: NiWaveletTree, lo, hi: int, val: int): int =
+  ## Count occurrences of val in [lo, hi]
+  if lo > hi: return 0
+  return rank(wt.root, hi, val) - (if lo > 0: rank(wt.root, lo - 1, val) else: 0)
+
+# --- NiKdTree ---
+type
+  KdPoint = object
+    coords*: seq[float]
+    data*: string
+
+  KdNode = ref object
+    point*: KdPoint
+    left*, right*: KdNode
+    axis*: int
+
+  NiKdTree* = object
+    ## K-d tree for spatial queries
+    root*: KdNode
+    dimensions*: int
+
+proc newKdTree*(dimensions: int): NiKdTree =
+  result.root = nil
+  result.dimensions = dimensions
+
+proc buildKdTree(points: var seq[KdPoint], depth: int, dims: int): KdNode =
+  if points.len == 0: return nil
+  
+  let axis = depth mod dims
+  
+  # Sort by axis (bubble sort)
+  for i in 0..<points.len-1:
+    for j in 0..<points.len-i-1:
+      if points[j].coords[axis] > points[j+1].coords[axis]:
+        swap(points[j], points[j+1])
+  
+  let mid = points.len div 2
+  var left = points[0..<mid]
+  var right = points[mid+1..^1]
+  
+  result = KdNode(
+    point: points[mid],
+    axis: axis,
+    left: buildKdTree(left, depth + 1, dims),
+    right: buildKdTree(right, depth + 1, dims)
+  )
+
+proc insert*(tree: var NiKdTree, coords: seq[float], data: string = "") =
+  let point = KdPoint(coords: coords, data: data)
+  var points: seq[KdPoint] = @[]
+  
+  # Collect existing points
+  proc collect(node: KdNode) =
+    if node == nil: return
+    points.add(node.point)
+    collect(node.left)
+    collect(node.right)
+  
+  collect(tree.root)
+  points.add(point)
+  tree.root = buildKdTree(points, 0, tree.dimensions)
+
+proc distanceSquared(a, b: seq[float]): float =
+  result = 0.0
+  for i in 0..<a.len:
+    let d = a[i] - b[i]
+    result += d * d
+
+proc nearestNeighbor(node: KdNode, target: seq[float], best: var KdPoint, bestDist: var float) =
+  if node == nil: return
+  
+  let dist = distanceSquared(node.point.coords, target)
+  if dist < bestDist:
+    bestDist = dist
+    best = node.point
+  
+  let axis = node.axis
+  let diff = target[axis] - node.point.coords[axis]
+  
+  var first, second: KdNode
+  if diff < 0:
+    first = node.left
+    second = node.right
+  else:
+    first = node.right
+    second = node.left
+  
+  nearestNeighbor(first, target, best, bestDist)
+  
+  if diff * diff < bestDist:
+    nearestNeighbor(second, target, best, bestDist)
+
+proc nearest*(tree: NiKdTree, coords: seq[float]): KdPoint =
+  var best = KdPoint()
+  var bestDist = high(float)
+  nearestNeighbor(tree.root, coords, best, bestDist)
+  return best
+
+# --- NiRope ---
+type
+  RopeNode = ref object
+    left*, right*: RopeNode
+    text*: string
+    weight*: int  # total length of left subtree
+
+  NiRope* = object
+    ## Rope for large string manipulation
+    root*: RopeNode
+    length*: int
+
+proc newRope*(text: string): NiRope =
+  result.root = RopeNode(text: text, weight: text.len)
+  result.length = text.len
+
+proc ropeLen(node: RopeNode): int =
+  if node == nil: return 0
+  return node.weight + (if node.right != nil: ropeLen(node.right) else: 0)
+
+proc buildRope(text: string): RopeNode =
+  if text.len <= 32:  # leaf threshold
+    return RopeNode(text: text, weight: text.len)
+  
+  let mid = text.len div 2
+  result = RopeNode(
+    left: buildRope(text[0..<mid]),
+    right: buildRope(text[mid..^1]),
+    weight: mid
+  )
+
+proc concat*(a, b: NiRope): NiRope =
+  result.root = RopeNode(left: a.root, right: b.root, weight: ropeLen(a.root))
+  result.length = a.length + b.length
+
+proc toString*(node: RopeNode): string =
+  if node == nil: return ""
+  result = ""
+  if node.left != nil:
+    result.add(toString(node.left))
+  result.add(node.text)
+  if node.right != nil:
+    result.add(toString(node.right))
+
+proc toString*(r: NiRope): string =
+  return toString(r.root)
+
+proc substring*(r: NiRope, start, length: int): string =
+  let s = r.toString()
+  if start < 0 or start >= s.len: return ""
+  let endIdx = min(start + length, s.len)
+  return s[start..<endIdx]
+
+# --- NiMerkleTree ---
+type
+  MerkleNode = ref object
+    hash*: string
+    left*, right*: MerkleNode
+    data*: string  # leaf data
+
+  NiMerkleTree* = object
+    ## Merkle tree for cryptographic verification
+    root*: MerkleNode
+    leaves*: seq[string]
+
+proc simpleHash(s: string): string =
+  ## Simple hash for demonstration (use SHA-256 in production)
+  var h: uint32 = 2166136261'u32
+  for ch in s:
+    h = h xor uint32(ch)
+    h = h * 16777619'u32
+  return $h
+
+proc buildMerkleTree(leaves: seq[string]): MerkleNode =
+  if leaves.len == 0: return nil
+  if leaves.len == 1:
+    return MerkleNode(hash: simpleHash(leaves[0]), data: leaves[0])
+  
+  let mid = (leaves.len + 1) div 2
+  let left = buildMerkleTree(leaves[0..<mid])
+  let right = buildMerkleTree(leaves[mid..^1])
+  
+  let combined = (if left != nil: left.hash else: "") & (if right != nil: right.hash else: "")
+  return MerkleNode(
+    hash: simpleHash(combined),
+    left: left,
+    right: right
+  )
+
+proc newMerkleTree*(data: seq[string]): NiMerkleTree =
+  result.leaves = data
+  result.root = buildMerkleTree(data)
+
+proc rootHash*(tree: NiMerkleTree): string =
+  if tree.root != nil:
+    return tree.root.hash
+  return ""
+
+proc verify*(tree: NiMerkleTree, index: int, data: string): bool =
+  ## Verify a leaf is in the tree
+  if index < 0 or index >= tree.leaves.len: return false
+  return tree.leaves[index] == data
+
+proc leafCount*(tree: NiMerkleTree): int = tree.leaves.len
+
