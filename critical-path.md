@@ -13,27 +13,23 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 18
+**Open Issues:** 17
 
 ---
 
 ## Critical Path (Priority Order)
 
-### Phase 2: Function Integration
+### Phase 2: Function Integration ✅ COMPLETE
 **Goal:** Wire evaluator to call actual functions
 
 1. **#18** Wire intrinsic functions to evaluator ✅
-   - $ASCII, $CHAR, $DATA, $EXTRACT, $FIND, $GET, $INCREMENT
-   - $JUSTIFY, $LENGTH, $ORDER, $PIECE, $QUERY, $RANDOM
-   - $REVERSE, $SELECT, $STACK, $TEXT, $TRANSLATE
-   - $CASE, $FNUMBER, $ZSYSTEM
-   - **Blocked:** #29 (conformance tests) — now unblocked
-
 2. **#19** Wire NI functions to evaluator ✅
-   - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
-   - **Blocked:** #23 (data structure integration) — now unblocked
+3. **#20** Wire special variables ✅
 
-3. **#20** Wire special variables
+### Phase 3: Storage Integration
+**Goal:** Wire LMDB as backing store for globals
+
+4. **#21** LMDB global store integration
    - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
    - **Blocks:** #23 (data structure integration)
 
