@@ -38,6 +38,11 @@ type
     tracingEnabled*: bool   # ZTRACE on/off
     traceLog*: seq[string]  # Trace log entries
     traceMaxEntries*: int   # Max trace log size
+    # Debugging
+    breakpoints*: Table[string, seq[int]]  # routine -> [line numbers]
+    stepMode*: string       # ZSTEP mode: off, into, over, out
+    stepping*: bool         # Currently stepping
+    debugOutput*: seq[string] # Debug output buffer
 
 proc getModeConfig*(mode: Mode): ModeConfig =
   ## Get configuration for a mode
@@ -72,6 +77,10 @@ proc newRuntime*(mode: Mode = nimm): Runtime =
   result.tracingEnabled = false
   result.traceLog = @[]
   result.traceMaxEntries = 10000
+  result.breakpoints = initTable[string, seq[int]]()
+  result.stepMode = "off"
+  result.stepping = false
+  result.debugOutput = @[]
 
 proc parseLabels(routine: var Routine) =
   ## Parse labels from routine lines
@@ -296,3 +305,81 @@ proc clearTraceLog*(rt: var Runtime) =
 proc traceLogLen*(rt: Runtime): int =
   ## Get trace log length
   return rt.traceLog.len
+
+# --- Debugging (ZBREAK/ZSTEP) ---
+
+proc addBreakpoint*(rt: var Runtime, routine: string, line: int) =
+  ## Add a breakpoint
+  let r = routine.toUpperAscii()
+  if r notin rt.breakpoints:
+    rt.breakpoints[r] = @[]
+  if line notin rt.breakpoints[r]:
+    rt.breakpoints[r].add(line)
+
+proc removeBreakpoint*(rt: var Runtime, routine: string, line: int) =
+  ## Remove a breakpoint
+  let r = routine.toUpperAscii()
+  if r in rt.breakpoints:
+    var newLines: seq[int] = @[]
+    for l in rt.breakpoints[r]:
+      if l != line:
+        newLines.add(l)
+    rt.breakpoints[r] = newLines
+    if rt.breakpoints[r].len == 0:
+      rt.breakpoints.del(r)
+
+proc clearBreakpoints*(rt: var Runtime) =
+  ## Remove all breakpoints
+  rt.breakpoints.clear()
+
+proc hasBreakpoint*(rt: Runtime, routine: string, line: int): bool =
+  ## Check if there's a breakpoint at routine:line
+  let r = routine.toUpperAscii()
+  if r in rt.breakpoints:
+    for l in rt.breakpoints[r]:
+      if l == line:
+        return true
+  return false
+
+proc getBreakpoints*(rt: Runtime): Table[string, seq[int]] =
+  ## Get all breakpoints
+  return rt.breakpoints
+
+proc breakpointCount*(rt: Runtime): int =
+  ## Get total number of breakpoints
+  result = 0
+  for lines in rt.breakpoints.values:
+    result += lines.len
+
+proc setStepMode*(rt: var Runtime, mode: string) =
+  ## Set step mode: off, into, over, out
+  rt.stepMode = mode.toLowerAscii()
+  rt.stepping = (rt.stepMode != "off")
+
+proc getStepMode*(rt: Runtime): string =
+  ## Get current step mode
+  return rt.stepMode
+
+proc isStepping*(rt: Runtime): bool =
+  ## Check if currently stepping
+  return rt.stepping
+
+proc shouldBreak*(rt: Runtime, routine: string, line: int): bool =
+  ## Check if execution should break at this point
+  if rt.hasBreakpoint(routine, line):
+    return true
+  if rt.stepping:
+    return true
+  return false
+
+proc addDebugOutput*(rt: var Runtime, msg: string) =
+  ## Add debug output
+  rt.debugOutput.add(msg)
+
+proc getDebugOutput*(rt: Runtime): seq[string] =
+  ## Get debug output
+  return rt.debugOutput
+
+proc clearDebugOutput*(rt: var Runtime) =
+  ## Clear debug output
+  rt.debugOutput.setLen(0)
