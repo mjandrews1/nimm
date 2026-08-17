@@ -1,0 +1,24 @@
+# Compiled binaries
+main
+run_all_tests
+test_conformance
+test_integration
+tests/test_engine
+tests/test_globals
+tests/test_evaluator
+tests/test_data_structures
+tests/test_advanced_structures
+tests/test_new_structures
+tests/test_specialized_structures
+tests/test_error_handling
+tests/test_mode
+tests/test_text
+tests/test_tracing
+tests/test_lmdb
+
+# LMDB database files
+*.mdb
+*.mdb-lock
+
+# Nim cache
+nimcache/
