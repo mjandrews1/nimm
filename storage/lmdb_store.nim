@@ -4,6 +4,7 @@
 import lmdb
 import os
 import strutils
+import key_encoding
 
 type
   LmdbStore* = object
@@ -56,14 +57,6 @@ proc close*(store: var LmdbStore) =
     dbiClose(store.env, store.dbi)
     envClose(store.env)
     store.env = nil
-
-proc encodeKey(global: string, subs: seq[string]): string =
-  ## Encode global/subscript key
-  result = global
-  for sub in subs:
-    result.add('\0')
-    result.add(sub)
-  result.add('\0')
 
 proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
   ## Get value for global[sub1,sub2,...]

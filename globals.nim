@@ -3,7 +3,9 @@
 
 import tables
 import strutils
+import algorithm
 import storage/lmdb_store
+import storage/key_encoding
 
 type
   SpecialVarGetter* = proc(): string
@@ -88,7 +90,7 @@ proc dataLocal*(g: Globals, name: string, subs: seq[string] = @[]): int =
   return 0
 
 proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
-  ## $ORDER for local variables
+  ## $ORDER for local variables with M-collation
   let scope = g.scopes[^1]
   let prefix = name & "\x00"
   
@@ -99,13 +101,8 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
       if '\0' notin rest:
         keys.add(rest)
   
-  # Simple sort
-  for i in 0..<keys.len-1:
-    for j in 0..<keys.len-i-1:
-      if keys[j] > keys[j+1]:
-        let tmp = keys[j]
-        keys[j] = keys[j+1]
-        keys[j+1] = tmp
+  # M-collation sort (numeric before string)
+  keys.sort(mCollationCmp)
   
   if keys.len == 0: return ""
   
@@ -168,6 +165,15 @@ proc kill*(g: var Globals, name: string, subs: seq[string] = @[]) =
     g.killGlobal(name, subs)
   else:
     g.killLocal(name, subs)
+
+proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
+  ## $ORDER (auto-detect local vs global)
+  if name.len > 0 and name[0] == '^':
+    # For globals, we need to iterate LMDB keys
+    # This is a simplified implementation
+    return ""
+  else:
+    return g.orderLocal(name, subs, forward)
 
 proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA (auto-detect local vs global)

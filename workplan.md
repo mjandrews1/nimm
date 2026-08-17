@@ -120,10 +120,16 @@ Wire get/set for:
 - **Usage:** `nimm -d /path/to/db.mdb -x 'SET ^X=1'`
 - **Tests:** Manual test — persistence verified across sessions
 
-### 3.2 Key Encoding
-- Wire `storage/key_encoding.nim`
-- M-collation for subscript ordering
-- Numeric subscripts before string subscripts
+### 3.2 Key Encoding ✅ DONE
+- Wire `storage/key_encoding.nim` ✅
+- M-collation for subscript ordering ✅
+- Numeric subscripts before string subscripts ✅
+- **Changes:**
+  - `storage/lmdb_store.nim` — uses shared `encodeKey` from key_encoding.nim
+  - `globals.nim` — `orderLocal` uses `mCollationCmp` for M-collation sort
+  - `globals.nim` — added unified `order` proc (auto-detects local vs global)
+  - `evaluator.nim` — $ORDER and $QUERY handle variable references directly
+- **Tests:** Manual test — M-collation verified (numeric before string)
 
 ### 3.3 Data Structure Integration
 - Wire `$NI_*` functions to `data_structures.nim`

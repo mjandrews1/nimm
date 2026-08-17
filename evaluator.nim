@@ -56,6 +56,32 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let newVal = num + increment
       ev.globals[].set(varName, @[], $newVal)
       return $newVal
+    # Special handling for $ORDER — needs variable reference, not value
+    if expr.fname in ["ORDER", "O"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      let forward = if expr.fargs.len > 1:
+        parseInt(ev.eval(expr.fargs[1])) >= 0
+      else: true
+      return ev.globals[].order(varName, subs, forward)
+    # Special handling for $QUERY — needs variable reference, not value
+    if expr.fname in ["QUERY", "Q"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      let forward = if expr.fargs.len > 1:
+        parseInt(ev.eval(expr.fargs[1])) >= 0
+      else: true
+      return ev.globals[].order(varName, subs, forward)
     var args: seq[string] = @[]
     for arg in expr.fargs:
       args.add(ev.eval(arg))
@@ -258,7 +284,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   of "ORDER", "O":
     if args.len < 1: return ""
     let forward = if args.len > 1: parseInt(args[1]) >= 0 else: true
-    return ev.globals[].orderLocal(args[0], @[], forward)
+    return ev.globals[].order(args[0], @[], forward)
   of "PIECE", "P":
     if args.len < 2: return ""
     let s = args[0]
@@ -355,13 +381,6 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     elif 'P' in format and num < 0:
       s = "(" & s[1..^1] & ")"
     return s
-  of "QUERY", "Q":
-    if args.len < 1: return ""
-    # $QUERY returns next subscripted variable in collation order
-    # For local variables, use orderLocal
-    let varName = args[0]
-    let forward = if args.len > 1: parseInt(args[1]) >= 0 else: true
-    return ev.globals[].orderLocal(varName, @[], forward)
   of "TEXT", "T":
     if args.len < 1: return ""
     # $TEXT returns a line of source code
