@@ -11,6 +11,7 @@ import globals
 import value
 import pattern
 import unicode_utils
+import ni_functions
 
 type
   Evaluator* = object
@@ -370,6 +371,30 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
+  of "NI_HTTP":
+    # $NI_HTTP(method, url, body) — HTTP client
+    if args.len < 2: return ""
+    let httpMethod = args[0]
+    let url = args[1]
+    let body = if args.len > 2: args[2] else: ""
+    return niHttp(httpMethod, url, body)
+  of "NI_JSON":
+    # $NI_JSON(action, data) — JSON parse/stringify
+    if args.len < 2: return ""
+    let action = args[0]
+    let data = args[1]
+    return niJson(action, data)
+  of "NI_UUID":
+    # $NI_UUID — Generate UUID v4
+    return niUuid()
+  of "NI_SLEEP":
+    # $NI_SLEEP(seconds) — Sleep
+    if args.len < 1: return ""
+    try:
+      niSleep(parseFloat(args[0]))
+    except:
+      discard
+    return ""
   else:
     return ""
 

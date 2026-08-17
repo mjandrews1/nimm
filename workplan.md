@@ -93,9 +93,11 @@ Wire `evaluator.nim` to call:
 - **Notes:** $TEXT requires runtime integration (stub returns "")
 - **Parser:** Special handling for $SELECT and $CASE (val:result pairs)
 
-### 2.2 NI Functions
+### 2.2 NI Functions ✅ DONE
 Wire `evaluator.nim` to call:
 - $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP (from ni_functions.nim)
+- **Tests:** `tests/test_ni.m` — all functions verified
+- **Notes:** $NI_HTTP requires network access; $NI_SLEEP uses os.sleep
 
 ### 2.3 Special Variables
 Wire get/set for:
