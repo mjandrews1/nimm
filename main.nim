@@ -18,6 +18,7 @@ import runtime
 import engine
 import lexer
 import parser
+import special_vars
 
 type
   CliArgs = object
@@ -139,6 +140,7 @@ proc main() =
 
   # Initialize components
   var g = newGlobals()
+  g.registerAllSpecialVars()
   var ev = newEvaluator(g)
   var rt = newRuntime(mode)
   var eng = newEngine(g, ev, rt)

@@ -67,7 +67,11 @@ proc execute*(eng: var Engine, line: Line): string =
           var subs: seq[string] = @[]
           for sub in item.target.tsubs:
             subs.add(eng.evaluator[].eval(sub))
-          eng.globals[].set(item.target.tname, subs, value)
+          # Check if this is a special variable
+          if item.target.tname.startsWith("$"):
+            eng.globals[].setSpecialVar(item.target.tname, value)
+          else:
+            eng.globals[].set(item.target.tname, subs, value)
         of SetKind.stPiece:
           let varName = item.target.targetVar
           let current = eng.globals[].get(varName)

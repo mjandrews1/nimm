@@ -99,11 +99,15 @@ Wire `evaluator.nim` to call:
 - **Tests:** `tests/test_ni.m` — all functions verified
 - **Notes:** $NI_HTTP requires network access; $NI_SLEEP uses os.sleep
 
-### 2.3 Special Variables
+### 2.3 Special Variables ✅ DONE
 Wire get/set for:
-- $DEVICE, $ECODE, $ETRAP, $HOROLOG, $IO, $JOB
-- $KEY, $PRINCIPAL, $QUIT, $REFERENCE, $STORAGE
-- $STACK, $SYSTEM, $TEST, $X, $Y
+- $DEVICE, $ECODE, $ETRAP, $HOROLOG, $IO, $JOB ✅
+- $KEY, $PRINCIPAL, $QUIT, $REFERENCE, $STORAGE ✅
+- $STACK, $SYSTEM, $TEST, $X, $Y ✅
+- **File:** `special_vars.nim` — 137 lines
+- **Tests:** `tests/test_special.m` — all variables verified
+- **Parser fix:** SET $X now correctly updates special variables
+- **Engine fix:** SET checks for $ prefix and uses setSpecialVar
 
 ---
 

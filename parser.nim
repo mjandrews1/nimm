@@ -695,7 +695,9 @@ proc parseSetTarget(p: var Parser): SetTarget =
       else:
         SetTarget(kind: stExtract, targetVar: varName, targs: args)
     else:
-      SetTarget(kind: stVar, tname: name, tsubs: @[])
+      # Special variable: $X, $Y, etc.
+      # Use the full name with $ prefix
+      SetTarget(kind: stVar, tname: "$" & name, tsubs: @[])
   else:
     let (name, subs) = parseVarRef(p)
     SetTarget(kind: stVar, tname: name, tsubs: subs)
