@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 15
+**Open Issues:** 14
 
 ---
 
@@ -26,7 +26,7 @@
 2. **#19** Wire NI functions to evaluator ✅
 3. **#20** Wire special variables ✅
 
-### Phase 3: Storage Integration
+### Phase 3: Storage Integration ✅ COMPLETE
 **Goal:** Wire LMDB as backing store for globals
 
 4. **#21** LMDB global store integration ✅
@@ -39,9 +39,14 @@
    - $ORDER and $QUERY now handle variable references
    - Shared encodeKey from key_encoding.nim
 
-6. **#23** Data structure integration
+6. **#23** Data structure integration ✅
+   - All 9 data structures accessible via $NI_* functions
+   - Array, Object, Stack, Queue, Set, Map, Sorted, Deque, Bag
 
-### Phase 3: Storage Integration
+### Phase 4: Interactive/Batch Modes
+**Goal:** Make nimm usable as a tool
+
+7. **#24** Interactive REPL
 **Goal:** Wire LMDB as backing store for globals
 
 4. **#21** LMDB global store integration
