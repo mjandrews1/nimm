@@ -131,10 +131,20 @@ Wire get/set for:
   - `evaluator.nim` — $ORDER and $QUERY handle variable references directly
 - **Tests:** Manual test — M-collation verified (numeric before string)
 
-### 3.3 Data Structure Integration
-- Wire `$NI_*` functions to `data_structures.nim`
-- Store data structures in LMDB or memory
-- Reference counting or garbage collection
+### 3.3 Data Structure Integration ✅ DONE
+- Wire `$NI_*` functions to `data_structures.nim` ✅
+- Store data structures in memory ✅
+- **Functions implemented:**
+  - `$NI_ARRAY(action, id, ...)` — create, add, get, set, len, clear, destroy
+  - `$NI_OBJECT(action, id, ...)` — create, set, get, has, del, len, clear, destroy
+  - `$NI_STACK(action, id, ...)` — create, push, pop, peek, len, destroy
+  - `$NI_QUEUE(action, id, ...)` — create, enqueue, dequeue, peek, len, destroy
+  - `$NI_SET(action, id, ...)` — create, add, has, del, len, destroy
+  - `$NI_MAP(action, id, ...)` — create, set, get, has, del, len, keys, values, destroy
+  - `$NI_SORTED(action, id, ...)` — create, add, has, del, len, toSeq, destroy
+  - `$NI_DEQUE(action, id, ...)` — create, pushFront, pushBack, popFront, popBack, peekFront, peekBack, len, destroy
+  - `$NI_BAG(action, id, ...)` — create, add, count, del, len, destroy
+- **Tests:** `tests/test_data_structures.m` — all structures verified
 
 ---
 

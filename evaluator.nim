@@ -12,12 +12,24 @@ import value
 import pattern
 import unicode_utils
 import ni_functions
+import data_structures
 
 type
   Evaluator* = object
     ## Expression evaluator
     globals*: ptr Globals
     mode*: string
+
+# Global storage for data structures
+var niArrays: Table[string, NiArray] = initTable[string, NiArray]()
+var niObjects: Table[string, NiObject] = initTable[string, NiObject]()
+var niStacks: Table[string, NiStack] = initTable[string, NiStack]()
+var niQueues: Table[string, NiQueue] = initTable[string, NiQueue]()
+var niSets: Table[string, NiSet] = initTable[string, NiSet]()
+var niMaps: Table[string, NiMap] = initTable[string, NiMap]()
+var niSorted: Table[string, NiSorted] = initTable[string, NiSorted]()
+var niDeques: Table[string, NiDeque] = initTable[string, NiDeque]()
+var niBags: Table[string, NiBag] = initTable[string, NiBag]()
 
 proc newEvaluator*(globals: var Globals, mode: string = "nimm"): Evaluator =
   result.globals = globals.addr
@@ -414,6 +426,340 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     except:
       discard
     return ""
+  of "NI_ARRAY":
+    # $NI_ARRAY(action, id, ...) — Array operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niArrays[id] = newArray()
+      return id
+    of "add":
+      if args.len < 3: return ""
+      if id notin niArrays: return ""
+      niArrays[id].add(args[2])
+      return $niArrays[id].len
+    of "get":
+      if args.len < 3: return ""
+      if id notin niArrays: return ""
+      try:
+        return niArrays[id].get(parseInt(args[2]))
+      except:
+        return ""
+    of "set":
+      if args.len < 4: return ""
+      if id notin niArrays: return ""
+      try:
+        niArrays[id].set(parseInt(args[2]), args[3])
+        return "1"
+      except:
+        return "0"
+    of "len":
+      if id notin niArrays: return "0"
+      return $niArrays[id].len
+    of "clear":
+      if id notin niArrays: return ""
+      niArrays[id].clear()
+      return "1"
+    of "destroy":
+      if id in niArrays:
+        niArrays.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_OBJECT":
+    # $NI_OBJECT(action, id, ...) — Object operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niObjects[id] = newObject()
+      return id
+    of "set":
+      if args.len < 4: return ""
+      if id notin niObjects: return ""
+      niObjects[id].set(args[2], args[3])
+      return "1"
+    of "get":
+      if args.len < 3: return ""
+      if id notin niObjects: return ""
+      return niObjects[id].get(args[2])
+    of "has":
+      if args.len < 3: return ""
+      if id notin niObjects: return "0"
+      if niObjects[id].has(args[2]): return "1"
+      return "0"
+    of "del":
+      if args.len < 3: return ""
+      if id notin niObjects: return ""
+      niObjects[id].del(args[2])
+      return "1"
+    of "len":
+      if id notin niObjects: return "0"
+      return $niObjects[id].len
+    of "clear":
+      if id notin niObjects: return ""
+      niObjects[id].clear()
+      return "1"
+    of "destroy":
+      if id in niObjects:
+        niObjects.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_STACK":
+    # $NI_STACK(action, id, ...) — Stack operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niStacks[id] = newStack()
+      return id
+    of "push":
+      if args.len < 3: return ""
+      if id notin niStacks: return ""
+      niStacks[id].push(args[2])
+      return $niStacks[id].len
+    of "pop":
+      if id notin niStacks: return ""
+      return niStacks[id].pop()
+    of "peek":
+      if id notin niStacks: return ""
+      return niStacks[id].peek()
+    of "len":
+      if id notin niStacks: return "0"
+      return $niStacks[id].len
+    of "destroy":
+      if id in niStacks:
+        niStacks.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_QUEUE":
+    # $NI_QUEUE(action, id, ...) — Queue operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niQueues[id] = newQueue()
+      return id
+    of "enqueue", "push":
+      if args.len < 3: return ""
+      if id notin niQueues: return ""
+      niQueues[id].enqueue(args[2])
+      return $niQueues[id].len
+    of "dequeue", "pop":
+      if id notin niQueues: return ""
+      return niQueues[id].dequeue()
+    of "peek":
+      if id notin niQueues: return ""
+      return niQueues[id].peek()
+    of "len":
+      if id notin niQueues: return "0"
+      return $niQueues[id].len
+    of "destroy":
+      if id in niQueues:
+        niQueues.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SET":
+    # $NI_SET(action, id, ...) — Set operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niSets[id] = newSet()
+      return id
+    of "add":
+      if args.len < 3: return ""
+      if id notin niSets: return ""
+      niSets[id].add(args[2])
+      return $niSets[id].len
+    of "has", "contains":
+      if args.len < 3: return ""
+      if id notin niSets: return "0"
+      if niSets[id].contains(args[2]): return "1"
+      return "0"
+    of "del", "remove":
+      if args.len < 3: return ""
+      if id notin niSets: return ""
+      niSets[id].remove(args[2])
+      return "1"
+    of "len":
+      if id notin niSets: return "0"
+      return $niSets[id].len
+    of "destroy":
+      if id in niSets:
+        niSets.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_MAP":
+    # $NI_MAP(action, id, ...) — Map operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niMaps[id] = newMap()
+      return id
+    of "set":
+      if args.len < 4: return ""
+      if id notin niMaps: return ""
+      niMaps[id].set(args[2], args[3])
+      return "1"
+    of "get":
+      if args.len < 3: return ""
+      if id notin niMaps: return ""
+      return niMaps[id].get(args[2])
+    of "has":
+      if args.len < 3: return ""
+      if id notin niMaps: return "0"
+      if niMaps[id].has(args[2]): return "1"
+      return "0"
+    of "del":
+      if args.len < 3: return ""
+      if id notin niMaps: return ""
+      niMaps[id].del(args[2])
+      return "1"
+    of "len":
+      if id notin niMaps: return "0"
+      return $niMaps[id].len
+    of "keys":
+      if id notin niMaps: return ""
+      return niMaps[id].keys().join(",")
+    of "values":
+      if id notin niMaps: return ""
+      return niMaps[id].values().join(",")
+    of "destroy":
+      if id in niMaps:
+        niMaps.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SORTED":
+    # $NI_SORTED(action, id, ...) — Sorted collection operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niSorted[id] = newSorted()
+      return id
+    of "add":
+      if args.len < 3: return ""
+      if id notin niSorted: return ""
+      niSorted[id].add(args[2])
+      return $niSorted[id].len
+    of "has", "contains":
+      if args.len < 3: return ""
+      if id notin niSorted: return "0"
+      if niSorted[id].contains(args[2]): return "1"
+      return "0"
+    of "del", "remove":
+      if args.len < 3: return ""
+      if id notin niSorted: return ""
+      niSorted[id].remove(args[2])
+      return "1"
+    of "len":
+      if id notin niSorted: return "0"
+      return $niSorted[id].len
+    of "toSeq":
+      if id notin niSorted: return ""
+      return niSorted[id].toSeq().join(",")
+    of "destroy":
+      if id in niSorted:
+        niSorted.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_DEQUE":
+    # $NI_DEQUE(action, id, ...) — Deque operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niDeques[id] = newDeque()
+      return id
+    of "addFirst", "pushFirst":
+      if args.len < 3: return ""
+      if id notin niDeques: return ""
+      niDeques[id].pushFront(args[2])
+      return $niDeques[id].len
+    of "addLast", "pushLast":
+      if args.len < 3: return ""
+      if id notin niDeques: return ""
+      niDeques[id].pushBack(args[2])
+      return $niDeques[id].len
+    of "popFirst":
+      if id notin niDeques: return ""
+      return niDeques[id].popFront()
+    of "popLast":
+      if id notin niDeques: return ""
+      return niDeques[id].popBack()
+    of "peekFirst":
+      if id notin niDeques: return ""
+      return niDeques[id].peekFront()
+    of "peekLast":
+      if id notin niDeques: return ""
+      return niDeques[id].peekBack()
+    of "len":
+      if id notin niDeques: return "0"
+      return $niDeques[id].len
+    of "destroy":
+      if id in niDeques:
+        niDeques.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_BAG":
+    # $NI_BAG(action, id, ...) — Bag (multiset) operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niBags[id] = newBag()
+      return id
+    of "add":
+      if args.len < 3: return ""
+      if id notin niBags: return ""
+      niBags[id].add(args[2])
+      return $niBags[id].count(args[2])
+    of "count":
+      if args.len < 3: return ""
+      if id notin niBags: return "0"
+      return $niBags[id].count(args[2])
+    of "del", "remove":
+      if args.len < 3: return ""
+      if id notin niBags: return ""
+      niBags[id].remove(args[2])
+      return "1"
+    of "len":
+      if id notin niBags: return "0"
+      return $niBags[id].len
+    of "destroy":
+      if id in niBags:
+        niBags.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
   else:
     return ""
 

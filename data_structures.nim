@@ -181,6 +181,16 @@ proc len*(m: NiMap): int = m.data.len
 
 proc clear*(m: var NiMap) = m.data.setLen(0)
 
+proc keys*(m: NiMap): seq[string] =
+  result = @[]
+  for (k, v) in m.data:
+    result.add(k)
+
+proc values*(m: NiMap): seq[string] =
+  result = @[]
+  for (k, v) in m.data:
+    result.add(v)
+
 # --- NiSorted ---
 proc newSorted*(): NiSorted = NiSorted(data: @[])
 
