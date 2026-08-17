@@ -19,6 +19,7 @@ import engine
 import lexer
 import parser
 import special_vars
+import repl
 
 type
   CliArgs = object
@@ -96,34 +97,6 @@ proc execCode(eng: var Engine, code: string): string =
   ## Parse and execute a code string
   let line = parseLine(code)
   return eng.execute(line)
-
-proc repl(eng: var Engine, rt: var Runtime) =
-  ## Interactive REPL
-  echo "nimm M/MUMPS REPL (type QUIT to exit)"
-  echo "======================================="
-  echo ""
-
-  while true:
-    stdout.write("nimm> ")
-    stdout.flushFile()
-    let line = stdin.readLine()
-    
-    if line.strip().toUpperAscii() == "QUIT":
-      break
-    
-    if line.strip().len == 0:
-      continue
-    
-    try:
-      eng.clearOutput()
-      let result = execCode(eng, line)
-      let output = eng.getOutput()
-      if output.len > 0:
-        echo output
-      if result.len > 0 and result != "QUIT":
-        echo "=> " & result
-    except:
-      echo "Error: " & getCurrentExceptionMsg()
 
 proc main() =
   let args = parseArgs()

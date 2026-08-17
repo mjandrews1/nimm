@@ -150,12 +150,12 @@ Wire get/set for:
 
 ## Phase 4: REPL and Batch Mode (Week 4)
 
-### 4.1 Interactive REPL
-**File:** `repl.nim`
-- Read-Eval-Print Loop
-- Line editing (basic readline)
-- Error recovery (don't crash on errors)
-- Special commands: /quit, /load, /save, /clear
+### 4.1 Interactive REPL ✅ DONE
+**File:** `repl.nim` — 130 lines
+- Read-Eval-Print Loop ✅
+- Error recovery (don't crash on errors) ✅
+- Special commands: /quit, /load, /clear, /history, /vars, /globals, /help ✅
+- **Tests:** Manual test — REPL verified with commands and history
 
 ### 4.2 Batch Mode
 - Execute M routines from files
