@@ -1,11 +1,22 @@
 # runtime.nim — nimm M/MUMPS runtime
-# Provides routine loading and $TEXT support
+# Provides routine loading, $TEXT support, and mode system
 
 import os
 import strutils
 import tables
 
 type
+  Mode* = enum
+    Strict,   # ANSI/MDC X11.1-1995 (ISO/IEC 11756:1999)
+    RSM,      # RSM-compatible extensions
+    nimm      # nimm extensions (data structures, network, $NI functions)
+
+  ModeConfig* = object
+    allowExtensions*: bool      # Allow nimm extensions ($NI_, NI commands)
+    allowLowercase*: bool       # Allow lowercase identifiers
+    maxIdentifierLen*: int      # Max identifier length (0 = unlimited)
+    operatorPrecedence*: bool   # Use PEMDAS vs left-to-right
+
   Routine* = object
     name*: string
     lines*: seq[string]
@@ -15,11 +26,34 @@ type
     routines*: Table[string, Routine]
     currentRoutine*: string
     currentLine*: int
+    mode*: Mode
+    config*: ModeConfig
 
-proc newRuntime*(): Runtime =
+proc getModeConfig*(mode: Mode): ModeConfig =
+  ## Get configuration for a mode
+  case mode
+  of Strict:
+    result.allowExtensions = false
+    result.allowLowercase = false
+    result.maxIdentifierLen = 8
+    result.operatorPrecedence = false
+  of RSM:
+    result.allowExtensions = false
+    result.allowLowercase = true
+    result.maxIdentifierLen = 32
+    result.operatorPrecedence = false
+  of nimm:
+    result.allowExtensions = true
+    result.allowLowercase = true
+    result.maxIdentifierLen = 0
+    result.operatorPrecedence = true
+
+proc newRuntime*(mode: Mode = nimm): Runtime =
   result.routines = initTable[string, Routine]()
   result.currentRoutine = ""
   result.currentLine = 0
+  result.mode = mode
+  result.config = getModeConfig(mode)
 
 proc parseLabels(routine: var Routine) =
   ## Parse labels from routine lines
