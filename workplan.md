@@ -192,11 +192,18 @@ Wire get/set for:
   - static_analysis, inspector, error_handling
 - Test storage with LMDB operations
 
-### 5.2 Integration Tests
-- Test full M programs
-- Test routine loading and execution
-- Test DO/GOTO with labels
-- Test nested function calls
+### 5.2 Integration Tests ✅ DONE
+- Test full M programs ✅
+- Test routine loading and execution ✅
+- Test DO/GOTO with labels ✅
+- Test nested function calls ✅
+- **Test Runner:** `test_integration.nim` — 29 integration tests
+- **Results:** 29/29 tests passing
+- **Tests cover:**
+  - Arithmetic, string operations, variables, subscripts
+  - $ functions ($ASCII, $CHAR, $LENGTH, $PIECE, $EXTRACT)
+  - IF/ELSE, FOR loops, KILL, special variables
+  - $ORDER, $SELECT, $CASE, $TRANSLATE, $FNUMBER
 
 ### 5.3 Conformance Tests
 - Port RFC conformance tests to nimm
