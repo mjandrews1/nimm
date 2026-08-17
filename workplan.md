@@ -113,10 +113,12 @@ Wire get/set for:
 
 ## Phase 3: Storage Integration (Week 3)
 
-### 3.1 LMDB Global Store
-- Wire `storage/lmdb_store.nim` to globals
-- Global variable read/write via LMDB
-- Transaction support for multi-key updates
+### 3.1 LMDB Global Store ✅ DONE
+- Wire `storage/lmdb_store.nim` to globals ✅
+- Global variable read/write via LMDB ✅
+- Transaction support for multi-key updates ✅
+- **Usage:** `nimm -d /path/to/db.mdb -x 'SET ^X=1'`
+- **Tests:** Manual test — persistence verified across sessions
 
 ### 3.2 Key Encoding
 - Wire `storage/key_encoding.nim`

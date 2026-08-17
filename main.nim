@@ -139,14 +139,11 @@ proc main() =
     mode = nimm
 
   # Initialize components
-  var g = newGlobals()
+  var g = newGlobals(args.dbPath)
   g.registerAllSpecialVars()
   var ev = newEvaluator(g)
   var rt = newRuntime(mode)
   var eng = newEngine(g, ev, rt)
-
-  # Load LMDB if specified
-  # TODO: Wire LMDB when storage/lmdb_store.nim is integrated
 
   # Load routine file if specified
   if args.routineFile.len > 0:
@@ -174,6 +171,9 @@ proc main() =
     echo "nimm M/MUMPS Interpreter"
     echo "Usage: nimm -x 'CODE' | nimm -r file.m | nimm --repl"
     echo "Try 'nimm --help' for more options"
+
+  # Cleanup
+  g.close()
 
 when isMainModule:
   main()
