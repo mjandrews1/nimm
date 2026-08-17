@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 14
+**Open Issues:** 13
 
 ---
 
@@ -46,22 +46,12 @@
 ### Phase 4: Interactive/Batch Modes
 **Goal:** Make nimm usable as a tool
 
-7. **#24** Interactive REPL
-**Goal:** Wire LMDB as backing store for globals
+7. **#24** Interactive REPL ✅
+   - repl.nim — 130 lines
+   - Special commands: /quit, /load, /clear, /history, /vars, /globals, /help
+   - Error recovery, command history
 
-4. **#21** LMDB global store integration
-   - Wire storage/lmdb_store.nim to globals.nim
-   - **Blocks:** #25 (batch mode)
-
-5. **#22** Key encoding integration
-   - Wire storage/key_encoding.nim
-   - **Blocks:** #21
-
-6. **#23** Data structure integration
-   - Wire data_structures.nim to evaluator
-   - **Blocks:** #29 (conformance tests)
-
-### Phase 4: Interactive/Batch Modes
+8. **#25** Batch mode
 **Goal:** Make nimm usable as a tool
 
 7. **#24** Interactive REPL
