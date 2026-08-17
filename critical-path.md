@@ -13,7 +13,7 @@
 - #16 Command dispatch (engine.nim) ✅
 - #17 Main entry point (main.nim) ✅
 
-**Open Issues:** 13
+**Open Issues:** 12
 
 ---
 
@@ -51,16 +51,11 @@
    - Special commands: /quit, /load, /clear, /history, /vars, /globals, /help
    - Error recovery, command history
 
-8. **#25** Batch mode
-**Goal:** Make nimm usable as a tool
+8. **#25** Batch mode ✅
+   - -r file.m -e 'CODE' pattern
+   - Exit codes: 0=success, non-zero=error
 
-7. **#24** Interactive REPL
-   - Enhance main.nim REPL with history, completion
-   - **Blocks:** #28 (integration tests)
-
-8. **#25** Batch mode
-   - File execution, error reporting
-   - **Blocks:** #28
+9. **#26** Error handling integration
 
 9. **#26** Error handling integration
    - Wire $ECODE/$ETRAP from error_handling.nim
