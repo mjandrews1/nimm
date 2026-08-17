@@ -5,6 +5,7 @@ import tables
 import deques
 import strutils
 import sequtils
+import random
 
 type
   NiArray* = object
@@ -707,4 +708,337 @@ proc contains*(b: NiBloom, item: string): bool =
 
 proc clear*(b: var NiBloom) =
   b.bits.clear()
+
+# --- NiSkipList ---
+type
+  SkipNode = ref object
+    value*: string
+    next*: seq[SkipNode]  # next[i] = next node at level i
+
+  NiSkipList* = object
+    ## Probabilistic sorted data structure with O(log n) search
+    head*: SkipNode
+    maxLevel*: int
+    size*: int
+
+proc newSkipList*(maxLevel: int = 16): NiSkipList =
+  result.head = SkipNode(value: "", next: newSeq[SkipNode](maxLevel))
+  result.maxLevel = maxLevel
+  result.size = 0
+
+proc randomLevel(maxLevel: int): int =
+  var level = 1
+  while level < maxLevel and (rand(1.0) < 0.5):
+    inc level
+  return level
+
+proc search*(sl: NiSkipList, value: string): bool =
+  var current = sl.head
+  for i in countdown(sl.maxLevel - 1, 0):
+    while current.next[i] != nil and current.next[i].value < value:
+      current = current.next[i]
+    if current.next[i] != nil and current.next[i].value == value:
+      return true
+  return false
+
+proc insert*(sl: var NiSkipList, value: string) =
+  var update = newSeq[SkipNode](sl.maxLevel)
+  var current = sl.head
+  
+  for i in countdown(sl.maxLevel - 1, 0):
+    while current.next[i] != nil and current.next[i].value < value:
+      current = current.next[i]
+    update[i] = current
+  
+  let newLevel = randomLevel(sl.maxLevel)
+  let newNode = SkipNode(value: value, next: newSeq[SkipNode](newLevel))
+  
+  for i in 0..<newLevel:
+    newNode.next[i] = update[i].next[i]
+    update[i].next[i] = newNode
+  
+  inc sl.size
+
+proc len*(sl: NiSkipList): int = sl.size
+
+# --- NiTreap ---
+type
+  TreapNode = ref object
+    value*: string
+    priority*: float
+    left*, right*: TreapNode
+
+  NiTreap* = object
+    ## Balanced BST with randomization
+    root*: TreapNode
+    size*: int
+
+proc newTreap*(): NiTreap =
+  result.root = nil
+  result.size = 0
+
+proc rotateRight(y: TreapNode): TreapNode =
+  let x = y.left
+  y.left = x.right
+  x.right = y
+  return x
+
+proc rotateLeft(x: TreapNode): TreapNode =
+  let y = x.right
+  x.right = y.left
+  y.left = x
+  return y
+
+proc insertNode(node: TreapNode, value: string): TreapNode =
+  if node == nil:
+    return TreapNode(value: value, priority: rand(1.0))
+  
+  var n = node
+  if value < n.value:
+    n.left = insertNode(n.left, value)
+    if n.left.priority > n.priority:
+      n = rotateRight(n)
+  elif value > n.value:
+    n.right = insertNode(n.right, value)
+    if n.right.priority > n.priority:
+      n = rotateLeft(n)
+  
+  return n
+
+proc insert*(t: var NiTreap, value: string) =
+  t.root = insertNode(t.root, value)
+  inc t.size
+
+proc searchNode(node: TreapNode, value: string): bool =
+  if node == nil: return false
+  if value == node.value: return true
+  if value < node.value: return searchNode(node.left, value)
+  return searchNode(node.right, value)
+
+proc search*(t: NiTreap, value: string): bool =
+  return searchNode(t.root, value)
+
+proc len*(t: NiTreap): int = t.size
+
+# --- NiDisjointSet ---
+type
+  NiDisjointSet* = object
+    ## Union-find for connectivity problems
+    parent*: seq[int]
+    rank*: seq[int]
+    size*: int
+
+proc newDisjointSet*(n: int): NiDisjointSet =
+  result.parent = newSeq[int](n)
+  result.rank = newSeq[int](n)
+  result.size = n
+  for i in 0..<n:
+    result.parent[i] = i
+
+proc find*(ds: var NiDisjointSet, x: int): int =
+  if ds.parent[x] != x:
+    ds.parent[x] = ds.find(ds.parent[x])  # Path compression
+  return ds.parent[x]
+
+proc union*(ds: var NiDisjointSet, x, y: int) =
+  let px = ds.find(x)
+  let py = ds.find(y)
+  if px == py: return
+  
+  # Union by rank
+  if ds.rank[px] < ds.rank[py]:
+    ds.parent[px] = py
+  elif ds.rank[px] > ds.rank[py]:
+    ds.parent[py] = px
+  else:
+    ds.parent[py] = px
+    inc ds.rank[px]
+
+proc connected*(ds: var NiDisjointSet, x, y: int): bool =
+  return ds.find(x) == ds.find(y)
+
+proc componentCount*(ds: var NiDisjointSet): int =
+  var roots: seq[int] = @[]
+  for i in 0..<ds.size:
+    if ds.find(i) == i:
+      roots.add(i)
+  return roots.len
+
+# --- NiSegmentTree ---
+type
+  NiSegmentTree* = object
+    ## Range query data structure (min/max/sum)
+    data*: seq[int]
+    tree*: seq[int]
+    n*: int
+    op*: string  # "min", "max", "sum"
+
+proc newSegmentTree*(n: int, op: string = "sum"): NiSegmentTree =
+  result.n = n
+  result.data = newSeq[int](n)
+  result.tree = newSeq[int](4 * n)
+  result.op = op
+
+proc merge(a, b: int, op: string): int =
+  case op
+  of "min": return min(a, b)
+  of "max": return max(a, b)
+  of "sum": return a + b
+  else: return a + b
+
+proc build*(st: var NiSegmentTree, node, start, endIdx: int) =
+  if start == endIdx:
+    st.tree[node] = st.data[start]
+  else:
+    let mid = (start + endIdx) div 2
+    st.build(2 * node, start, mid)
+    st.build(2 * node + 1, mid + 1, endIdx)
+    st.tree[node] = merge(st.tree[2 * node], st.tree[2 * node + 1], st.op)
+
+proc update*(st: var NiSegmentTree, node, start, endIdx, idx, val: int) =
+  if start == endIdx:
+    st.data[idx] = val
+    st.tree[node] = val
+  else:
+    let mid = (start + endIdx) div 2
+    if idx <= mid:
+      st.update(2 * node, start, mid, idx, val)
+    else:
+      st.update(2 * node + 1, mid + 1, endIdx, idx, val)
+    st.tree[node] = merge(st.tree[2 * node], st.tree[2 * node + 1], st.op)
+
+proc query*(st: NiSegmentTree, node, start, endIdx, l, r: int): int =
+  if r < start or endIdx < l:
+    case st.op
+    of "min": return high(int)
+    of "max": return low(int)
+    of "sum": return 0
+    else: return 0
+  if l <= start and endIdx <= r:
+    return st.tree[node]
+  let mid = (start + endIdx) div 2
+  let left = st.query(2 * node, start, mid, l, r)
+  let right = st.query(2 * node + 1, mid + 1, endIdx, l, r)
+  return merge(left, right, st.op)
+
+# --- NiFenwickTree ---
+type
+  NiFenwickTree* = object
+    ## Binary indexed tree for prefix sums
+    data*: seq[int]
+    n*: int
+
+proc newFenwickTree*(n: int): NiFenwickTree =
+  result.data = newSeq[int](n + 1)
+  result.n = n
+
+proc update*(ft: var NiFenwickTree, i: int, delta: int) =
+  var idx = i + 1
+  while idx <= ft.n:
+    ft.data[idx] += delta
+    idx += (idx and (-idx))
+
+proc query*(ft: NiFenwickTree, i: int): int =
+  result = 0
+  var idx = i + 1
+  while idx > 0:
+    result += ft.data[idx]
+    idx -= (idx and (-idx))
+
+proc rangeQuery*(ft: NiFenwickTree, l, r: int): int =
+  if l == 0:
+    return ft.query(r)
+  return ft.query(r) - ft.query(l - 1)
+
+# --- NiSparseMatrix ---
+type
+  NiSparseMatrix* = object
+    ## Sparse 2D data structure
+    rows*: int
+    cols*: int
+    data*: Table[(int, int), float]
+
+proc newSparseMatrix*(rows, cols: int): NiSparseMatrix =
+  result.rows = rows
+  result.cols = cols
+  result.data = initTable[(int, int), float]()
+
+proc get*(m: NiSparseMatrix, row, col: int): float =
+  let key = (row, col)
+  if key in m.data:
+    return m.data[key]
+  return 0.0
+
+proc set*(m: var NiSparseMatrix, row, col: int, value: float) =
+  if value != 0.0:
+    m.data[(row, col)] = value
+  elif (row, col) in m.data:
+    m.data.del((row, col))
+
+proc nnz*(m: NiSparseMatrix): int = m.data.len
+
+proc toDense*(m: NiSparseMatrix): seq[seq[float]] =
+  result = newSeq[seq[float]](m.rows)
+  for i in 0..<m.rows:
+    result[i] = newSeq[float](m.cols)
+  for key, val in m.data.pairs:
+    result[key[0]][key[1]] = val
+
+# --- NiIntervalTree ---
+type
+  Interval = object
+    low*, high*: int
+    data*: string
+
+  IntervalNode = ref object
+    interval*: Interval
+    max*: int
+    left*, right*: IntervalNode
+
+  NiIntervalTree* = object
+    ## Interval overlap queries
+    root*: IntervalNode
+
+proc newIntervalTree*(): NiIntervalTree =
+  result.root = nil
+
+proc newNode(interval: Interval): IntervalNode =
+  result = IntervalNode(interval: interval, max: interval.high)
+
+proc insertNode(node: IntervalNode, interval: Interval): IntervalNode =
+  if node == nil:
+    return newNode(interval)
+  
+  let l = node.interval.low
+  
+  if interval.low < l:
+    node.left = insertNode(node.left, interval)
+  else:
+    node.right = insertNode(node.right, interval)
+  
+  if node.max < interval.high:
+    node.max = interval.high
+  
+  return node
+
+proc insert*(it: var NiIntervalTree, low, high: int, data: string = "") =
+  it.root = insertNode(it.root, Interval(low: low, high: high, data: data))
+
+proc overlaps(a, b: Interval): bool =
+  return a.low <= b.high and b.low <= a.high
+
+proc findOverlapping(node: IntervalNode, interval: Interval): seq[Interval] =
+  result = @[]
+  if node == nil: return
+  
+  if overlaps(node.interval, interval):
+    result.add(node.interval)
+  
+  if node.left != nil and node.left.max >= interval.low:
+    result.add(findOverlapping(node.left, interval))
+  
+  result.add(findOverlapping(node.right, interval))
+
+proc query*(it: NiIntervalTree, low, high: int): seq[Interval] =
+  return findOverlapping(it.root, Interval(low: low, high: high))
 
