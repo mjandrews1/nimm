@@ -475,65 +475,77 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
 ## implementation would handle literals specially.
 proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
   var atoms: seq[PatternAtom] = @[]
-  var pendingWord = ""  # Buffer for multi-character words from lexer
-  var pendingCount = -1  # Count carried from a number token before a pendingWord (-1 = not set)
+  var pendingWord = ""
+  var pendingCount = -1
+  var pendingOrMore = false
   
   while true:
     var count = 1
     var orMore = false
     
-    # If we have a pending word, parse count/code from it
     if pendingWord.len > 0:
-      # Use carried count if set, otherwise parse from pending word
+      # Parse from pending word
       if pendingCount >= 0:
         count = pendingCount
         pendingCount = -1
-      else:
-        # Parse optional leading digits (count)
-        var numStr = ""
-        var pos = 0
-        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
-          numStr.add(pendingWord[pos])
-          inc pos
-        if numStr.len > 0:
-          try: count = parseInt(numStr)
-          except: count = 1
+      orMore = pendingOrMore
+      pendingOrMore = false
       
-      # Parse optional dot (orMore)
       var pos = 0
-      if pendingCount < 0:
-        # Skip past digits we already parsed
-        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
-          inc pos
-      # else: pos stays 0, we haven't consumed anything yet
+      # Parse leading digits
+      var numStr = ""
+      while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+        numStr.add(pendingWord[pos])
+        inc pos
+      if numStr.len > 0:
+        try: count = parseInt(numStr)
+        except: count = 1
+      
+      # Parse optional dot
       if pos < pendingWord.len and pendingWord[pos] == '.':
         inc pos
         orMore = true
         while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
           inc pos
       
-      # Parse pattern code (single letter)
+      # Parse pattern code
       if pos < pendingWord.len and pendingWord[pos] in {'A'..'Z', 'a'..'z'}:
         let code = pendingWord[pos]
         inc pos
-        # Keep remainder for next iteration
         if pos < pendingWord.len:
           pendingWord = pendingWord[pos..^1]
         else:
           pendingWord = ""
         atoms.add PatternAtom(count: count, code: code, orMore: orMore)
         continue
+      elif pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+        var numStr2 = ""
+        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+          numStr2.add(pendingWord[pos])
+          inc pos
+        if numStr2.len > 0:
+          try: pendingCount = parseInt(numStr2)
+          except: pendingCount = 1
+        if pos < pendingWord.len:
+          pendingWord = pendingWord[pos..^1]
+        else:
+          pendingWord = ""
+        pendingOrMore = orMore
+        continue
       else:
-        # Invalid pattern, stop
         pendingWord = ""
         break
     else:
       # Read from parser tokens
+      if pendingCount >= 0:
+        count = pendingCount
+        pendingCount = -1
+        orMore = pendingOrMore
+        pendingOrMore = false
+      
       if p.peek() == tokNumber:
-        try:
-          count = parseInt(p.cur.text)
-        except ValueError:
-          count = 1
+        try: count = parseInt(p.cur.text)
+        except: count = 1
         discard p.advance()
       
       if p.peek() == tokDot:
@@ -545,14 +557,13 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
       if p.peek() == tokWord:
         let word = p.cur.text
         if word.len == 1:
-          # Single character pattern code
           discard p.advance()
           atoms.add PatternAtom(count: count, code: word[0], orMore: orMore)
           continue
         elif word.len > 1:
-          # Multi-character word — carry the count and buffer it
           pendingWord = word
           pendingCount = count
+          pendingOrMore = orMore
           discard p.advance()
           continue
       elif p.peek() == tokStr:
