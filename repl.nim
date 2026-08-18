@@ -3,8 +3,10 @@
 
 import strutils
 import os
+import tables
 import engine
 import runtime
+import globals
 
 type
   ReplState* = object
@@ -91,14 +93,21 @@ proc repl*(eng: var Engine, rt: var Runtime) =
       of "/history":
         showHistory(state)
       of "/vars":
-        # Show local variables (simplified)
+        # Show local variables
         echo ""
-        echo "Local variables: (use WRITE to inspect)"
+        echo "Local variables:"
+        let scope = eng.globals[].scopes[^1]
+        if scope.len == 0:
+          echo "  (none)"
+        else:
+          for k, v in scope:
+            echo "  " & k & " = " & v
         echo ""
       of "/globals":
-        # Show global variables (simplified)
+        # Show global variables (LMDB)
         echo ""
-        echo "Global variables: (use WRITE ^ to inspect)"
+        echo "Global variables:"
+        echo "  (use WRITE ^VAR to inspect)"
         echo ""
       else:
         # Check for /load command

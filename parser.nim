@@ -723,9 +723,39 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cZwrite, zwriteExpr: p.parseExpr())
   of "ZKILL":
     cmd = Cmd(kind: cZkill, zkillExpr: p.parseExpr())
-  # Stubbed commands (recognized but no-op)
-  of "ZHALT", "ZMESSAGE", "ZSAVE", "ZSYSTEM", "ZTRAP", "ZBREAK", "ZGOTO", "ZPRINT", "ZQUIT":
-    cmd = Cmd(kind: cNoop)
+  of "ZHALT":
+    var haltCode: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      haltCode = p.parseExpr()
+    cmd = Cmd(kind: cZhalt, zhaltCode: haltCode)
+  of "ZMESSAGE":
+    cmd = Cmd(kind: cZmessage, zmessageExpr: p.parseExpr())
+  of "ZSAVE":
+    var saveExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      saveExpr = p.parseExpr()
+    cmd = Cmd(kind: cZsave, zsaveExpr: saveExpr)
+  of "ZSYSTEM":
+    var sysExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      sysExpr = p.parseExpr()
+    cmd = Cmd(kind: cZsystem, zsystemExpr: sysExpr)
+  of "ZTRAP":
+    cmd = Cmd(kind: cZtrap, ztrapExpr: p.parseExpr())
+  of "ZBREAK":
+    var breakExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      breakExpr = p.parseExpr()
+    cmd = Cmd(kind: cZbreak, zbreakExpr: breakExpr)
+  of "ZGOTO":
+    cmd = Cmd(kind: cZgoto, zgotoExpr: p.parseExpr())
+  of "ZPRINT":
+    cmd = Cmd(kind: cZprint, zprintExpr: p.parseExpr())
+  of "ZQUIT":
+    var quitExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      quitExpr = p.parseExpr()
+    cmd = Cmd(kind: cZquit, zquitExpr: quitExpr)
   of "OPEN", "O":
     cmd = Cmd(kind: cOpen, openDevice: p.parseExpr(), openParams: Expr(kind: eStr, sval: ""))
   of "USE", "U":

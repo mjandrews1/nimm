@@ -368,7 +368,8 @@ type
   CmdKind* = enum
     cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
     cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
-    cZwrite, cZkill, cOpen, cUse, cClose, cRead
+    cZwrite, cZkill, cOpen, cUse, cClose, cRead,
+    cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -445,3 +446,21 @@ type
       closeDevice*: Expr
     of cRead:
       readVars*: seq[Expr]
+    of cZhalt:
+      zhaltCode*: Expr
+    of cZmessage:
+      zmessageExpr*: Expr
+    of cZsave:
+      zsaveExpr*: Expr
+    of cZsystem:
+      zsystemExpr*: Expr
+    of cZtrap:
+      ztrapExpr*: Expr
+    of cZbreak:
+      zbreakExpr*: Expr
+    of cZgoto:
+      zgotoExpr*: Expr
+    of cZprint:
+      zprintExpr*: Expr
+    of cZquit:
+      zquitExpr*: Expr

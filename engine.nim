@@ -238,6 +238,36 @@ proc execute*(eng: var Engine, line: Line): string =
           let code = eng.evaluator[].eval(cmd.xecExpr)
           result = eng.execute(parseLine(code))
 
+      # Z-commands
+      of CmdKind.cZhalt:
+        var exitCode = 0
+        if cmd.zhaltCode != nil:
+          try: exitCode = parseInt(eng.evaluator[].eval(cmd.zhaltCode))
+          except: discard
+        quit(exitCode)
+
+      of CmdKind.cZsystem:
+        var cmdStr = ""
+        if cmd.zsystemExpr != nil:
+          cmdStr = eng.evaluator[].eval(cmd.zsystemExpr)
+        if cmdStr.len > 0:
+          let exitCode = execShellCmd(cmdStr)
+          eng.output.add("Exit code: " & $exitCode & "\n")
+
+      of CmdKind.cZprint:
+        if cmd.zprintExpr != nil and cmd.zprintExpr.kind == eVar:
+          let label = cmd.zprintExpr.vname
+          let routine = eng.runtime[].currentRoutine
+          if routine.len > 0:
+            let line = eng.runtime[].getLine(routine, label, 0)
+            if line.len > 0:
+              eng.writeln(line)
+
+      of CmdKind.cZbreak, CmdKind.cZgoto, CmdKind.cZmessage,
+         CmdKind.cZsave, CmdKind.cZtrap, CmdKind.cZquit:
+        # Not yet implemented - silent no-op
+        discard
+
       else:
         discard
 
