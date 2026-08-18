@@ -1,11 +1,14 @@
 # main.nim — CLI entry point for nimm M/MUMPS interpreter
 #
 # Usage:
+#   nimm -V                                       # Show version
 #   nimm -x 'WRITE "Hello, World!"'           # Execute code directly
 #   nimm -r file.m -e 'DO ENTRY'              # Load routine, execute entry point
 #   nimm -d /path/to/db -x 'SET ^X=1'        # With LMDB database
 #   nimm --repl                                # Interactive REPL
 #   nimm -m strict -x 'SET X=1'               # Strict mode
+
+const Version* = "0.1.0"
 
 import os
 import strutils
@@ -66,6 +69,9 @@ proc parseArgs(): CliArgs =
           result.mode = args[i].toLowerAscii()
       of "repl":
         result.repl = true
+      of "V", "version":
+        echo "nimm " & Version
+        quit(0)
       of "h", "help":
         echo "nimm — M/MUMPS Interpreter"
         echo ""

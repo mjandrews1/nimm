@@ -78,8 +78,11 @@ proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
   if rc != SUCCESS:
     return ""
   
-  result = newString(mdbVal.mvSize)
-  copyMem(addr result[0], mdbVal.mvData, mdbVal.mvSize)
+  if mdbVal.mvSize > 0:
+    result = newString(mdbVal.mvSize)
+    copyMem(addr result[0], mdbVal.mvData, mdbVal.mvSize)
+  else:
+    result = ""
 
 proc put*(store: LmdbStore, global: string, subs: seq[string], value: string) =
   ## Set value for global[sub1,sub2,...]
@@ -90,23 +93,27 @@ proc put*(store: LmdbStore, global: string, subs: seq[string], value: string) =
   if rc != SUCCESS:
     raise newException(IOError, "LMDB txn_begin failed")
   
-  var mdbKey: Val
-  mdbKey.mvSize = cast[uint](key.len)
-  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
-  
-  var mdbVal: Val
-  mdbVal.mvSize = cast[uint](value.len)
-  if value.len > 0:
-    mdbVal.mvData = cast[pointer](unsafeAddr value[0])
-  
-  rc = put(txn, store.dbi, addr mdbKey, addr mdbVal, 0)
-  if rc != SUCCESS:
+  try:
+    var mdbKey: Val
+    mdbKey.mvSize = cast[uint](key.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+    
+    var mdbVal: Val
+    mdbVal.mvSize = cast[uint](value.len)
+    if value.len > 0:
+      mdbVal.mvData = cast[pointer](unsafeAddr value[0])
+    
+    rc = put(txn, store.dbi, addr mdbKey, addr mdbVal, 0)
+    if rc != SUCCESS:
+      abort(txn)
+      raise newException(IOError, "LMDB put failed")
+    
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_commit failed")
+  except:
     abort(txn)
-    raise newException(IOError, "LMDB put failed")
-  
-  rc = txnCommit(txn)
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB txn_commit failed")
+    raise
 
 proc delete*(store: LmdbStore, global: string, subs: seq[string] = @[]) =
   ## Delete global[sub1,sub2,...]
@@ -117,18 +124,22 @@ proc delete*(store: LmdbStore, global: string, subs: seq[string] = @[]) =
   if rc != SUCCESS:
     raise newException(IOError, "LMDB txn_begin failed")
   
-  var mdbKey: Val
-  mdbKey.mvSize = cast[uint](key.len)
-  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
-  
-  rc = del(txn, store.dbi, addr mdbKey, nil)
-  if rc != SUCCESS:
+  try:
+    var mdbKey: Val
+    mdbKey.mvSize = cast[uint](key.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+    
+    rc = del(txn, store.dbi, addr mdbKey, nil)
+    if rc != SUCCESS:
+      abort(txn)
+      raise newException(IOError, "LMDB delete failed")
+    
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_commit failed")
+  except:
     abort(txn)
-    raise newException(IOError, "LMDB delete failed")
-  
-  rc = txnCommit(txn)
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB txn_commit failed")
+    raise
 
 proc sync*(store: LmdbStore) =
   ## Flush data to disk
