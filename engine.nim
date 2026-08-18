@@ -166,6 +166,11 @@ proc execute*(eng: var Engine, line: Line): string =
         # Pop scope if we're in a NEW block
         if eng.globals[].scopes.len > 1:
           eng.globals[].popScope()
+          # Restore $ETRAP from stack
+          if eng.runtime[].etrapStack.len > 0:
+            let savedEtrap = eng.runtime[].etrapStack[^1]
+            eng.runtime[].etrapStack.setLen(eng.runtime[].etrapStack.len - 1)
+            eng.globals[].setSpecialVar("$ETRAP", savedEtrap)
           # After popping scope, continue execution (don't return QUIT)
           if cmd.quitVal != nil:
             discard eng.evaluator[].eval(cmd.quitVal)
@@ -188,6 +193,9 @@ proc execute*(eng: var Engine, line: Line): string =
               eng.globals[].kill(killRef.vname, subs)
 
       of CmdKind.cNew:
+        # Save $ETRAP before pushing scope
+        let currentEtrap = eng.globals[].getSpecialVar("$ETRAP")
+        eng.runtime[].etrapStack.add(currentEtrap)
         eng.globals[].pushScope()
 
       of CmdKind.cDo:

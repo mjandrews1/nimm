@@ -31,6 +31,7 @@ type
     # Error handling
     ecode*: string          # $ECODE - error code
     etrap*: string          # $ETRAP - error trap expression
+    etrapStack*: seq[string] # Error trap stack for NEW/QUIT scoping
     zstatus*: string        # $ZSTATUS - error status
     zerror*: string         # $ZERROR - error message
     errorStack*: seq[string] # Error propagation stack
@@ -71,6 +72,7 @@ proc newRuntime*(mode: Mode = nimm): Runtime =
   result.config = getModeConfig(mode)
   result.ecode = ""
   result.etrap = ""
+  result.etrapStack = @[]
   result.zstatus = ""
   result.zerror = ""
   result.errorStack = @[]
@@ -199,6 +201,18 @@ proc clearError*(rt: var Runtime) =
 proc hasError*(rt: Runtime): bool =
   ## Check if error state is set
   return rt.ecode.len > 0
+
+proc pushEtrap*(rt: var Runtime) =
+  ## Push current $ETRAP onto stack (called on NEW)
+  rt.etrapStack.add(rt.etrap)
+
+proc popEtrap*(rt: var Runtime) =
+  ## Pop $ETRAP from stack (called on QUIT)
+  if rt.etrapStack.len > 0:
+    rt.etrap = rt.etrapStack[^1]
+    rt.etrapStack.setLen(rt.etrapStack.len - 1)
+  else:
+    rt.etrap = ""
 
 proc getLastError*(rt: Runtime): string =
   ## Get last error from stack
