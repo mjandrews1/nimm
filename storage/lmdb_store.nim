@@ -15,6 +15,8 @@ type
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
   ## Initialize LMDB store
+  if mapSize <= 0:
+    raise newException(ValueError, "LMDB mapSize must be positive: " & $mapSize)
   store.path = path
   store.mapSize = mapSize
   

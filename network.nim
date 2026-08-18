@@ -110,6 +110,9 @@ proc niaccept*(nm: var NetworkManager, listenerId: int): int =
 proc niread*(nm: NetworkManager, connId: int, size: int = 4096): string =
   ## Read data from a connection (blocking)
   
+  if size <= 0:
+    return ""
+  
   if connId notin nm.connections:
     return ""
   

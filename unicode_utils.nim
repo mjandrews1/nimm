@@ -61,6 +61,11 @@ proc utf8CharLen*(b: uint8): int =
 
 proc utf8Substring*(s: string, start: int, length: int = -1): string =
   ## Extract substring by UTF-8 code point indices
+  if start < 0:
+    raise newException(IndexDefect, "utf8Substring start must be non-negative: " & $start)
+  if length < -1:
+    raise newException(IndexDefect, "utf8Substring length must be >= -1: " & $length)
+  
   var startByte = 0
   var i = 0
   
