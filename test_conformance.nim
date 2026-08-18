@@ -38,20 +38,20 @@ proc main() =
   var results: seq[TestResult] = @[]
   
   # ==========================================
-  # 1. Arithmetic Operations
+  # 1. Arithmetic Operations (per RFC: left-to-right, integer results)
   # ==========================================
-  results.add(runMCode("WRITE 1+2", "3.0", "Arithmetic"))
-  results.add(runMCode("WRITE 5-3", "2.0", "Arithmetic"))
-  results.add(runMCode("WRITE 2*3", "6.0", "Arithmetic"))
-  results.add(runMCode("WRITE 10/2", "5.0", "Arithmetic"))
-  results.add(runMCode("WRITE 10#3", "1.0", "Arithmetic"))
-  results.add(runMCode("WRITE 2**3", "8.0", "Arithmetic"))
-  results.add(runMCode("WRITE -5", "-5.0", "Arithmetic"))
-  results.add(runMCode("WRITE +5", "5.0", "Arithmetic"))
-  results.add(runMCode("WRITE 1+2*3", "7.0", "Arithmetic"))
-  results.add(runMCode("WRITE (1+2)*3", "9.0", "Arithmetic"))
-  results.add(runMCode("WRITE 1E2", "100.0", "Arithmetic"))
-  results.add(runMCode("WRITE 1.5E2", "150.0", "Arithmetic"))
+  results.add(runMCode("WRITE 1+2", "3", "Arithmetic"))
+  results.add(runMCode("WRITE 5-3", "2", "Arithmetic"))
+  results.add(runMCode("WRITE 2*3", "6", "Arithmetic"))
+  results.add(runMCode("WRITE 10/2", "5", "Arithmetic"))
+  results.add(runMCode("WRITE 10#3", "1", "Arithmetic"))
+  results.add(runMCode("WRITE 2**3", "8", "Arithmetic"))
+  results.add(runMCode("WRITE -5", "-5", "Arithmetic"))
+  results.add(runMCode("WRITE +5", "5", "Arithmetic"))
+  results.add(runMCode("WRITE 1+2*3", "9", "Arithmetic"))
+  results.add(runMCode("WRITE (1+2)*3", "9", "Arithmetic"))
+  results.add(runMCode("WRITE 1E2", "100", "Arithmetic"))
+  results.add(runMCode("WRITE 1.5E2", "150", "Arithmetic"))
   
   # ==========================================
   # 2. String Operations
@@ -59,7 +59,7 @@ proc main() =
   results.add(runMCode("WRITE \"hello\"_\"world\"", "helloworld", "String"))
   results.add(runMCode("WRITE \"abc\"=\"abc\"", "1", "String"))
   results.add(runMCode("WRITE \"abc\"=\"def\"", "0", "String"))
-  results.add(runMCode("WRITE \"abc\"'=\"def\"", "1", "String"))
+  results.add(runMCode("WRITE \"abc\"'=\\\"def\\\"", "1", "String"))
   results.add(runMCode("WRITE \"abc\"<\"def\"", "1", "String"))
   results.add(runMCode("WRITE \"abc\">\"def\"", "0", "String"))
   results.add(runMCode("WRITE \"abc\"]\"ab\"", "1", "String"))
@@ -70,7 +70,7 @@ proc main() =
   # ==========================================
   results.add(runMCode("SET X=42 WRITE X", "42", "Variable"))
   results.add(runMCode("SET X=\"hello\" WRITE X", "hello", "Variable"))
-  results.add(runMCode("SET X=1,Y=2 WRITE X+Y", "3.0", "Variable"))
+  results.add(runMCode("SET X=1,Y=2 WRITE X+Y", "3", "Variable"))
   results.add(runMCode("SET A(1)=\"one\" WRITE A(1)", "one", "Variable"))
   results.add(runMCode("SET A(1,2)=\"nested\" WRITE A(1,2)", "nested", "Variable"))
   results.add(runMCode("SET X=42 KILL X WRITE $DATA(X)", "0", "Variable"))

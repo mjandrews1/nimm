@@ -108,7 +108,7 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   of eNeg:
     let val = ev.eval(expr.operand)
     try:
-      return $(-parseFloat(val))
+      return formatNumber(-parseFloat(val))
     except:
       return "0"
   of eNot:
@@ -121,35 +121,35 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     let right = ev.eval(expr.right)
     case expr.op
     of bAdd:
-      try: return $(parseFloat(left) + parseFloat(right))
+      try: return formatNumber(parseFloat(left) + parseFloat(right))
       except: return "0"
     of bSub:
-      try: return $(parseFloat(left) - parseFloat(right))
+      try: return formatNumber(parseFloat(left) - parseFloat(right))
       except: return "0"
     of bMul:
-      try: return $(parseFloat(left) * parseFloat(right))
+      try: return formatNumber(parseFloat(left) * parseFloat(right))
       except: return "0"
     of bDiv:
       try:
         let r = parseFloat(right)
         if r == 0.0: return "0"
-        return $(parseFloat(left) / r)
+        return formatNumber(parseFloat(left) / r)
       except: return "0"
     of bIntDiv:
       try:
         let r = parseFloat(right)
         if r == 0.0: return "0"
-        return $(int(parseFloat(left) / r))
+        return formatNumber(float(int(parseFloat(left) / r)))
       except: return "0"
     of bMod:
       try:
         let r = parseFloat(right)
         if r == 0.0: return "0"
         let l = parseFloat(left)
-        return $(l - r * floor(l / r))
+        return formatNumber(l - r * floor(l / r))
       except: return "0"
     of bPow:
-      try: return $(pow(parseFloat(left), parseFloat(right)))
+      try: return formatNumber(pow(parseFloat(left), parseFloat(right)))
       except: return "0"
     of bConcat:
       return left & right
@@ -792,18 +792,3 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return ""
   else:
     return ""
-
-proc matchPattern*(s: string, atoms: seq[PatternAtom]): bool =
-  var pos = 0
-  for atom in atoms:
-    var count = 0
-    let maxCount = if atom.orMore: s.len - pos else: atom.count
-    while count < maxCount and pos < s.len:
-      if matchesCode(s[pos], atom.code):
-        pos.inc
-        count.inc
-      else:
-        break
-    if count < atom.count:
-      return false
-  return pos == s.len

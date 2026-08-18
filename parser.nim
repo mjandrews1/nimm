@@ -475,32 +475,93 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
 ## implementation would handle literals specially.
 proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
   var atoms: seq[PatternAtom] = @[]
+  var pendingWord = ""  # Buffer for multi-character words from lexer
+  var pendingCount = -1  # Count carried from a number token before a pendingWord (-1 = not set)
+  
   while true:
     var count = 1
-    if p.peek() == tokNumber:
-      try:
-        count = parseInt(p.cur.text)
-      except ValueError:
-        count = 1
-      discard p.advance()
     var orMore = false
-    if p.peek() == tokDot:
-      discard p.advance()
-      orMore = true
-      # Consume optional upper bound (we don't store it)
-      if p.peek() == tokNumber:
-        discard p.advance()
-    var code = '\0'
-    if p.peek() == tokWord and p.cur.text.len == 1:
-      code = p.cur.text[0]
-      discard p.advance()
-    elif p.peek() == tokStr:
-      # Literal pattern (e.g. "abc"): approximate as literal match char code.
-      code = 'E'
-      discard p.advance()
+    
+    # If we have a pending word, parse count/code from it
+    if pendingWord.len > 0:
+      # Use carried count if set, otherwise parse from pending word
+      if pendingCount >= 0:
+        count = pendingCount
+        pendingCount = -1
+      else:
+        # Parse optional leading digits (count)
+        var numStr = ""
+        var pos = 0
+        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+          numStr.add(pendingWord[pos])
+          inc pos
+        if numStr.len > 0:
+          try: count = parseInt(numStr)
+          except: count = 1
+      
+      # Parse optional dot (orMore)
+      var pos = 0
+      if pendingCount < 0:
+        # Skip past digits we already parsed
+        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+          inc pos
+      # else: pos stays 0, we haven't consumed anything yet
+      if pos < pendingWord.len and pendingWord[pos] == '.':
+        inc pos
+        orMore = true
+        while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
+          inc pos
+      
+      # Parse pattern code (single letter)
+      if pos < pendingWord.len and pendingWord[pos] in {'A'..'Z', 'a'..'z'}:
+        let code = pendingWord[pos]
+        inc pos
+        # Keep remainder for next iteration
+        if pos < pendingWord.len:
+          pendingWord = pendingWord[pos..^1]
+        else:
+          pendingWord = ""
+        atoms.add PatternAtom(count: count, code: code, orMore: orMore)
+        continue
+      else:
+        # Invalid pattern, stop
+        pendingWord = ""
+        break
     else:
-      break
-    atoms.add PatternAtom(count: count, code: code, orMore: orMore)
+      # Read from parser tokens
+      if p.peek() == tokNumber:
+        try:
+          count = parseInt(p.cur.text)
+        except ValueError:
+          count = 1
+        discard p.advance()
+      
+      if p.peek() == tokDot:
+        discard p.advance()
+        orMore = true
+        if p.peek() == tokNumber:
+          discard p.advance()
+      
+      if p.peek() == tokWord:
+        let word = p.cur.text
+        if word.len == 1:
+          # Single character pattern code
+          discard p.advance()
+          atoms.add PatternAtom(count: count, code: word[0], orMore: orMore)
+          continue
+        elif word.len > 1:
+          # Multi-character word — carry the count and buffer it
+          pendingWord = word
+          pendingCount = count
+          discard p.advance()
+          continue
+      elif p.peek() == tokStr:
+        discard p.advance()
+        atoms.add PatternAtom(count: count, code: 'E', orMore: orMore)
+        continue
+      else:
+        break
+  
   atoms
 
 # ======================================================================
