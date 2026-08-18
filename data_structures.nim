@@ -51,13 +51,14 @@ proc add*(arr: var NiArray, value: string) =
   arr.data.add(value)
 
 proc get*(arr: NiArray, index: int): string =
-  if index >= 0 and index < arr.data.len:
-    return arr.data[index]
-  return ""
+  if index < 0 or index >= arr.data.len:
+    raise newException(IndexDefect, "NiArray index out of bounds: " & $index)
+  return arr.data[index]
 
 proc set*(arr: var NiArray, index: int, value: string) =
-  if index >= 0 and index < arr.data.len:
-    arr.data[index] = value
+  if index < 0 or index >= arr.data.len:
+    raise newException(IndexDefect, "NiArray index out of bounds: " & $index)
+  arr.data[index] = value
 
 proc len*(arr: NiArray): int = arr.data.len
 
@@ -357,6 +358,8 @@ type
     count*: int
 
 proc newRing*(capacity: int): NiRing =
+  if capacity <= 0:
+    raise newException(ValueError, "NiRing capacity must be positive: " & $capacity)
   result.data = newSeq[string](capacity)
   result.capacity = capacity
   result.head = 0
@@ -403,6 +406,8 @@ type
     data*: Table[string, string]
 
 proc newLRU*(capacity: int): NiLRU =
+  if capacity <= 0:
+    raise newException(ValueError, "NiLRU capacity must be positive: " & $capacity)
   result.capacity = capacity
   result.order = @[]
   result.data = initTable[string, string]()
@@ -446,28 +451,32 @@ type
     size*: int
 
 proc newBitSet*(size: int): NiBitSet =
+  if size < 0:
+    raise newException(ValueError, "NiBitSet size must be non-negative: " & $size)
   let numWords = (size + 63) div 64
   result.bits = newSeq[uint64](numWords)
   result.size = size
 
 proc set*(bs: var NiBitSet, index: int) =
-  if index >= 0 and index < bs.size:
-    let word = index div 64
-    let bit = index mod 64
-    bs.bits[word] = bs.bits[word] or (1'u64 shl bit)
+  if index < 0 or index >= bs.size:
+    raise newException(IndexDefect, "NiBitSet index out of bounds: " & $index)
+  let word = index div 64
+  let bit = index mod 64
+  bs.bits[word] = bs.bits[word] or (1'u64 shl bit)
 
 proc clear*(bs: var NiBitSet, index: int) =
-  if index >= 0 and index < bs.size:
-    let word = index div 64
-    let bit = index mod 64
-    bs.bits[word] = bs.bits[word] and not (1'u64 shl bit)
+  if index < 0 or index >= bs.size:
+    raise newException(IndexDefect, "NiBitSet index out of bounds: " & $index)
+  let word = index div 64
+  let bit = index mod 64
+  bs.bits[word] = bs.bits[word] and not (1'u64 shl bit)
 
 proc test*(bs: NiBitSet, index: int): bool =
-  if index >= 0 and index < bs.size:
-    let word = index div 64
-    let bit = index mod 64
-    return (bs.bits[word] and (1'u64 shl bit)) != 0
-  return false
+  if index < 0 or index >= bs.size:
+    raise newException(IndexDefect, "NiBitSet index out of bounds: " & $index)
+  let word = index div 64
+  let bit = index mod 64
+  return (bs.bits[word] and (1'u64 shl bit)) != 0
 
 proc count*(bs: NiBitSet): int =
   result = 0
