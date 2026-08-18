@@ -152,15 +152,21 @@ proc matchPattern*(s: string, atoms: seq[PatternAtom]): bool =
   for atom in atoms:
     let min = atom.count
     var matched = 0
-    # Consume as many matching chars as possible.
-    while idx < s.len and matchesCode(s[idx], atom.code):
-      inc idx
-      inc matched
-    if matched < min:
-      return false
-    if not atom.orMore and matched != min:
-      # Cannot have more than count unless or_more.
-      return false
+    # For orMore atoms, consume greedily; for exact atoms, consume exactly min
+    if atom.orMore:
+      # Greedy: consume as many as possible
+      while idx < s.len and matchesCode(s[idx], atom.code):
+        inc idx
+        inc matched
+      if matched < min:
+        return false
+    else:
+      # Exact: consume exactly min characters
+      while matched < min and idx < s.len and matchesCode(s[idx], atom.code):
+        inc idx
+        inc matched
+      if matched < min:
+        return false
   idx == s.len
 
 ## atomToString — Render a Pattern Atom Back to M Source

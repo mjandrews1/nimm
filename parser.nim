@@ -202,7 +202,7 @@ proc readDollarName(p: var Parser): string =
 ## current token can't start an expression, we're done.
 proc isExprStart(p: Parser): bool =
   case p.cur.kind
-  of tokNumber, tokStr, tokDollar, tokCaret, tokLParen, tokMinus, tokNot, tokAt,
+  of tokNumber, tokStr, tokDollar, tokCaret, tokLParen, tokMinus, tokPlus, tokNot, tokAt,
      tokWord:
     true
   else:
@@ -279,8 +279,8 @@ proc parseExpr(p: var Parser): Expr =
 
 ## parsePrefix — Parse Unary Prefix Operators
 ##
-## Handles unary minus (-) and logical NOT ('). These are right-associative:
-## --x means -(-x), ''x means NOT(NOT(x)).
+## Handles unary minus (-), unary plus (+), and logical NOT (').
+## These are right-associative: --x means -(-x), ''x means NOT(NOT(x)).
 ##
 ## Design Decision: We use recursion for right-associativity. This means
 ## "---x" parses correctly as -(-(-x)).
@@ -288,6 +288,10 @@ proc parsePrefix(p: var Parser): Expr =
   if p.peek() == tokMinus:
     discard p.advance()
     Expr(kind: eNeg, operand: parsePrefix(p))
+  elif p.peek() == tokPlus:
+    # Unary plus — just skip it (no effect on value)
+    discard p.advance()
+    parsePrefix(p)
   elif p.peek() == tokNot:
     discard p.advance()
     Expr(kind: eNot, operand: parsePrefix(p))
@@ -583,8 +587,22 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cWrite, writeArgs: parseWriteArgs(p))
   of "IF", "I":
     let cond = p.parseExpr()
-    let body = p.parseLine()
+    # Parse body until ELSE or end of line
+    var body = Line(cmds: @[])
+    while true:
+      if p.peek() == tokEof:
+        break
+      # Check if next token is ELSE
+      if p.peek() == tokWord and p.cur.text.toUpperAscii == "ELSE":
+        break
+      if p.atCommandPos():
+        body.cmds.add parseCommand(p)
+      else:
+        break
     cmd = Cmd(kind: cIf, ifCond: cond, ifBody: body)
+  of "ELSE", "E":
+    let body = p.parseLine()
+    cmd = Cmd(kind: cElse, elseBody: body)
   of "FOR", "F":
     let spec = parseForSpec(p)
     let body = p.parseLine()
@@ -597,7 +615,14 @@ proc parseCommand(p: var Parser): CommandNode =
   of "KILL", "K":
     cmd = parseKill(p)
   of "NEW", "N":
-    cmd = Cmd(kind: cNew, newNames: parseNameList(p))
+    # NEW can have no arguments (push scope for all) or a list of variable names
+    var names: seq[string] = @[]
+    if p.peek() == tokWord and not p.atCommandPos():
+      # Only parse name list if next token is a word (not a command)
+      let nextWord = p.cur.text.toUpperAscii
+      if not isCommandWord(p, nextWord):
+        names = parseNameList(p)
+    cmd = Cmd(kind: cNew, newNames: names)
   of "HANG", "H":
     cmd = Cmd(kind: cHang, hangExpr: p.parseExpr())
   of "LOCK", "L":
@@ -607,7 +632,15 @@ proc parseCommand(p: var Parser): CommandNode =
   of "XECUTE", "X":
     cmd = Cmd(kind: cXecute, xecExpr: p.parseExpr())
   of "DO", "D":
-    cmd = Cmd(kind: cDo, doArgs: parseExprList(p))
+    # DO can execute inline commands or call labels
+    # Check if next token is a command word (inline DO) or a variable name (label DO)
+    if p.peek() == tokWord and isCommandWord(p, p.cur.text.toUpperAscii):
+      # Inline DO: DO command
+      let body = p.parseLine()
+      cmd = Cmd(kind: cDoInline, doInlineBody: body)
+    else:
+      # Label DO: DO label,label,...
+      cmd = Cmd(kind: cDo, doArgs: parseExprList(p))
   of "GOTO", "G":
     cmd = Cmd(kind: cGoto, gotoExpr: p.parseExpr())
   of "BREAK", "B":
@@ -816,8 +849,12 @@ proc parseKill(p: var Parser): Cmd =
     if p.peek() == tokRParen:
       discard p.advance()
     Cmd(kind: cKillExcept, killKeep: vars)
-  else:
+  elif isExprStart(p) and not p.atCommandPos():
+    # KILL with arguments
     Cmd(kind: cKill, killRefs: parseExprList(p))
+  else:
+    # KILL without arguments — kill all local variables
+    Cmd(kind: cKill, killRefs: @[])
 
 ## parseExprList — Parse a Comma-Separated Expression List
 proc parseExprList(p: var Parser): seq[Expr] =

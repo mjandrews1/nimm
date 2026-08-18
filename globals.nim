@@ -70,6 +70,10 @@ proc killLocal*(g: var Globals, name: string, subs: seq[string] = @[]) =
     let key = makeKey(name, subs)
     scope[].del(key)
 
+proc killAllLocal*(g: var Globals) =
+  ## Kill all local variables in current scope
+  g.scopes[^1].clear()
+
 proc dataLocal*(g: Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA for local variables
   let key = makeKey(name, subs)

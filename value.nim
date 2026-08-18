@@ -88,6 +88,16 @@ proc isCanonicalNumber*(s: string): bool =
     while i < t.len and t[i] in {'0'..'9'}:
       hasDigit = true
       inc i
+  # Scientific notation: E or e followed by optional sign and digits
+  if i < t.len and t[i] in {'E', 'e'}:
+    inc i
+    if i < t.len and t[i] in {'+', '-'}:
+      inc i
+    var hasExponentDigit = false
+    while i < t.len and t[i] in {'0'..'9'}:
+      hasExponentDigit = true
+      inc i
+    return hasDigit and hasExponentDigit and i == t.len
   hasDigit and i == t.len
 
 ## parseNum — Parse a string to float, respecting M's coercion rules

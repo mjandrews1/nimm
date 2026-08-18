@@ -42,7 +42,12 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   ## Evaluate an expression and return string result
   case expr.kind
   of numLit:
-    return expr.sval
+    # Normalize number to canonical M form
+    try:
+      let v = parseFloat(expr.sval)
+      return formatNumber(v)
+    except:
+      return expr.sval
   of eStr:
     return expr.sval
   of eVar:
@@ -388,10 +393,35 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         s = $int(num)
       else:
         s = $num
+    # Apply sign
     if '+' in format and num >= 0:
       s = "+" & s
     elif 'P' in format and num < 0:
       s = "(" & s[1..^1] & ")"
+    # Apply comma separator
+    if ',' in format:
+      # Split into integer and decimal parts
+      let dotPos = s.find('.')
+      var intPart: string
+      var decPart: string
+      if dotPos >= 0:
+        intPart = s[0..<dotPos]
+        decPart = s[dotPos..^1]
+      else:
+        intPart = s
+        decPart = ""
+      # Handle negative sign
+      var sign = ""
+      if intPart.startsWith("-"):
+        sign = "-"
+        intPart = intPart[1..^1]
+      # Add commas
+      var result = ""
+      for i, ch in intPart:
+        if i > 0 and (intPart.len - i) mod 3 == 0:
+          result.add(',')
+        result.add(ch)
+      s = sign & result & decPart
     return s
   of "TEXT", "T":
     if args.len < 1: return ""

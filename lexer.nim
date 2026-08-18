@@ -235,10 +235,10 @@ proc nextToken*(lex: var Lexer): Token =
         inc lex.pos
     return Token(kind: tokStr, text: s, start: start)
 
-  # Number (integer or decimal)
+  # Number (integer, decimal, or scientific notation)
   # ANSI/ISO Section 3.3: Numeric literals are digits optionally followed
-  # by a decimal point and more digits. No leading sign — that's a
-  # unary operator in M.
+  # by a decimal point and more digits. Scientific notation uses E or e.
+  # No leading sign — that's a unary operator in M.
   if c in {'0'..'9'}:
     var n = ""
     while lex.peekAt(0) in {'0'..'9'}:
@@ -247,6 +247,16 @@ proc nextToken*(lex: var Lexer): Token =
     if lex.peekAt(0) == '.' and lex.peekAt(1) in {'0'..'9'}:
       n.add '.'
       inc lex.pos
+      while lex.peekAt(0) in {'0'..'9'}:
+        n.add lex.peekAt(0)
+        inc lex.pos
+    # Scientific notation: E or e followed by optional sign and digits
+    if lex.peekAt(0) in {'E', 'e'}:
+      n.add lex.peekAt(0)
+      inc lex.pos
+      if lex.peekAt(0) in {'+', '-'}:
+        n.add lex.peekAt(0)
+        inc lex.pos
       while lex.peekAt(0) in {'0'..'9'}:
         n.add lex.peekAt(0)
         inc lex.pos

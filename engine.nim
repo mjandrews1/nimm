@@ -131,6 +131,11 @@ proc execute*(eng: var Engine, line: Line): string =
           if eng.testValue and cmd.ifBody != nil:
             result = eng.execute(cmd.ifBody)
 
+      of CmdKind.cElse:
+        # ELSE executes only if $TEST is false
+        if not eng.testValue and cmd.elseBody != nil:
+          result = eng.execute(cmd.elseBody)
+
       of CmdKind.cFor:
         if cmd.forSpec.varName == "":
           # Argumentless FOR — loops until QUIT
@@ -148,7 +153,8 @@ proc execute*(eng: var Engine, line: Line): string =
             parseFloat(eng.evaluator[].eval(cmd.forSpec.limitE))
           else: 0.0
           var current = init
-          while current <= limit:
+          # Handle both positive and negative steps
+          while (step > 0 and current <= limit) or (step < 0 and current >= limit):
             eng.globals[].set(cmd.forSpec.varName, @[], $current)
             if cmd.forBody != nil:
               let r = eng.execute(cmd.forBody)
@@ -157,17 +163,23 @@ proc execute*(eng: var Engine, line: Line): string =
             current += step
 
       of CmdKind.cQuit:
+        # Pop scope if we're in a NEW block
+        eng.globals[].popScope()
         if cmd.quitVal != nil:
           return eng.evaluator[].eval(cmd.quitVal)
         return "QUIT"
 
       of CmdKind.cKill:
-        for killRef in cmd.killRefs:
-          if killRef.kind == eVar:
-            var subs: seq[string] = @[]
-            for sub in killRef.subs:
-              subs.add(eng.evaluator[].eval(sub))
-            eng.globals[].kill(killRef.vname, subs)
+        if cmd.killRefs.len == 0:
+          # KILL without arguments — kill all local variables
+          eng.globals[].killAllLocal()
+        else:
+          for killRef in cmd.killRefs:
+            if killRef.kind == eVar:
+              var subs: seq[string] = @[]
+              for sub in killRef.subs:
+                subs.add(eng.evaluator[].eval(sub))
+              eng.globals[].kill(killRef.vname, subs)
 
       of CmdKind.cNew:
         eng.globals[].pushScope()
@@ -191,6 +203,11 @@ proc execute*(eng: var Engine, line: Line): string =
                   if r == "QUIT":
                     break
                 offset.inc
+
+      of CmdKind.cDoInline:
+        # Inline DO: execute the body directly
+        if cmd.doInlineBody != nil:
+          result = eng.execute(cmd.doInlineBody)
 
       of CmdKind.cGoto:
         if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:

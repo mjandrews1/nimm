@@ -366,8 +366,8 @@ type
   ## Genera Note: Each command would be inspectable with its arguments,
   ## postconditional, and execution status (executed/skipped/failed).
   CmdKind* = enum
-    cSet, cWrite, cIf, cFor, cQuit, cKill, cKillExcept, cNew,
-    cHang, cLock, cMerge, cXecute, cDo, cGoto, cBreak, cNoop,
+    cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
+    cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
     cZwrite, cZkill, cOpen, cUse, cClose, cRead
 
   ## Cmd — Command AST Node (without postconditional)
@@ -401,6 +401,8 @@ type
     of cIf:
       ifCond*: Expr
       ifBody*: Line
+    of cElse:
+      elseBody*: Line
     of cFor:
       forSpec*: ForSpec
       forBody*: Line
@@ -422,6 +424,8 @@ type
       xecExpr*: Expr
     of cDo:
       doArgs*: seq[Expr]
+    of cDoInline:
+      doInlineBody*: Line
     of cGoto:
       gotoExpr*: Expr
     of cBreak:
