@@ -19,7 +19,9 @@ proc runMCode(code: string, expected: string, category: string = ""): TestResult
   result.passed = false
   result.category = category
   
-  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./main -x '" & code & "'"
+  # Escape $ for shell
+  let escapedCode = code.replace("$", "\\$")
+  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./main -x '" & escapedCode & "'"
   let (output, exitCode) = execCmdEx(cmd)
   
   let actual = output.strip()

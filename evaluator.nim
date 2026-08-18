@@ -288,9 +288,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       let precision = parseInt(args[2])
       try:
         let num = parseFloat(s)
-        return formatFloat(num, ffDecimal, precision)
+        let formatted = formatFloat(num, ffDecimal, precision)
+        return formatted.align(width)
       except:
-        return s
+        return s.align(width)
     else:
       return s.align(width)
   of "LENGTH", "L":
