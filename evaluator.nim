@@ -71,8 +71,8 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       try: num = parseFloat(current)
       except: discard
       let newVal = num + increment
-      ev.globals[].set(varName, @[], $newVal)
-      return $newVal
+      ev.globals[].set(varName, @[], formatNumber(newVal))
+      return formatNumber(newVal)
     # Special handling for $DATA — needs variable name, not value
     if expr.fname in ["DATA", "D"]:
       if expr.fargs.len < 1: return ""

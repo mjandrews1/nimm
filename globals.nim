@@ -114,21 +114,15 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
     if forward: return keys[0]
     else: return keys[^1]
   
+  # Find the next key after the given subscript
   let lastSub = subs[^1]
-  var idx = -1
   for i, k in keys:
-    if k == lastSub:
-      idx = i
-      break
+    if forward and k > lastSub:
+      return k
+    elif not forward and k < lastSub:
+      return k
   
-  if idx < 0: return ""
-  
-  if forward:
-    if idx + 1 < keys.len: return keys[idx + 1]
-    return ""
-  else:
-    if idx - 1 >= 0: return keys[idx - 1]
-    return ""
+  return ""
 
 # --- Global variable operations ---
 
