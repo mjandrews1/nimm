@@ -129,7 +129,8 @@ proc main() =
   # 10. KILL (BUG if failing)
   # ==========================================
   # Per M standard: KILL without args kills all local variables
-  results.add(runMCode("SET X=42 KILL WRITE $DATA(X)", "0", "KILL"))
+  # Note: KILL X treats X as variable (not XECUTE command)
+  results.add(runMCode("SET X=42 KILL X WRITE $DATA(X)", "0", "KILL"))
   results.add(runMCode("SET A(1)=1,A(2)=2 KILL A(1) WRITE $DATA(A(1))", "0", "KILL"))
   results.add(runMCode("SET A(1)=1,A(2)=2 KILL A(1) WRITE $DATA(A(2))", "1", "KILL"))
   

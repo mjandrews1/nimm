@@ -73,6 +73,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let newVal = num + increment
       ev.globals[].set(varName, @[], $newVal)
       return $newVal
+    # Special handling for $DATA — needs variable name, not value
+    if expr.fname in ["DATA", "D"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      return $ev.globals[].data(varName, subs)
     # Special handling for $ORDER — needs variable reference, not value
     if expr.fname in ["ORDER", "O"]:
       if expr.fargs.len < 1: return ""

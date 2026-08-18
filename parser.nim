@@ -909,6 +909,7 @@ proc parseForSpec(p: var Parser): ForSpec =
 ## the normal form produces cKill.
 proc parseKill(p: var Parser): Cmd =
   if p.peek() == tokLParen:
+    # KILL (var,var,...) — kill all except listed
     discard p.advance()
     var vars: seq[Expr] = @[]
     while true:
@@ -921,9 +922,18 @@ proc parseKill(p: var Parser): Cmd =
     if p.peek() == tokRParen:
       discard p.advance()
     Cmd(kind: cKillExcept, killKeep: vars)
-  elif isExprStart(p) and not p.atCommandPos():
-    # KILL with arguments
-    Cmd(kind: cKill, killRefs: parseExprList(p))
+  elif p.peek() == tokWord:
+    # KILL var,var,... — parse as variable list
+    # Always treat the next word as a variable name, even if it's a command word
+    var refs: seq[Expr] = @[]
+    while true:
+      let (name, subs) = parseVarRef(p)
+      refs.add Expr(kind: eVar, vname: name, subs: subs)
+      if p.peek() == tokComma:
+        discard p.advance()
+      else:
+        break
+    Cmd(kind: cKill, killRefs: refs)
   else:
     # KILL without arguments — kill all local variables
     Cmd(kind: cKill, killRefs: @[])
@@ -934,6 +944,9 @@ proc parseExprList(p: var Parser): seq[Expr] =
   if not isExprStart(p):
     return list
   while true:
+    # Stop if we hit a command word at command position
+    if p.atCommandPos():
+      break
     list.add p.parseExpr()
     if p.peek() == tokComma:
       discard p.advance()
