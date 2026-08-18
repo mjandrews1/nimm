@@ -164,10 +164,16 @@ proc execute*(eng: var Engine, line: Line): string =
 
       of CmdKind.cQuit:
         # Pop scope if we're in a NEW block
-        eng.globals[].popScope()
-        if cmd.quitVal != nil:
-          return eng.evaluator[].eval(cmd.quitVal)
-        return "QUIT"
+        if eng.globals[].scopes.len > 1:
+          eng.globals[].popScope()
+          # After popping scope, continue execution (don't return QUIT)
+          if cmd.quitVal != nil:
+            discard eng.evaluator[].eval(cmd.quitVal)
+        else:
+          # Not in a NEW scope - this is a real QUIT (exit DO/FOR)
+          if cmd.quitVal != nil:
+            return eng.evaluator[].eval(cmd.quitVal)
+          return "QUIT"
 
       of CmdKind.cKill:
         if cmd.killRefs.len == 0:

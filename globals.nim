@@ -191,8 +191,8 @@ proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
 # --- NEW/QUIT scoping ---
 
 proc pushScope*(g: var Globals) =
-  ## Push new local scope (NEW)
-  g.scopes.add(initTable[string, string]())
+  ## Push new local scope (NEW) — inherits current scope
+  g.scopes.add(g.scopes[^1])
 
 proc popScope*(g: var Globals) =
   ## Pop local scope (QUIT) — discards current scope

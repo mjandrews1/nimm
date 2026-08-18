@@ -688,12 +688,30 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = parseKill(p)
   of "NEW", "N":
     # NEW can have no arguments (push scope for all) or a list of variable names
+    # The first word after NEW is always a variable name (even X = XECUTE)
+    # But subsequent words should not be command words
     var names: seq[string] = @[]
-    if p.peek() == tokWord and not p.atCommandPos():
-      # Only parse name list if next token is a word (not a command)
-      let nextWord = p.cur.text.toUpperAscii
-      if not isCommandWord(p, nextWord):
-        names = parseNameList(p)
+    if p.peek() == tokWord:
+      let word = p.cur.text
+      # Check if this looks like a real command (not just X)
+      let upperWord = word.toUpperAscii
+      if upperWord != "X" and isCommandWord(p, upperWord):
+        # It's a real command like SET, WRITE — treat as NEW without args
+        discard
+      else:
+        # First word is a variable name
+        names.add(word)
+        discard p.advance()
+        # Additional variable names (comma-separated)
+        while p.peek() == tokComma:
+          discard p.advance()
+          if p.peek() == tokWord:
+            let nextWord = p.cur.text
+            let upperNext = nextWord.toUpperAscii
+            if upperNext != "X" and isCommandWord(p, upperNext):
+              break
+            names.add(nextWord)
+            discard p.advance()
     cmd = Cmd(kind: cNew, newNames: names)
   of "HANG", "H":
     cmd = Cmd(kind: cHang, hangExpr: p.parseExpr())

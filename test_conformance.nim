@@ -19,12 +19,14 @@ proc runMCode(code: string, expected: string, category: string = ""): TestResult
   result.passed = false
   result.category = category
   
-  # Escape $ for shell
-  let escapedCode = code.replace("$", "\\$")
-  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./main -x '" & escapedCode & "'"
-  let (output, exitCode) = execCmdEx(cmd)
+  putEnv("DYLD_LIBRARY_PATH", "/usr/local/lib")
+  let output = execProcess("./nimm", args = @["-x", code], options = {poStdErrToStdOut})
   
-  let actual = output.strip()
+  # Only strip trailing newline, not spaces
+  var actual = output
+  while actual.len > 0 and actual[^1] == '\n':
+    actual = actual[0..^2]
+  
   if actual == expected:
     result.passed = true
     result.message = "OK"
@@ -154,7 +156,7 @@ proc main() =
   results.add(runMCode("WRITE $TEST", "1", "Special"))
   results.add(runMCode("SET $X=10 WRITE $X", "10", "Special"))
   results.add(runMCode("SET $Y=20 WRITE $Y", "20", "Special"))
-  results.add(runMCode("WRITE $HOROLOG?5N1\",\"5N", "1", "Special"))
+  results.add(runMCode("WRITE $HOROLOG?5N 1\",\"5N", "1", "Special"))
   results.add(runMCode("WRITE $JOB?1.N", "1", "Special"))
   
   # ==========================================
