@@ -147,6 +147,63 @@ proc sync*(store: LmdbStore) =
   ## Flush data to disk
   discard envSync(store.env, 1)
 
+proc batchPut*(store: LmdbStore, items: seq[(string, seq[string], string)]) =
+  ## Batch put multiple key-value pairs in a single transaction
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB txn_begin failed")
+  
+  try:
+    for (global, subs, value) in items:
+      let key = encodeKey(global, subs)
+      var mdbKey: Val
+      mdbKey.mvSize = cast[uint](key.len)
+      mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+      
+      var mdbVal: Val
+      mdbVal.mvSize = cast[uint](value.len)
+      if value.len > 0:
+        mdbVal.mvData = cast[pointer](unsafeAddr value[0])
+      
+      rc = put(txn, store.dbi, addr mdbKey, addr mdbVal, 0)
+      if rc != SUCCESS:
+        abort(txn)
+        raise newException(IOError, "LMDB batch put failed")
+    
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_commit failed")
+  except:
+    abort(txn)
+    raise
+
+proc batchDelete*(store: LmdbStore, keys: seq[(string, seq[string])]) =
+  ## Batch delete multiple keys in a single transaction
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB txn_begin failed")
+  
+  try:
+    for (global, subs) in keys:
+      let key = encodeKey(global, subs)
+      var mdbKey: Val
+      mdbKey.mvSize = cast[uint](key.len)
+      mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+      
+      rc = del(txn, store.dbi, addr mdbKey, nil)
+      if rc != SUCCESS:
+        abort(txn)
+        raise newException(IOError, "LMDB batch delete failed")
+    
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_commit failed")
+  except:
+    abort(txn)
+    raise
+
 proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
   ## Get next/previous key in LMDB (for $ORDER)
   let prefix = encodeKey(global, subs)
