@@ -74,6 +74,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let newVal = num + increment
       ev.globals[].set(varName, @[], formatNumber(newVal))
       return formatNumber(newVal)
+    # Special handling for $GET — needs variable name, not value
+    if expr.fname in ["GET", "G"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      let val = ev.globals[].get(varName)
+      if val.len > 0: return val
+      if expr.fargs.len > 1: return ev.eval(expr.fargs[1])
+      return ""
     # Special handling for $DATA — needs variable name, not value
     if expr.fname in ["DATA", "D"]:
       if expr.fargs.len < 1: return ""
@@ -115,7 +125,10 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       args.add(ev.eval(arg))
     return ev.callFunction(expr.fname, args)
   of eSvar:
-    return ev.globals[].getSpecialVar("$" & expr.sname)
+    let sv = ev.globals[].getSpecialVar("$" & expr.sname)
+    if sv.len > 0: return sv
+    # If not found as special var, try as function (e.g. $ZHOROLOG)
+    return ev.callFunction(expr.sname, @[])
   of eNeg:
     let val = ev.eval(expr.operand)
     try:

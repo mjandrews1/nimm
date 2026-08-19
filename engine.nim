@@ -284,7 +284,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           cmdStr = eng.evaluator[].eval(cmd.zsystemExpr)
         if cmdStr.len > 0:
           let exitCode = execShellCmd(cmdStr)
-          eng.output.add("Exit code: " & $exitCode & "\n")
+          # Don't output exit code to stdout
 
       of CmdKind.cZprint:
         if cmd.zprintExpr != nil and cmd.zprintExpr.kind == eVar:
