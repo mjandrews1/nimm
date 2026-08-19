@@ -77,6 +77,8 @@ nimm -m MODE               Set mode (nimm|strict|rsm)
 
 ## Supported Functions
 
+See [FUNCTIONS.md](FUNCTIONS.md) for complete function reference.
+
 ### ANSI/ISO Standard Functions
 - $ASCII, $CHAR, $DATA, $EXTRACT, $FIND, $GET
 - $INCREMENT, $JUSTIFY, $LENGTH, $ORDER, $PIECE
@@ -118,6 +120,14 @@ nim c -d:release test_conformance.nim
 # Run integration tests
 nim c -d:release test_integration.nim
 ./test_integration
+
+# Run unified conformance script
+./conformance.sh -m rsm -e ./nimm   # ANSI/ISO only
+./conformance.sh -m rfc -e ./nimm   # ANSI/ISO + RSM extensions
+./conformance.sh -m nimm -e ./nimm  # ANSI/ISO + RSM + nimm extensions
+
+# Run performance tests
+./performance.sh -e ./nimm -m nimm -n 100
 ```
 
 ## License

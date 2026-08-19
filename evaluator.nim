@@ -885,7 +885,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     of "len":
       if id notin niSorted: return "0"
       return $niSorted[id].len
-    of "toSeq":
+    of "toseq", "toSeq":
       if id notin niSorted: return ""
       return niSorted[id].toSeq().join(",")
     of "destroy":
@@ -904,26 +904,26 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     of "create":
       niDeques[id] = newDeque()
       return id
-    of "addFirst", "pushFirst":
+    of "addfirst", "pushfirst":
       if args.len < 3: return ""
       if id notin niDeques: return ""
       niDeques[id].pushFront(args[2])
       return $niDeques[id].len
-    of "addLast", "pushLast":
+    of "addlast", "pushlast":
       if args.len < 3: return ""
       if id notin niDeques: return ""
       niDeques[id].pushBack(args[2])
       return $niDeques[id].len
-    of "popFirst":
+    of "popfirst":
       if id notin niDeques: return ""
       return niDeques[id].popFront()
-    of "popLast":
+    of "poplast":
       if id notin niDeques: return ""
       return niDeques[id].popBack()
-    of "peekFirst":
+    of "peekfirst":
       if id notin niDeques: return ""
       return niDeques[id].peekFront()
-    of "peekLast":
+    of "peeklast":
       if id notin niDeques: return ""
       return niDeques[id].peekBack()
     of "len":

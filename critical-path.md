@@ -127,3 +127,18 @@
 - Engine has stubs for LOCK, MERGE, XECUTE, BREAK, OPEN/USE/CLOSE
 - LMDB storage exists but isn't wired to globals yet
 - No test coverage beyond manual testing
+
+## Git Issues Resolved (2026-08-19)
+- **#167:** Local nimm binary missing liblmdb.dylib — Fixed by adding rpath to nim.cfg
+- **#168:** RSM build hash discrepancy across servers — Fixed by rebuilding RSM on local machine
+- **#169:** $FIND test fails on Utility-02 — Fixed by copying correct conformance script from local machine
+
+## Policy: RSM and RFC Frozen (2026-08-19)
+- **RSM and RFC source code is frozen.** No development changes permitted.
+- Only occasional binary rebuilds to refresh on all servers.
+- nimm remains the active development target.
+
+## Policy: nimm v0.1.0 Frozen (2026-08-19)
+- **nimm v0.1.0 is frozen.** Tagged as `v0.1.0` on GitHub.
+- All servers synced with tag.
+- Development continues on nimm v0.1.1.
