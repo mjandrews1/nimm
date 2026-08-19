@@ -6,6 +6,7 @@ import tables
 import math
 import random
 import os
+import times
 import ast
 import globals
 import value
@@ -485,6 +486,92 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if args.len < 1: return ""
     try: return formatNumber(tan(parseFloat(args[0])))
     except: return "0"
+  # RSM Date/Time/String Functions
+  of "ZDATE":
+    # $ZDATE(horolog) - Format date from $HOROLOG
+    if args.len < 1: return ""
+    let parts = args[0].split(",")
+    if parts.len < 2: return ""
+    try:
+      let days = parseInt(parts[0])
+      # Days since Dec 31, 1840
+      let base = 693594  # Days from 0001-01-01 to 1840-12-31
+      let totalDays = base + days
+      # Simple date calculation
+      var year = 1
+      var dayOfYear = totalDays
+      while true:
+        let daysInYear = if year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 366 else: 365
+        if dayOfYear <= daysInYear: break
+        dayOfYear -= daysInYear
+        year.inc
+      let monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+      var month = 1
+      for md in monthDays:
+        let daysInMonth = if month == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 29 else: md
+        if dayOfYear <= daysInMonth: break
+        dayOfYear -= daysInMonth
+        month.inc
+      return $year & "-" & align($month, 2, '0') & "-" & align($dayOfYear, 2, '0')
+    except:
+      return ""
+  of "ZTIME":
+    # $ZTIME(horolog) - Format time from $HOROLOG
+    if args.len < 1: return ""
+    let parts = args[0].split(",")
+    if parts.len < 2: return ""
+    try:
+      let seconds = parseInt(parts[1])
+      let hours = seconds div 3600
+      let minutes = (seconds mod 3600) div 60
+      let secs = seconds mod 60
+      return align($hours, 2, '0') & ":" & align($minutes, 2, '0') & ":" & align($secs, 2, '0')
+    except:
+      return ""
+  of "ZHOROLOG":
+    # $ZHOROLOG - Get current date/time in $HOROLOG format
+    let now = times.now()
+    # Days from 1840-12-31 to now
+    let year = now.year
+    let month = now.month.ord
+    let day = now.monthday
+    var days = 0
+    for y in 1840..<year:
+      if y mod 4 == 0 and (y mod 100 != 0 or y mod 400 == 0):
+        days += 366
+      else:
+        days += 365
+    let monthDays = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    for m in 1..<month:
+      days += monthDays[m]
+      if m == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0):
+        days.inc
+    days += day
+    let seconds = now.hour * 3600 + now.minute * 60 + now.second
+    return $days & "," & $seconds
+  of "ZCONVERT":
+    # $ZCONVERT(expr, type) - Convert string case
+    if args.len < 2: return args[0]
+    let s = args[0]
+    let t = args[1].toLowerAscii
+    case t
+    of "u": return s.toUpperAscii
+    of "l": return s.toLowerAscii
+    else: return s
+  of "ZWIDTH":
+    # $ZWIDTH(expr) - Get display width (simplified: just string length)
+    if args.len < 1: return "0"
+    return $args[0].len
+  of "ZBIT":
+    # $ZBIT(expr, bit) - Get bit value
+    if args.len < 2: return "0"
+    try:
+      let n = parseInt(args[0])
+      let b = parseInt(args[1])
+      if (n and (1 shl b)) != 0: return "1"
+      return "0"
+    except:
+      return "0"
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
