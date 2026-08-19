@@ -146,3 +146,86 @@ proc delete*(store: LmdbStore, global: string, subs: seq[string] = @[]) =
 proc sync*(store: LmdbStore) =
   ## Flush data to disk
   discard envSync(store.env, 1)
+
+proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
+  ## Get next/previous key in LMDB (for $ORDER)
+  let prefix = encodeKey(global, subs)
+  
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
+  if rc != SUCCESS:
+    return ""
+  
+  var cursor: LMDBCursor
+  rc = cursorOpen(txn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    abort(txn)
+    return ""
+  
+  # Position cursor at prefix
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](prefix.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+  
+  var mdbVal: Val
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+  
+  if rc != SUCCESS:
+    cursorClose(cursor)
+    abort(txn)
+    return ""
+  
+  # Move to next/previous
+  if forward:
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  else:
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+  
+  cursorClose(cursor)
+  abort(txn)
+  
+  if rc != SUCCESS:
+    return ""
+  
+  # Decode the key from mdbKey
+  let key = newString(mdbKey.mvSize)
+  copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+  let decoded = decodeKey(key)
+  # Return the subscript (first subscript after global name)
+  if decoded[1].len > 0:
+    return decoded[1][0]
+  return ""
+
+proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
+  ## List all keys with optional prefix
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
+  if rc != SUCCESS:
+    return @[]
+  
+  var cursor: LMDBCursor
+  rc = cursorOpen(txn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    abort(txn)
+    return @[]
+  
+  var mdbKey: Val
+  var mdbVal: Val
+  
+  if prefix.len > 0:
+    mdbKey.mvSize = cast[uint](prefix.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+  else:
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, FIRST)
+  
+  while rc == SUCCESS:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    if prefix.len > 0 and not key.startsWith(prefix):
+      break
+    result.add(decodeKey(key)[0])
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  
+  cursorClose(cursor)
+  abort(txn)

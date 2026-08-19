@@ -167,9 +167,9 @@ proc kill*(g: var Globals, name: string, subs: seq[string] = @[]) =
 proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
   ## $ORDER (auto-detect local vs global)
   if name.len > 0 and name[0] == '^':
-    # For globals, we need to iterate LMDB keys
-    # This is a simplified implementation
-    return ""
+    # For globals, use LMDB cursor
+    if g.dbPath.len == 0: return ""
+    return g.globals.order(name, subs, forward)
   else:
     return g.orderLocal(name, subs, forward)
 
