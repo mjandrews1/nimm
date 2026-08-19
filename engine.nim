@@ -9,6 +9,7 @@ import globals
 import evaluator
 import runtime
 import parser
+import special_vars
 
 type
   Engine* = ref object
@@ -205,6 +206,7 @@ proc execute*(eng: var Engine, line: Line): string =
             let routine = eng.runtime[].currentRoutine
             if routine.len > 0:
               # Execute from label until QUIT or next label
+              pushStack()
               var offset = 0
               while true:
                 let gotLine = eng.runtime[].getLine(routine, label, offset)
@@ -217,6 +219,7 @@ proc execute*(eng: var Engine, line: Line): string =
                   if r == "QUIT":
                     break
                 offset.inc
+              popStack()
 
       of CmdKind.cDoInline:
         # Inline DO: execute the body directly

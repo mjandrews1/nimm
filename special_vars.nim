@@ -121,9 +121,21 @@ proc getStorage(): string =
     discard
   return "1000000000"  # Fallback: 1GB
 
+var stackDepth: int = 0
+
 proc getStack(): string =
-  # $STACK returns call stack depth (simplified)
-  return "0"
+  # $STACK returns call stack depth
+  return $stackDepth
+
+proc pushStack*() =
+  inc stackDepth
+
+proc popStack*() =
+  if stackDepth > 0:
+    dec stackDepth
+
+proc resetStack*() =
+  stackDepth = 0
 
 proc getSystem(): string =
   # $SYSTEM returns system info
