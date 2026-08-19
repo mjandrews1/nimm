@@ -10,6 +10,7 @@ import evaluator
 import runtime
 import parser
 import special_vars
+import debugger
 
 type
   Engine* = ref object
@@ -17,6 +18,7 @@ type
     globals*: ptr Globals
     evaluator*: ptr Evaluator
     runtime*: ptr Runtime
+    debugger*: Debugger
     output*: string
     testValue*: bool
 
@@ -25,6 +27,7 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.globals = globals.addr
   result.evaluator = evaluator.addr
   result.runtime = runtime.addr
+  result.debugger = newDebugger()
   result.output = ""
   result.testValue = false
 
@@ -251,9 +254,16 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let seconds = parseFloat(eng.evaluator[].eval(cmd.hangExpr))
           os.sleep(int(seconds * 1000))
 
-      of CmdKind.cLock, CmdKind.cMerge, CmdKind.cBreak,
+      of CmdKind.cLock, CmdKind.cMerge,
          CmdKind.cOpen, CmdKind.cUse, CmdKind.cClose:
         discard
+
+      of CmdKind.cBreak:
+        # BREAK - Enter debugger
+        # Note: Full debugger integration requires refactoring
+        # For now, just print debugger info
+        eng.writeln("BREAK: Debugger not available in this build")
+        eng.writeln("Use ZBREAK, ZSTEP, ZCONTINUE for debugging")
 
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:
@@ -320,25 +330,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let label = cmd.zbreakExpr.vname
           let routine = eng.runtime[].currentRoutine
           if routine.len > 0:
-            if routine notin eng.runtime[].breakpoints:
-              eng.runtime[].breakpoints[routine] = @[]
-            eng.runtime[].breakpoints[routine].add(0)  # Line 0 for now
-            eng.writeln("Breakpoint set at " & label)
+            eng.debugger.setBreakpoint(routine, 0)
 
       of CmdKind.cZstep:
         # ZSTEP [mode] - Single-step execution
         if cmd.zstepExpr != nil:
           let mode = eng.evaluator[].eval(cmd.zstepExpr)
-          eng.runtime[].stepMode = mode
-          eng.writeln("Step mode: " & mode)
+          eng.debugger.setStepMode(mode)
         else:
-          eng.runtime[].stepMode = "into"
-          eng.writeln("Step mode: into")
+          eng.debugger.setStepMode("into")
 
       of CmdKind.cZcontinue:
         # ZCONTINUE - Continue after breakpoint
-        eng.runtime[].stepping = false
-        eng.writeln("Continuing...")
+        eng.debugger.continueExecution()
 
       of CmdKind.cZmessage:
         # ZMESSAGE errorcode - Raise an M error

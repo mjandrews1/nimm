@@ -1,45 +1,46 @@
 # nimm Work Resume Point
 
 **Date:** 2026-08-18
-**Last Action:** Fixed #152 (version flag), #156 (LMDB txn leaks), #157 (copyMem UB)
+**Last Action:** Working on #161 (debugger infrastructure) — SIGSEGV on ZBREAK/ZSTEP/ZCONTINUE
 
 ## Current State
 
-### Conformance: ~90% (test runner needs execProcess fix)
-The conformance test runner uses `execCmdEx` which interprets `$` as shell variables. Fix: use `execProcess` instead.
+### Conformance: 100% (60/60)
+All conformance tests passing.
 
-### Files Modified
-- `main.nim` — Added `--version`/`-V` flag, Version const = "0.1.0"
-- `storage/lmdb_store.nim` — Fixed copyMem UB, added try/finally for txn cleanup
-- `nim.cfg` — Added `--out:nimm` for binary name
+### Open Issues: 4
+- #30: Performance optimization
+- #31: Documentation
+- #32: Packaging and distribution
+- #161: Debugger infrastructure (in progress)
+
+### Issue #161 Status
+The debugger module (`debugger.nim`) has been created with:
+- Breakpoint management (set, remove, clear, list)
+- Step mode control (into, over, out)
+- Debug prompt loop
+
+**Problem:** ZBREAK/ZSTEP/ZCONTINUE commands cause SIGSEGV when run via `-x` flag. The issue is likely that the debugger object in the Engine is not properly initialized when running single-line commands.
+
+**Root cause:** The Engine's `debugger` field may not be initialized when commands are executed via `-x` flag.
+
+**Fix needed:** Check that `eng.debugger` is properly initialized before accessing it, or ensure the Engine is always created with a debugger.
 
 ### Git Status
-- **nimm repo:** Up to date (63062fc)
-- **diary repo:** Needs update
+- **nimm:** 06d43f2 (before debugger work)
+- **diary:** needs update
 
-## Immediate Next Steps
-
-1. **Fix test_conformance.nim** — Replace `execCmdEx` with `execProcess`
-2. **Run conformance tests** to get real score
-3. **Commit** and push
-
-## Open Issues (97)
-| Category | Count |
-|----------|-------|
-| Bug | 7 |
-| ANSI/ISO | 19 |
-| RSM Extension | 24 |
-| nimm Extension | 13 |
-| Stub | 6 |
-| Noop | 8 |
-| Bounds | 10 |
-| Port | 10 |
+## Files Modified (uncommitted)
+- `debugger.nim` — New debugger module
+- `engine.nim` — Added debugger integration
+- `evaluator.nim` — Minor changes
+- `parser.nim` — Added iteration limits
 
 ## Servers
 | Server | IP | Status |
 |--------|-----|--------|
-| Utility-01 | 192.168.0.103 | Local, synced |
-| Utility-02 | 2.29.3.122 | Hetzner, synced |
+| Utility-01 | 192.168.0.103 | Synced |
+| Utility-02 | 2.29.3.122 | Synced, DNS configured |
 
 ## DNS
 - flamingyak.com → 2.29.3.122
