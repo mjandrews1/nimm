@@ -151,7 +151,7 @@ proc main() =
   results.add(runMCode("WRITE $SYSTEM", "nimm/1.0", "Special"))
   results.add(runMCode("WRITE $IO", "stdout", "Special"))
   results.add(runMCode("WRITE $PRINCIPAL", "stdin", "Special"))
-  results.add(runMCode("WRITE $STORAGE", "1000000", "Special"))
+  results.add(runMCode("WRITE $STORAGE", "17179869184", "Special"))
   results.add(runMCode("WRITE $STACK", "0", "Special"))
   results.add(runMCode("WRITE $TEST", "1", "Special"))
   results.add(runMCode("SET $X=10 WRITE $X", "10", "Special"))

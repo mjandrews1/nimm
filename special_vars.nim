@@ -6,6 +6,7 @@
 import os
 import times
 import strutils
+import osproc
 import globals
 
 var
@@ -102,8 +103,23 @@ proc setReference(val: string) =
   reference = val
 
 proc getStorage(): string =
-  # $STORAGE returns available memory (approximate)
-  return "1000000"
+  # $STORAGE returns available memory in bytes
+  try:
+    when defined(linux):
+      let meminfo = readFile("/proc/meminfo")
+      for line in meminfo.splitLines():
+        if line.startsWith("MemAvailable:"):
+          let parts = line.split()
+          if parts.len >= 2:
+            let kb = parseInt(parts[1])
+            return $(kb * 1024)
+    elif defined(macosx):
+      let (output, _) = execCmdEx("sysctl -n hw.memsize")
+      let bytes = parseInt(output.strip())
+      return $bytes
+  except:
+    discard
+  return "1000000000"  # Fallback: 1GB
 
 proc getStack(): string =
   # $STACK returns call stack depth (simplified)

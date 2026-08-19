@@ -39,7 +39,7 @@ proc newInspector*(): Inspector =
     commandsExecuted: 0,
     functionCalls: 0,
     variableAccesses: 0,
-    memoryUsed: 0,
+    memoryUsed: getOccupiedMem(),
     startTime: epochTime(),
     elapsedTime: 0
   )
@@ -105,8 +105,9 @@ proc formatStack*(frames: seq[StackFrame]): string =
 # --- ZSTATS: Statistics ---
 
 proc updateStats*(insp: var Inspector) =
-  ## Update elapsed time
+  ## Update elapsed time and memory usage
   insp.stats.elapsedTime = epochTime() - insp.stats.startTime
+  insp.stats.memoryUsed = getOccupiedMem()
 
 proc formatStats*(insp: var Inspector): string =
   ## Format statistics as string
