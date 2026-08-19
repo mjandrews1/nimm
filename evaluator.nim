@@ -440,6 +440,51 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     # Format: label+offset^routine
     # For now, return empty - needs runtime integration
     return ""
+  # RSM Math Functions
+  of "ZABS":
+    if args.len < 1: return ""
+    try: return formatNumber(abs(parseFloat(args[0])))
+    except: return "0"
+  of "ZARCCOS":
+    if args.len < 1: return ""
+    try: return formatNumber(arccos(parseFloat(args[0])))
+    except: return "0"
+  of "ZARCSIN":
+    if args.len < 1: return ""
+    try: return formatNumber(arcsin(parseFloat(args[0])))
+    except: return "0"
+  of "ZARCTAN":
+    if args.len < 1: return ""
+    try: return formatNumber(arctan(parseFloat(args[0])))
+    except: return "0"
+  of "ZCOS":
+    if args.len < 1: return ""
+    try: return formatNumber(cos(parseFloat(args[0])))
+    except: return "0"
+  of "ZEXP":
+    if args.len < 1: return ""
+    try: return formatNumber(exp(parseFloat(args[0])))
+    except: return "0"
+  of "ZLN":
+    if args.len < 1: return ""
+    try: return formatNumber(ln(parseFloat(args[0])))
+    except: return "0"
+  of "ZPOWER":
+    if args.len < 2: return ""
+    try: return formatNumber(pow(parseFloat(args[0]), parseFloat(args[1])))
+    except: return "0"
+  of "ZSIN":
+    if args.len < 1: return ""
+    try: return formatNumber(sin(parseFloat(args[0])))
+    except: return "0"
+  of "ZSQRT":
+    if args.len < 1: return ""
+    try: return formatNumber(sqrt(parseFloat(args[0])))
+    except: return "0"
+  of "ZTAN":
+    if args.len < 1: return ""
+    try: return formatNumber(tan(parseFloat(args[0])))
+    except: return "0"
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
