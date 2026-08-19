@@ -15,6 +15,7 @@ type
     lastCommand*: string    # Last debug command
 
 proc newDebugger*(): Debugger =
+  new(result)
   result.breakpoints = initTable[string, seq[int]]()
   result.stepMode = "off"
   result.stepping = false
