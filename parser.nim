@@ -8,6 +8,8 @@
 # M/MUMPS Parsing Challenges:
 #   1. Command boundaries are whitespace-dependent: "SET A=1WRITE" is one
 #      word, but "SET A=1 WRITE" has SET and WRITE as separate commands.
+
+const MaxParseIterations = 10000  # Prevent livelock on malformed input
 #   2. The parser must distinguish commands from variable names by context.
 #   3. M has no explicit statement terminator — commands end at the next
 #      command (identified by whitespace + known command word).
@@ -257,7 +259,11 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom]
 ## left-associative, so this is correct.
 proc parseExpr(p: var Parser): Expr =
   var left = parsePrefix(p)
+  var iterations = 0
   while true:
+    if iterations >= MaxParseIterations:
+      break
+    inc iterations
     if isBinop(p.peek()):
       let op = tokToBinop(p.peek()).get()
       discard p.advance()
@@ -478,8 +484,12 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
   var pendingWord = ""
   var pendingCount = -1
   var pendingOrMore = false
+  var iterations = 0
   
   while true:
+    if iterations >= MaxParseIterations:
+      break
+    inc iterations
     var count = 1
     var orMore = false
     
@@ -623,7 +633,11 @@ proc parseMergePairs(p: var Parser): seq[(string, string)]
 ## command parsing.
 proc parseLine*(p: var Parser): Line =
   result = Line(cmds: @[])
+  var iterations = 0
   while true:
+    if iterations >= MaxParseIterations:
+      break
+    inc iterations
     if p.peek() == tokEof:
       break
     if p.atCommandPos():

@@ -40,11 +40,16 @@ proc getOutput*(eng: Engine): string =
 proc clearOutput*(eng: var Engine) =
   eng.output = ""
 
+const MaxRecursionDepth = 1000  # Prevent stack overflow
+
 proc parseLine*(code: string): Line
 
-proc execute*(eng: var Engine, line: Line): string =
+proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   ## Execute a line of M code (Line is already ref object)
   if line == nil: return ""
+  if depth > MaxRecursionDepth:
+    eng.output.add("Error: Maximum recursion depth exceeded\n")
+    return "Error"
   result = ""
 
   for cmdNode in line.cmds:
@@ -130,19 +135,19 @@ proc execute*(eng: var Engine, line: Line): string =
           let cond = eng.evaluator[].eval(cmd.ifCond)
           eng.testValue = (cond != "0" and cond != "")
           if eng.testValue and cmd.ifBody != nil:
-            result = eng.execute(cmd.ifBody)
+            result = eng.execute(cmd.ifBody, depth + 1)
 
       of CmdKind.cElse:
         # ELSE executes only if $TEST is false
         if not eng.testValue and cmd.elseBody != nil:
-          result = eng.execute(cmd.elseBody)
+          result = eng.execute(cmd.elseBody, depth + 1)
 
       of CmdKind.cFor:
         if cmd.forSpec.varName == "":
           # Argumentless FOR — loops until QUIT
           while true:
             if cmd.forBody != nil:
-              let r = eng.execute(cmd.forBody)
+              let r = eng.execute(cmd.forBody, depth + 1)
               if r == "QUIT":
                 break
         else:
@@ -158,7 +163,7 @@ proc execute*(eng: var Engine, line: Line): string =
           while (step > 0 and current <= limit) or (step < 0 and current >= limit):
             eng.globals[].set(cmd.forSpec.varName, @[], $current)
             if cmd.forBody != nil:
-              let r = eng.execute(cmd.forBody)
+              let r = eng.execute(cmd.forBody, depth + 1)
               if r == "QUIT":
                 break
             current += step
@@ -215,7 +220,7 @@ proc execute*(eng: var Engine, line: Line): string =
                 # Skip label lines (they start with a word followed by space or no space)
                 let parsed = parseLine(gotLine)
                 if parsed != nil and parsed.cmds.len > 0:
-                  let r = eng.execute(parsed)
+                  let r = eng.execute(parsed, depth + 1)
                   if r == "QUIT":
                     break
                 offset.inc
@@ -224,7 +229,7 @@ proc execute*(eng: var Engine, line: Line): string =
       of CmdKind.cDoInline:
         # Inline DO: execute the body directly
         if cmd.doInlineBody != nil:
-          result = eng.execute(cmd.doInlineBody)
+          result = eng.execute(cmd.doInlineBody, depth + 1)
 
       of CmdKind.cGoto:
         if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:
@@ -233,7 +238,7 @@ proc execute*(eng: var Engine, line: Line): string =
           if routine.len > 0:
             let gotLine = eng.runtime[].getLine(routine, label, 0)
             if gotLine.len > 0:
-              result = eng.execute(parseLine(gotLine))
+              result = eng.execute(parseLine(gotLine), depth + 1)
 
       of CmdKind.cRead:
         for varExpr in cmd.readVars:
@@ -253,7 +258,7 @@ proc execute*(eng: var Engine, line: Line): string =
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:
           let code = eng.evaluator[].eval(cmd.xecExpr)
-          result = eng.execute(parseLine(code))
+          result = eng.execute(parseLine(code), depth + 1)
 
       # Z-commands
       of CmdKind.cZhalt:
@@ -365,7 +370,7 @@ proc execute*(eng: var Engine, line: Line): string =
       let etrap = eng.globals[].getSpecialVar("$ETRAP")
       if etrap.len > 0:
         try:
-          discard eng.execute(parseLine(etrap))
+          discard eng.execute(parseLine(etrap), depth + 1)
         except:
           eng.output.add("Error in $ETRAP: " & getCurrentExceptionMsg() & "\n")
       else:
