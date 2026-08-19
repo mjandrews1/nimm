@@ -103,6 +103,7 @@ proc matchesCode*(c: char, code: char): bool =
   of 'L': c in {'a'..'z'}
   of 'P': c in punctSet
   of 'H': c in {'0'..'9', 'A'..'F', 'a'..'f'}
+  of 'C': ord(c) < 32 or ord(c) == 127  # Control characters
   else: false
 
 ## matchPattern — Match a String Against a Sequence of Pattern Atoms
