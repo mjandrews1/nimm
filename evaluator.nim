@@ -286,7 +286,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     let f = args[1]
     let start = if args.len > 2: parseInt(args[2]) else: 0
     let pos = s.find(f, start)
-    if pos >= 0: return $(pos + 1)
+    if pos >= 0: return $(pos + f.len + 1)
     return "0"
   of "GET", "G":
     if args.len < 1: return ""
