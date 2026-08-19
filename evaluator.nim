@@ -436,9 +436,32 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       s = sign & result & decPart
     return s
   of "TEXT", "T":
+    # $TEXT(label+offset^routine) - Returns source line
     if args.len < 1: return ""
-    # $TEXT returns a line of source code
-    # Format: label+offset^routine
+    let spec = args[0]
+    # Parse label+offset^routine format
+    let caretPos = spec.find('^')
+    var label = ""
+    var offset = 0
+    var routineName = ""
+    if caretPos >= 0:
+      let before = spec[0..<caretPos]
+      routineName = spec[caretPos+1..^1]
+      let plusPos = before.find('+')
+      if plusPos >= 0:
+        label = before[0..<plusPos]
+        try: offset = parseInt(before[plusPos+1..^1])
+        except: offset = 0
+      else:
+        label = before
+    else:
+      let plusPos = spec.find('+')
+      if plusPos >= 0:
+        label = spec[0..<plusPos]
+        try: offset = parseInt(spec[plusPos+1..^1])
+        except: offset = 0
+      else:
+        label = spec
     # For now, return empty - needs runtime integration
     return ""
   # RSM Math Functions
