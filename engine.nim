@@ -335,7 +335,20 @@ proc execute*(eng: var Engine, line: Line): string =
         eng.runtime[].stepping = false
         eng.writeln("Continuing...")
 
-      of CmdKind.cZgoto, CmdKind.cZmessage, CmdKind.cZtrap, CmdKind.cZquit:
+      of CmdKind.cZmessage:
+        # ZMESSAGE errorcode - Raise an M error
+        if cmd.zmessageExpr != nil:
+          let code = eng.evaluator[].eval(cmd.zmessageExpr)
+          eng.globals[].setSpecialVar("$ECODE", code)
+          eng.output.add("M error: " & code & "\n")
+
+      of CmdKind.cZtrap:
+        # ZTRAP expr - Set error trap
+        if cmd.ztrapExpr != nil:
+          let trapExpr = eng.evaluator[].eval(cmd.ztrapExpr)
+          eng.globals[].setSpecialVar("$ETRAP", trapExpr)
+
+      of CmdKind.cZgoto, CmdKind.cZquit:
         # Not yet implemented - silent no-op
         discard
 
