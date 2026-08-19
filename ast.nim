@@ -369,7 +369,8 @@ type
     cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
     cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
     cZwrite, cZkill, cOpen, cUse, cClose, cRead,
-    cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit
+    cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
+    cZload, cZstep, cZcontinue, cZremove
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -464,3 +465,11 @@ type
       zprintExpr*: Expr
     of cZquit:
       zquitExpr*: Expr
+    of cZload:
+      zloadExpr*: Expr
+    of cZstep:
+      zstepExpr*: Expr
+    of cZcontinue:
+      discard
+    of cZremove:
+      zremoveExpr*: Expr

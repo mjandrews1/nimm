@@ -774,6 +774,23 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       quitExpr = p.parseExpr()
     cmd = Cmd(kind: cZquit, zquitExpr: quitExpr)
+  of "ZLOAD":
+    var loadExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      loadExpr = p.parseExpr()
+    cmd = Cmd(kind: cZload, zloadExpr: loadExpr)
+  of "ZSTEP":
+    var stepExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      stepExpr = p.parseExpr()
+    cmd = Cmd(kind: cZstep, zstepExpr: stepExpr)
+  of "ZCONTINUE":
+    cmd = Cmd(kind: cZcontinue)
+  of "ZREMOVE":
+    var removeExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      removeExpr = p.parseExpr()
+    cmd = Cmd(kind: cZremove, zremoveExpr: removeExpr)
   of "OPEN", "O":
     cmd = Cmd(kind: cOpen, openDevice: p.parseExpr(), openParams: Expr(kind: eStr, sval: ""))
   of "USE", "U":

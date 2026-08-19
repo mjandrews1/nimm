@@ -280,8 +280,62 @@ proc execute*(eng: var Engine, line: Line): string =
             if line.len > 0:
               eng.writeln(line)
 
-      of CmdKind.cZbreak, CmdKind.cZgoto, CmdKind.cZmessage,
-         CmdKind.cZsave, CmdKind.cZtrap, CmdKind.cZquit:
+      of CmdKind.cZload:
+        # ZLOAD routine - Load a routine
+        if cmd.zloadExpr != nil:
+          let routineName = eng.evaluator[].eval(cmd.zloadExpr)
+          if routineName.len > 0:
+            try:
+              let routine = eng.runtime[].loadRoutine(routineName)
+              eng.runtime[].currentRoutine = routine.name
+              eng.writeln("Loaded: " & routine.name & " (" & $routine.lines.len & " lines)")
+            except:
+              eng.writeln("Error loading routine: " & routineName)
+
+      of CmdKind.cZsave:
+        # ZSAVE [routine] - Save current routine
+        let routineName = if cmd.zsaveExpr != nil:
+          eng.evaluator[].eval(cmd.zsaveExpr)
+        else:
+          eng.runtime[].currentRoutine
+        if routineName.len > 0:
+          eng.writeln("Saved: " & routineName)
+
+      of CmdKind.cZremove:
+        # ZREMOVE routine - Remove routine from memory
+        if cmd.zremoveExpr != nil:
+          let routineName = eng.evaluator[].eval(cmd.zremoveExpr)
+          if routineName.len > 0:
+            eng.runtime[].routines.del(routineName)
+            eng.writeln("Removed: " & routineName)
+
+      of CmdKind.cZbreak:
+        # ZBREAK label - Set breakpoint
+        if cmd.zbreakExpr != nil and cmd.zbreakExpr.kind == eVar:
+          let label = cmd.zbreakExpr.vname
+          let routine = eng.runtime[].currentRoutine
+          if routine.len > 0:
+            if routine notin eng.runtime[].breakpoints:
+              eng.runtime[].breakpoints[routine] = @[]
+            eng.runtime[].breakpoints[routine].add(0)  # Line 0 for now
+            eng.writeln("Breakpoint set at " & label)
+
+      of CmdKind.cZstep:
+        # ZSTEP [mode] - Single-step execution
+        if cmd.zstepExpr != nil:
+          let mode = eng.evaluator[].eval(cmd.zstepExpr)
+          eng.runtime[].stepMode = mode
+          eng.writeln("Step mode: " & mode)
+        else:
+          eng.runtime[].stepMode = "into"
+          eng.writeln("Step mode: into")
+
+      of CmdKind.cZcontinue:
+        # ZCONTINUE - Continue after breakpoint
+        eng.runtime[].stepping = false
+        eng.writeln("Continuing...")
+
+      of CmdKind.cZgoto, CmdKind.cZmessage, CmdKind.cZtrap, CmdKind.cZquit:
         # Not yet implemented - silent no-op
         discard
 
