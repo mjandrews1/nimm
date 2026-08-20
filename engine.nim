@@ -411,14 +411,18 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
 
       of CmdKind.cMerge:
         # MERGE dest=src — Copy entire variable trees
-        # Implementation: copy all subscripts from src to dest
         for pair in cmd.mergePairs:
           let destName = pair[0]
           let srcName = pair[1]
-          # For now, just copy the value (not full tree)
-          # TODO: Implement full tree copy
-          let val = eng.globals[].get(srcName)
-          eng.globals[].set(destName, @[], val)
+          # Copy the root value (if any)
+          let rootVal = eng.globals[].get(srcName)
+          if rootVal.len > 0:
+            eng.globals[].set(destName, @[], rootVal)
+          # Copy all subscripts
+          let allSubs = eng.globals[].listSubs(srcName)
+          for subs in allSubs:
+            let val = eng.globals[].get(srcName, subs)
+            eng.globals[].set(destName, subs, val)
         eng.testValue = true
 
       of CmdKind.cBreak:

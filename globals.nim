@@ -206,6 +206,37 @@ proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
   else:
     return g.dataLocal(name, subs)
 
+proc listSubs*(g: Globals, name: string, subs: seq[string] = @[]): seq[seq[string]] =
+  ## List all subscripts under a given variable
+  ## Returns a sequence of subscript sequences
+  if name.len > 0 and name[0] == '^':
+    # For globals, use LMDB cursor
+    if g.dbPath.len == 0: return @[]
+    return g.globals.listSubs(name, subs)
+  else:
+    # For locals, scan the scope table
+    let scope = g.scopes[^1]
+    let prefix = makeKey(name, subs)
+    var result: seq[seq[string]] = @[]
+    for k in scope.keys:
+      if k.startsWith(prefix) and k.len > prefix.len:
+        # Extract subscripts after the prefix
+        let rest = k[prefix.len..^1]
+        var subSeq: seq[string] = @[]
+        var current = ""
+        for ch in rest:
+          if ch == '\0':
+            if current.len > 0:
+              subSeq.add(current)
+              current = ""
+          else:
+            current.add(ch)
+        if current.len > 0:
+          subSeq.add(current)
+        if subSeq.len > 0:
+          result.add(subSeq)
+    return result
+
 # --- NEW/QUIT scoping ---
 
 proc pushScope*(g: var Globals) =

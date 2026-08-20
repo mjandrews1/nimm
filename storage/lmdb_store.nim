@@ -337,6 +337,65 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   abort(txn)
   return decoded[1]
 
+proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[seq[string]] =
+  ## List all subscripts under a given global[sub1,sub2,...]
+  ## Returns a sequence of subscript sequences
+  let prefix = encodeKey(global, subs)
+  
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
+  if rc != SUCCESS:
+    return @[]
+  
+  var cursor: LMDBCursor
+  rc = cursorOpen(txn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    abort(txn)
+    return @[]
+  
+  # Position cursor at prefix
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](prefix.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+  
+  var mdbVal: Val
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+  
+  if rc != SUCCESS:
+    cursorClose(cursor)
+    abort(txn)
+    return @[]
+  
+  var result: seq[seq[string]] = @[]
+  
+  # Iterate through all keys with the same prefix
+  while rc == SUCCESS:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    let decoded = decodeKey(key)
+    
+    # Check if key starts with the same global name
+    if decoded[0] != global:
+      break
+    
+    # Check if key has more subscripts than the prefix
+    if decoded[1].len > subs.len:
+      # Check that all prefix subscripts match
+      var match = true
+      for i in 0..<subs.len:
+        if decoded[1][i] != subs[i]:
+          match = false
+          break
+      if match:
+        result.add(decoded[1])
+    
+    # Move to next key
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  
+  cursorClose(cursor)
+  abort(txn)
+  return result
+
 proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix
   var txn: ptr Txn
