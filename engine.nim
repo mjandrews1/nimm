@@ -404,8 +404,22 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         else:
           eng.testValue = false
 
-      of CmdKind.cLock, CmdKind.cMerge:
-        discard
+      of CmdKind.cLock:
+        # LOCK var1,var2,... — Acquire resource locks
+        # Simple implementation: always succeeds (no actual locking)
+        eng.testValue = true
+
+      of CmdKind.cMerge:
+        # MERGE dest=src — Copy entire variable trees
+        # Implementation: copy all subscripts from src to dest
+        for pair in cmd.mergePairs:
+          let destName = pair[0]
+          let srcName = pair[1]
+          # For now, just copy the value (not full tree)
+          # TODO: Implement full tree copy
+          let val = eng.globals[].get(srcName)
+          eng.globals[].set(destName, @[], val)
+        eng.testValue = true
 
       of CmdKind.cBreak:
         # BREAK - Enter debugger
@@ -506,9 +520,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let trapExpr = eng.evaluator[].eval(cmd.ztrapExpr)
           eng.globals[].setSpecialVar("$ETRAP", trapExpr)
 
-      of CmdKind.cZgoto, CmdKind.cZquit:
-        # Not yet implemented - silent no-op
-        discard
+      of CmdKind.cZgoto:
+        # ZGOTO label — Transfer control (Z-version of GOTO)
+        if cmd.zgotoExpr != nil and cmd.zgotoExpr.kind == eVar:
+          let label = cmd.zgotoExpr.vname
+          let routine = eng.runtime[].currentRoutine
+          if routine.len > 0:
+            let gotLine = eng.runtime[].getLine(routine, label, 0)
+            if gotLine.len > 0:
+              result = eng.execute(parseLine(gotLine), depth + 1)
+
+      of CmdKind.cZquit:
+        # ZQUIT — Exit with value (Z-version of QUIT)
+        return "QUIT"
 
       else:
         discard
