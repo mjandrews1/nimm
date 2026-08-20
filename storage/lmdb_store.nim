@@ -206,7 +206,16 @@ proc batchDelete*(store: LmdbStore, keys: seq[(string, seq[string])]) =
 
 proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
   ## Get next/previous key in LMDB (for $ORDER)
+  ## Returns the next subscript at the same level, or "" if none
   let prefix = encodeKey(global, subs)
+  
+  # Build the parent prefix (global + all subscripts except last)
+  # This is used to verify the next key is a sibling, not a child/descendant
+  var parentPrefix = global
+  for i in 0..<subs.len:
+    parentPrefix.add('\0')
+    parentPrefix.add(subs[i])
+  parentPrefix.add('\0')
   
   var txn: ptr Txn
   var rc = txnBegin(store.env, nil, RDONLY, addr txn)
@@ -238,20 +247,95 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   else:
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
   
-  cursorClose(cursor)
-  abort(txn)
-  
   if rc != SUCCESS:
+    cursorClose(cursor)
+    abort(txn)
     return ""
   
   # Decode the key from mdbKey
   let key = newString(mdbKey.mvSize)
   copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
   let decoded = decodeKey(key)
-  # Return the subscript (first subscript after global name)
-  if decoded[1].len > 0:
-    return decoded[1][0]
-  return ""
+  
+  # Verify the key has the same global name
+  if decoded[0] != global:
+    cursorClose(cursor)
+    abort(txn)
+    return ""
+  
+  # Verify the key is at the same level (same number of subscripts)
+  if decoded[1].len != subs.len:
+    cursorClose(cursor)
+    abort(txn)
+    return ""
+  
+  # Verify all subscripts except the last match (same parent)
+  for i in 0..<subs.len - 1:
+    if decoded[1][i] != subs[i]:
+      cursorClose(cursor)
+      abort(txn)
+      return ""
+  
+  # Return the last subscript (the next one at this level)
+  cursorClose(cursor)
+  abort(txn)
+  return decoded[1][^1]
+
+proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
+  ## Get next/previous node in LMDB (for $QUERY)
+  ## Returns ALL subscripts of the next node (any depth), or empty if none
+  let prefix = encodeKey(global, subs)
+  
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
+  if rc != SUCCESS:
+    return @[]
+  
+  var cursor: LMDBCursor
+  rc = cursorOpen(txn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    abort(txn)
+    return @[]
+  
+  # Position cursor at prefix
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](prefix.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+  
+  var mdbVal: Val
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+  
+  if rc != SUCCESS:
+    cursorClose(cursor)
+    abort(txn)
+    return @[]
+  
+  # Move to next/previous
+  if forward:
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  else:
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+  
+  if rc != SUCCESS:
+    cursorClose(cursor)
+    abort(txn)
+    return @[]
+  
+  # Decode the key from mdbKey
+  let key = newString(mdbKey.mvSize)
+  copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+  let decoded = decodeKey(key)
+  
+  # Verify the key has the same global name
+  if decoded[0] != global:
+    cursorClose(cursor)
+    abort(txn)
+    return @[]
+  
+  # Return all subscripts
+  cursorClose(cursor)
+  abort(txn)
+  return decoded[1]
 
 proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix

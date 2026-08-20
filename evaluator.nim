@@ -14,11 +14,13 @@ import pattern
 import unicode_utils
 import ni_functions
 import data_structures
+import runtime
 
 type
   Evaluator* = object
     ## Expression evaluator
     globals*: ptr Globals
+    runtime*: ptr Runtime
     mode*: string
 
 # Global storage for data structures
@@ -32,8 +34,9 @@ var niSorted: Table[string, NiSorted] = initTable[string, NiSorted]()
 var niDeques: Table[string, NiDeque] = initTable[string, NiDeque]()
 var niBags: Table[string, NiBag] = initTable[string, NiBag]()
 
-proc newEvaluator*(globals: var Globals, mode: string = "nimm"): Evaluator =
+proc newEvaluator*(globals: var Globals, runtime: var Runtime, mode: string = "nimm"): Evaluator =
   result.globals = globals.addr
+  result.runtime = runtime.addr
   result.mode = mode
 
 proc eval*(ev: var Evaluator, expr: Expr): string
@@ -108,6 +111,7 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       else: true
       return ev.globals[].order(varName, subs, forward)
     # Special handling for $QUERY — needs variable reference, not value
+    # $QUERY returns the next node in the entire array (any depth), unlike $ORDER
     if expr.fname in ["QUERY", "Q"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
@@ -119,7 +123,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let forward = if expr.fargs.len > 1:
         parseInt(ev.eval(expr.fargs[1])) >= 0
       else: true
-      return ev.globals[].order(varName, subs, forward)
+      # Get the next node (any depth)
+      let nextSubs = ev.globals[].query(varName, subs, forward)
+      if nextSubs.len == 0: return ""
+      # Construct full variable reference
+      var result = varName & "("
+      for i, sub in nextSubs:
+        if i > 0: result.add(",")
+        result.add(sub)
+      result.add(")")
+      return result
     var args: seq[string] = @[]
     for arg in expr.fargs:
       args.add(ev.eval(arg))
@@ -452,30 +465,55 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     # $TEXT(label+offset^routine) - Returns source line
     if args.len < 1: return ""
     let spec = args[0]
-    # Parse label+offset^routine format
-    let caretPos = spec.find('^')
-    var label = ""
-    var offset = 0
-    var routineName = ""
-    if caretPos >= 0:
-      let before = spec[0..<caretPos]
-      routineName = spec[caretPos+1..^1]
-      let plusPos = before.find('+')
-      if plusPos >= 0:
-        label = before[0..<plusPos]
-        try: offset = parseInt(before[plusPos+1..^1])
-        except: offset = 0
+    # Use runtime to get the source line
+    if ev.runtime != nil:
+      return ev.runtime[].getLine(spec)
+    return ""
+  # M Standard Name Functions
+  of "NAME", "N":
+    # $NAME(expr) — Returns canonical name of variable
+    if args.len < 1: return ""
+    # For now, return the argument as-is (basic implementation)
+    return args[0]
+  of "QLENGTH", "QL":
+    # $QLENGTH(expr) — Returns number of subscripts in a qualified name
+    if args.len < 1: return "0"
+    let name = args[0]
+    let openParen = name.find('(')
+    if openParen < 0: return "0"
+    let closeParen = name.rfind(')')
+    if closeParen < 0: return "0"
+    let subStr = name[openParen+1..<closeParen]
+    if subStr.len == 0: return "0"
+    # Count commas + 1
+    var count = 1
+    for ch in subStr:
+      if ch == ',': count += 1
+    return $count
+  of "QSUBSCRIPT", "QS":
+    # $QSUBSCRIPT(expr, n) — Returns nth subscript from a qualified name
+    if args.len < 2: return ""
+    let name = args[0]
+    let n = parseInt(args[1])
+    let openParen = name.find('(')
+    if openParen < 0: return ""
+    let closeParen = name.rfind(')')
+    if closeParen < 0: return ""
+    let subStr = name[openParen+1..<closeParen]
+    if subStr.len == 0: return ""
+    # Split by comma
+    var subs: seq[string] = @[]
+    var current = ""
+    for ch in subStr:
+      if ch == ',':
+        subs.add(current)
+        current = ""
       else:
-        label = before
-    else:
-      let plusPos = spec.find('+')
-      if plusPos >= 0:
-        label = spec[0..<plusPos]
-        try: offset = parseInt(spec[plusPos+1..^1])
-        except: offset = 0
-      else:
-        label = spec
-    # For now, return empty - needs runtime integration
+        current.add(ch)
+    subs.add(current)
+    # Return nth subscript (1-based)
+    if n >= 1 and n <= subs.len:
+      return subs[n-1]
     return ""
   # RSM Math Functions
   of "ZABS":

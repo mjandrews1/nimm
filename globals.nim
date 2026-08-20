@@ -173,6 +173,23 @@ proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = t
   else:
     return g.orderLocal(name, subs, forward)
 
+proc query*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): seq[string] =
+  ## $QUERY (auto-detect local vs global)
+  ## Returns all subscripts of the next node (any depth)
+  if name.len > 0 and name[0] == '^':
+    # For globals, use LMDB cursor
+    if g.dbPath.len == 0: return @[]
+    return g.globals.query(name, subs, forward)
+  else:
+    # For locals, use order (same as $ORDER for locals)
+    let nextSub = g.orderLocal(name, subs, forward)
+    if nextSub.len == 0: return @[]
+    var result: seq[string] = @[]
+    for sub in subs:
+      result.add(sub)
+    result.add(nextSub)
+    return result
+
 proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA (auto-detect local vs global)
   if name.len > 0 and name[0] == '^':

@@ -22,6 +22,9 @@ var
   x: int = 0
   y: int = 0
   zeof: string = "0"  # $ZEOF - end-of-file flag
+  zerror: string = ""  # $ZERROR - error message
+  zstatus: string = ""  # $ZSTATUS - status
+  ztrap: string = ""  # $ZTRAP - trap handler
 
 proc getDevice(): string =
   return device
@@ -172,6 +175,27 @@ proc getZeof(): string =
 proc setZeof(val: string) =
   zeof = val
 
+proc getZerror(): string =
+  return zerror
+
+proc setZerror(val: string) =
+  zerror = val
+
+proc getZstatus(): string =
+  return zstatus
+
+proc setZstatus(val: string) =
+  zstatus = val
+
+proc getZtrap(): string =
+  return ztrap
+
+proc setZtrap(val: string) =
+  ztrap = val
+
+proc getZversion(): string =
+  return "nimm 0.1.1"
+
 proc registerAllSpecialVars*(g: var Globals) =
   ## Register all special variables with the globals system
   g.registerSpecialVar("$DEVICE", getDevice, setDevice)
@@ -191,3 +215,7 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$X", getX, setX)
   g.registerSpecialVar("$Y", getY, setY)
   g.registerSpecialVar("$ZEOF", getZeof, setZeof)
+  g.registerSpecialVar("$ZERROR", getZerror, setZerror)
+  g.registerSpecialVar("$ZSTATUS", getZstatus, setZstatus)
+  g.registerSpecialVar("$ZTRAP", getZtrap, setZtrap)
+  g.registerSpecialVar("$ZVERSION", getZversion)

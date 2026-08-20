@@ -120,8 +120,8 @@ proc main() =
   # Initialize components
   var g = newGlobals(args.dbPath)
   g.registerAllSpecialVars()
-  var ev = newEvaluator(g)
   var rt = newRuntime(mode)
+  var ev = newEvaluator(g, rt)
   var eng = newEngine(g, ev, rt)
 
   # Load routine file if specified
