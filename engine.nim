@@ -99,6 +99,13 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             # Check if this is a special variable
             if item.target.tname.startsWith("$"):
               eng.globals[].setSpecialVar(item.target.tname, value)
+            elif item.target.tname == "^":
+              # Naked reference: ^(subs) uses last global reference
+              if eng.globals[].nakedGlobal.len > 0:
+                var allSubs = eng.globals[].nakedSubs
+                for sub in subs:
+                  allSubs.add(sub)
+                eng.globals[].set(eng.globals[].nakedGlobal, allSubs, value)
             else:
               eng.globals[].set(item.target.tname, subs, value)
           of SetKind.stPiece:
@@ -138,6 +145,18 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             if endIdx + 1 < current.len:
               res.add(current[endIdx + 1..^1])
             eng.globals[].set(varName, @[], res)
+          of SetKind.stIndirect:
+            # SET @expr = value — indirect assignment
+            let varName = eng.evaluator[].eval(item.target.indirectExpr)
+            if varName.len > 0:
+              var subs: seq[string] = @[]
+              for sub in item.target.indirectSubs:
+                subs.add(eng.evaluator[].eval(sub))
+              # Check if this is a special variable
+              if varName.startsWith("$"):
+                eng.globals[].setSpecialVar(varName, value)
+              else:
+                eng.globals[].set(varName, subs, value)
 
       of CmdKind.cWrite:
         for arg in cmd.writeArgs:

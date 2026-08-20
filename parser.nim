@@ -364,20 +364,53 @@ proc parsePrimary(p: var Parser): Expr =
       Expr(kind: eSvar, sname: name)
   of tokCaret:
     # Global variable: ^NAME or ^NAME(subs...)
+    # Naked reference: ^(subs...) — uses last global reference
     discard p.advance()
-    let name = p.readWord()
-    let subs = parseSubscripts(p)
-    Expr(kind: eVar, vname: "^" & name, subs: subs)
+    if p.peek() == tokLParen:
+      # Naked reference: ^(subs...)
+      let subs = parseSubscripts(p)
+      Expr(kind: eVar, vname: "^", subs: subs)
+    else:
+      let name = p.readWord()
+      let subs = parseSubscripts(p)
+      Expr(kind: eVar, vname: "^" & name, subs: subs)
   of tokWord:
     # Local variable: NAME or NAME(subs...)
     let name = p.readWord()
     let subs = parseSubscripts(p)
     Expr(kind: eVar, vname: name, subs: subs)
   of tokAt:
-    # Indirection: @expr
-    # We just parse the primary — runtime handles indirection
+    # Indirection: @expr or @(expr, sub1, sub2)
+    # For @X(1), X is the variable name and (1) are the subscripts
     discard p.advance()
-    parsePrimary(p)
+    # Read just the variable name (not subscripts)
+    var innerExpr: Expr
+    if p.peek() == tokWord:
+      let name = p.readWord()
+      innerExpr = Expr(kind: eVar, vname: name, subs: @[])
+    elif p.peek() == tokCaret:
+      discard p.advance()
+      let name = p.readWord()
+      innerExpr = Expr(kind: eVar, vname: "^" & name, subs: @[])
+    elif p.peek() == tokDollar:
+      discard p.advance()
+      let name = p.readDollarName()
+      innerExpr = Expr(kind: eSvar, sname: name)
+    else:
+      innerExpr = parsePrimary(p)
+    var subs: seq[Expr] = @[]
+    # Check for subscripts: @X(sub1, sub2)
+    if p.peek() == tokLParen:
+      discard p.advance()
+      while true:
+        subs.add(parseExpr(p))
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      if p.peek() == tokRParen:
+        discard p.advance()
+    Expr(kind: eIndirect, indirectExpr: innerExpr, indirectSubs: subs)
   else:
     # Unexpected token — return a zero literal as fallback
     discard p.advance()
@@ -910,6 +943,33 @@ proc parseSetTarget(p: var Parser): SetTarget =
       # Special variable: $X, $Y, etc.
       # Use the full name with $ prefix
       SetTarget(kind: stVar, tname: "$" & name, tsubs: @[])
+  elif p.peek() == tokAt:
+    # Indirect: @X or @X(sub1, sub2)
+    discard p.advance()
+    # Read just the variable name (not subscripts)
+    var indirectExpr: Expr
+    if p.peek() == tokWord:
+      let name = p.readWord()
+      indirectExpr = Expr(kind: eVar, vname: name, subs: @[])
+    elif p.peek() == tokCaret:
+      discard p.advance()
+      let name = p.readWord()
+      indirectExpr = Expr(kind: eVar, vname: "^" & name, subs: @[])
+    else:
+      indirectExpr = parsePrimary(p)
+    var subs: seq[Expr] = @[]
+    # Check for subscripts: @X(sub1, sub2)
+    if p.peek() == tokLParen:
+      discard p.advance()
+      while true:
+        subs.add(parseExpr(p))
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      if p.peek() == tokRParen:
+        discard p.advance()
+    SetTarget(kind: stIndirect, indirectExpr: indirectExpr, indirectSubs: subs)
   else:
     let (name, subs) = parseVarRef(p)
     SetTarget(kind: stVar, tname: name, tsubs: subs)
@@ -921,7 +981,11 @@ proc parseVarRef(p: var Parser): (string, seq[Expr]) =
   var name: string
   if p.peek() == tokCaret:
     discard p.advance()
-    name = "^" & p.readWord()
+    if p.peek() == tokLParen:
+      # Naked reference: ^(subs...)
+      name = "^"
+    else:
+      name = "^" & p.readWord()
   else:
     name = p.readWord()
   let subs = parseSubscripts(p)

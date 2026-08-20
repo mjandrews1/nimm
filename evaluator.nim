@@ -58,6 +58,14 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     var subs: seq[string] = @[]
     for sub in expr.subs:
       subs.add(ev.eval(sub))
+    # Handle naked references: ^ with no name uses last global reference
+    if expr.vname == "^":
+      if ev.globals[].nakedGlobal.len == 0: return ""
+      # Append new subscripts to existing naked subscripts
+      var allSubs = ev.globals[].nakedSubs
+      for sub in subs:
+        allSubs.add(sub)
+      return ev.globals[].get(ev.globals[].nakedGlobal, allSubs)
     return ev.globals[].get(expr.vname, subs)
   of eFunc:
     # Special handling for functions that need variable references
@@ -260,6 +268,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if matchPattern(lhs, expr.atoms):
       return "1"
     return "0"
+  of eIndirect:
+    # Indirection: @expr — expr evaluates to a variable name
+    let varName = ev.eval(expr.indirectExpr)
+    if varName.len == 0: return ""
+    # Evaluate subscripts if present
+    var subs: seq[string] = @[]
+    for sub in expr.indirectSubs:
+      subs.add(ev.eval(sub))
+    # Get the variable value
+    return ev.globals[].get(varName, subs)
 
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   ## Call an intrinsic function

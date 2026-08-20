@@ -18,6 +18,8 @@ type
     specialGetters*: Table[string, SpecialVarGetter]
     specialSetters*: Table[string, SpecialVarSetter]
     dbPath*: string
+    nakedGlobal*: string                  # Last global name for naked references
+    nakedSubs*: seq[string]               # Last subscripts for naked references
 
 proc makeKey(name: string, subs: seq[string]): string =
   ## Create flat key for storage
@@ -31,6 +33,8 @@ proc newGlobals*(dbPath: string = ""): Globals =
   result.dbPath = dbPath
   result.specialGetters = initTable[string, SpecialVarGetter]()
   result.specialSetters = initTable[string, SpecialVarSetter]()
+  result.nakedGlobal = ""
+  result.nakedSubs = @[]
   
   if dbPath.len > 0:
     result.globals.init(dbPath)
@@ -135,6 +139,9 @@ proc setGlobal*(g: var Globals, name: string, subs: seq[string], value: string) 
   ## Set global variable value in LMDB
   if g.dbPath.len == 0: return
   g.globals.put(name, subs, value)
+  # Track last global reference for naked indirection
+  g.nakedGlobal = name
+  g.nakedSubs = subs
 
 proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
   ## Kill global variable

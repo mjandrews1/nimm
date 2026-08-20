@@ -137,7 +137,7 @@ type
   ## info for error reporting and debugging. A type inference pass
   ## could annotate nodes with [NUM], [STR], or [ANY].
   ExprKind* = enum
-    numLit, eStr, eVar, eFunc, eSvar, eNeg, eNot, eBinary, ePattern
+    numLit, eStr, eVar, eFunc, eSvar, eNeg, eNot, eBinary, ePattern, eIndirect
 
   ## Expr — Expression AST Node
   ##
@@ -183,6 +183,10 @@ type
     of ePattern:
       patLhs*: Expr
       atoms*: seq[PatternAtom]
+    of eIndirect:
+      ## Indirection: @expr — expr evaluates to a variable name
+      indirectExpr*: Expr
+      indirectSubs*: seq[Expr]  # Optional subscripts: @(expr, sub1, sub2)
 
   ## SetKind — SET Target Variants
   ##
@@ -199,7 +203,7 @@ type
   ## the $PIECE/$EXTRACT arguments because the variable is the LHS
   ## of the assignment, while the args specify which piece/position.
   SetKind* = enum
-    stVar, stPiece, stExtract
+    stVar, stPiece, stExtract, stIndirect
 
   ## SetTarget — A SET Assignment Target
   ##
@@ -227,6 +231,10 @@ type
       ## SET $PIECE(var, delim, start[, end]) = value / SET $EXTRACT(var, ...) = value
       targetVar*: string
       targs*: seq[Expr]
+    of stIndirect:
+      ## SET @expr = value — indirect assignment
+      indirectExpr*: Expr
+      indirectSubs*: seq[Expr]
 
   ## SetItem — One SET Assignment
   ##
