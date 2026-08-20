@@ -376,7 +376,7 @@ type
   CmdKind* = enum
     cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
     cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
-    cZwrite, cZkill, cOpen, cUse, cClose, cRead,
+    cZwrite, cZkill, cOpen, cUse, cClose, cRead, cJob,
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
     cZload, cZstep, cZcontinue, cZremove
 
@@ -458,6 +458,9 @@ type
       closeChannel*: Expr         # Channel number
     of cRead:
       readVars*: seq[Expr]
+    of cJob:
+      jobEntry*: Expr          # Entry reference (Label^Routine or ^Routine)
+      jobTimeout*: Expr        # Optional timeout
     of cZhalt:
       zhaltCode*: Expr
     of cZmessage:

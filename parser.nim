@@ -768,6 +768,49 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cMerge, mergePairs: parseMergePairs(p))
   of "XECUTE", "X":
     cmd = Cmd(kind: cXecute, xecExpr: p.parseExpr())
+  of "JOB", "J":
+    # JOB entryref[(args)][:timeout]
+    # entryref: LABEL^ROUTINE or ^ROUTINE
+    # Labels and routine names can contain underscores (concatenation operator
+    # in expressions, but part of the identifier in entryref context)
+    var entryStr = ""
+    if p.peek() == tokCaret:
+      discard p.advance()
+      entryStr = "^"
+      if p.peek() == tokWord:
+        entryStr.add(p.readWord())
+        while p.peek() == tokConcat:
+          discard p.advance()
+          if p.peek() == tokWord:
+            entryStr.add("_" & p.readWord())
+    elif p.peek() == tokWord:
+      entryStr = p.readWord()
+      while p.peek() == tokConcat:
+        discard p.advance()
+        if p.peek() == tokWord:
+          entryStr.add("_" & p.readWord())
+      if p.peek() == tokCaret:
+        discard p.advance()
+        entryStr.add("^")
+        if p.peek() == tokWord:
+          entryStr.add(p.readWord())
+          while p.peek() == tokConcat:
+            discard p.advance()
+            if p.peek() == tokWord:
+              entryStr.add("_" & p.readWord())
+    # Skip optional (args)
+    if p.peek() == tokLParen:
+      discard p.advance()
+      var depth = 1
+      while depth > 0 and p.peek() != tokEof:
+        if p.peek() == tokLParen: depth.inc
+        elif p.peek() == tokRParen: depth.dec
+        discard p.advance()
+    var timeout: Expr = nil
+    if p.peek() == tokColon:
+      discard p.advance()
+      timeout = p.parseExpr()
+    cmd = Cmd(kind: cJob, jobEntry: Expr(kind: eStr, sval: entryStr), jobTimeout: timeout)
   of "DO", "D":
     # DO can execute inline commands or call labels
     # Check if next token is a command word (inline DO) or a variable name (label DO)

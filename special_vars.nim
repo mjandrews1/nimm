@@ -25,6 +25,9 @@ var
   zerror: string = ""  # $ZERROR - error message
   zstatus: string = ""  # $ZSTATUS - status
   ztrap: string = ""  # $ZTRAP - trap handler
+  jobNumber: int = 0  # M job number for $JOB
+  isChildProcess: bool = false  # true if spawned by JOB command
+  parentJobNum: int = 0  # parent's job number (negative in child)
 
 proc getDevice(): string =
   return device
@@ -79,8 +82,25 @@ proc setIo(val: string) =
   io = val
 
 proc getJob(): string =
-  # $JOB returns current process ID
-  return $os.getCurrentProcessId()
+  # $JOB returns M job number (not OS PID)
+  if isChildProcess:
+    # Child process: return negative of parent's job number
+    return $(-parentJobNum)
+  elif jobNumber > 0:
+    # Parent process with assigned job number
+    return $jobNumber
+  else:
+    # Standalone process: root job is always 1
+    return "1"
+
+proc setJobNumber*(num: int) =
+  ## Set the M job number for this process
+  jobNumber = num
+
+proc initChildJob*(parentNum: int) =
+  ## Initialize as a child process spawned by JOB
+  isChildProcess = true
+  parentJobNum = parentNum
 
 proc getKey(): string =
   return key
@@ -202,6 +222,7 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$ECODE", getEcode, setEcode)
   g.registerSpecialVar("$ETRAP", getEtrap, setEtrap)
   g.registerSpecialVar("$HOROLOG", getHorolog)
+  g.registerSpecialVar("$H", getHorolog)
   g.registerSpecialVar("$IO", getIo, setIo)
   g.registerSpecialVar("$JOB", getJob)
   g.registerSpecialVar("$KEY", getKey, setKey)

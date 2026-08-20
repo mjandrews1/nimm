@@ -4,6 +4,7 @@
 import strutils
 import tables
 import os
+import osproc
 import streams
 import posix
 import ast
@@ -13,6 +14,7 @@ import runtime
 import parser
 import special_vars
 import debugger
+import jobs
 
 type
   DeviceHandle = ref object
@@ -32,6 +34,7 @@ type
     testValue*: bool
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
     currentChannel: int  # Current channel number (0 = principal)
+    jobTable*: JobTable  # Job table for JOB command
 
 proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Runtime): Engine =
   new(result)
@@ -42,6 +45,7 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.output = ""
   result.testValue = false
   result.currentChannel = 0
+  result.jobTable = newJobTable()
   
   # Initialize channel array
   for i in 0..63:
@@ -438,6 +442,34 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let code = eng.evaluator[].eval(cmd.xecExpr)
           result = eng.execute(parseLine(code), depth + 1)
 
+      of CmdKind.cJob:
+        # JOB entryref[:timeout] — start new process to run routine
+        if cmd.jobEntry != nil:
+          let entry = eng.evaluator[].eval(cmd.jobEntry)
+          let currentFile = eng.runtime[].currentFile
+          var timeout = 0
+          if cmd.jobTimeout != nil:
+            try:
+              timeout = parseInt(eng.evaluator[].eval(cmd.jobTimeout))
+            except:
+              discard
+
+          try:
+            let dbPath = eng.globals[].dbPath
+            let parentJobNum = parseInt(eng.globals[].getSpecialVar("$JOB"))
+            let jobNum = eng.jobTable.spawnJob(entry, currentFile, dbPath, parentJobNum, timeout)
+            eng.globals[].setLocal("$JOB", @[], $jobNum)
+            # $TEST semantics: with timeout, always 1; without timeout, unchanged
+            if timeout > 0:
+              eng.testValue = true
+          except:
+            # JOB failed — $TEST = 0 only with timeout
+            if timeout > 0:
+              eng.testValue = false
+        else:
+          if cmd.jobTimeout != nil:
+            eng.testValue = false
+
       # Z-commands
       of CmdKind.cZhalt:
         var exitCode = 0
@@ -471,6 +503,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             try:
               let routine = eng.runtime[].loadRoutine(routineName)
               eng.runtime[].currentRoutine = routine.name
+              eng.runtime[].currentFile = routineName
               eng.writeln("Loaded: " & routine.name & " (" & $routine.lines.len & " lines)")
             except:
               eng.writeln("Error loading routine: " & routineName)

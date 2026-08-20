@@ -31,6 +31,7 @@ type
     dbPath: string
     mode: string
     repl: bool
+    parentJobNum: int  # -p: parent M job number (set by JOB command)
 
 proc parseArgs(): CliArgs =
   result.code = ""
@@ -38,6 +39,7 @@ proc parseArgs(): CliArgs =
   result.dbPath = ""
   result.mode = "nimm"
   result.repl = false
+  result.parentJobNum = 0
 
   let args = os.commandLineParams()
   var i = 0
@@ -63,6 +65,13 @@ proc parseArgs(): CliArgs =
         if i + 1 < args.len:
           inc i
           result.dbPath = args[i]
+      of "p":
+        if i + 1 < args.len:
+          inc i
+          try:
+            result.parentJobNum = parseInt(args[i])
+          except:
+            discard
       of "m":
         if i + 1 < args.len:
           inc i
@@ -124,6 +133,19 @@ proc main() =
   var ev = newEvaluator(g, rt)
   var eng = newEngine(g, ev, rt)
 
+  # Detect if spawned by JOB command (child process mode)
+  # Uses -p flag (preferred) or NIMM_PARENT_JOB env var (fallback)
+  if args.parentJobNum > 0:
+    initChildJob(args.parentJobNum)
+  else:
+    let parentJobEnv = getEnv("NIMM_PARENT_JOB")
+    if parentJobEnv.len > 0:
+      try:
+        let parentNum = parseInt(parentJobEnv)
+        initChildJob(parentNum)
+      except:
+        discard
+
   # Load routine file if specified
   if args.routineFile.len > 0:
     if not fileExists(args.routineFile):
@@ -131,6 +153,7 @@ proc main() =
       quit(1)
     let routine = rt.loadRoutine(args.routineFile)
     rt.currentRoutine = routine.name
+    rt.currentFile = args.routineFile
 
   # Execute or REPL
   if args.repl:
