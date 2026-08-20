@@ -21,6 +21,7 @@ var
   test: string = "1"
   x: int = 0
   y: int = 0
+  zeof: string = "0"  # $ZEOF - end-of-file flag
 
 proc getDevice(): string =
   return device
@@ -165,6 +166,12 @@ proc setY(val: string) =
   except:
     discard
 
+proc getZeof(): string =
+  return zeof
+
+proc setZeof(val: string) =
+  zeof = val
+
 proc registerAllSpecialVars*(g: var Globals) =
   ## Register all special variables with the globals system
   g.registerSpecialVar("$DEVICE", getDevice, setDevice)
@@ -183,3 +190,4 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$TEST", getTest, setTest)
   g.registerSpecialVar("$X", getX, setX)
   g.registerSpecialVar("$Y", getY, setY)
+  g.registerSpecialVar("$ZEOF", getZeof, setZeof)

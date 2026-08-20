@@ -806,11 +806,39 @@ proc parseCommand(p: var Parser): CommandNode =
       removeExpr = p.parseExpr()
     cmd = Cmd(kind: cZremove, zremoveExpr: removeExpr)
   of "OPEN", "O":
-    cmd = Cmd(kind: cOpen, openDevice: p.parseExpr(), openParams: Expr(kind: eStr, sval: ""))
+    # OPEN channel:(file:mode)[:timeout]
+    let channelExpr = p.parseExpr()
+    var deviceExpr = Expr(kind: eStr, sval: "")
+    var modeExpr = Expr(kind: eStr, sval: "IO")
+    var timeoutExpr: Expr = nil
+    
+    if p.peek() == tokColon:
+      discard p.advance()  # consume :
+      if p.peek() == tokLParen:
+        discard p.advance()  # consume (
+        deviceExpr = p.parseExpr()
+        if p.peek() == tokColon:
+          discard p.advance()  # consume :
+          modeExpr = p.parseExpr()
+          if p.peek() == tokColon:
+            discard p.advance()  # consume :
+            timeoutExpr = p.parseExpr()
+        if p.peek() == tokRParen:
+          discard p.advance()  # consume )
+    
+    cmd = Cmd(kind: cOpen, openChannel: channelExpr, openDevice: deviceExpr, openMode: modeExpr, openTimeout: timeoutExpr)
   of "USE", "U":
-    cmd = Cmd(kind: cUse, useDevice: p.parseExpr())
+    # USE channel[:params]
+    let channelExpr = p.parseExpr()
+    var paramsExpr: Expr = nil
+    if p.peek() == tokColon:
+      discard p.advance()  # consume :
+      paramsExpr = p.parseExpr()
+    cmd = Cmd(kind: cUse, useChannel: channelExpr, useParams: paramsExpr)
   of "CLOSE", "C":
-    cmd = Cmd(kind: cClose, closeDevice: p.parseExpr())
+    # CLOSE channel
+    let channelExpr = p.parseExpr()
+    cmd = Cmd(kind: cClose, closeChannel: channelExpr)
   of "YOPEN", "YLISTEN", "YREAD", "YWRITE", "YCLOSE":
     cmd = Cmd(kind: cNoop)
   else:

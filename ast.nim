@@ -439,12 +439,15 @@ type
     of cZkill:
       zkillExpr*: Expr
     of cOpen:
-      openDevice*: Expr
-      openParams*: Expr
+      openChannel*: Expr          # Channel number (0-63)
+      openDevice*: Expr           # Device/file path
+      openMode*: Expr             # Mode: "READ", "WRITE", "APPEND", "IO"
+      openTimeout*: Expr          # Optional timeout
     of cUse:
-      useDevice*: Expr
+      useChannel*: Expr           # Channel number
+      useParams*: Expr            # Optional device parameters
     of cClose:
-      closeDevice*: Expr
+      closeChannel*: Expr         # Channel number
     of cRead:
       readVars*: seq[Expr]
     of cZhalt:

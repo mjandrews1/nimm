@@ -4,6 +4,8 @@
 import strutils
 import tables
 import os
+import streams
+import posix
 import ast
 import globals
 import evaluator
@@ -13,6 +15,13 @@ import special_vars
 import debugger
 
 type
+  DeviceHandle = ref object
+    ## Represents an open device (file or stream)
+    fd: cint  # POSIX file descriptor
+    readBuf: string
+    readPos: int
+    isOpen: bool
+  
   Engine* = ref object
     ## M/MUMPS command interpreter
     globals*: ptr Globals
@@ -21,6 +30,8 @@ type
     debugger*: Debugger
     output*: string
     testValue*: bool
+    channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
+    currentChannel: int  # Current channel number (0 = principal)
 
 proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Runtime): Engine =
   new(result)
@@ -30,6 +41,14 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.debugger = newDebugger()
   result.output = ""
   result.testValue = false
+  result.currentChannel = 0
+  
+  # Initialize channel array
+  for i in 0..63:
+    result.channels[i] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: false)
+  
+  # Channel 0 = principal device (stdin/stdout)
+  result.channels[0] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: true)
 
 proc write*(eng: var Engine, s: string) =
   eng.output.add(s)
@@ -125,13 +144,30 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           case arg.kind
           of WriteKind.wrExpr:
             let val = eng.evaluator[].eval(arg.wexpr)
-            eng.write(val)
+            if eng.currentChannel == 0:
+              eng.write(val)
+            elif eng.channels[eng.currentChannel].isOpen:
+              let handle = eng.channels[eng.currentChannel]
+              discard posix.write(handle.fd, cstring(val), val.len)
           of WriteKind.wrNewline:
-            eng.writeln("")
+            if eng.currentChannel == 0:
+              eng.writeln("")
+            elif eng.channels[eng.currentChannel].isOpen:
+              let handle = eng.channels[eng.currentChannel]
+              discard posix.write(handle.fd, cstring("\n"), 1)
           of WriteKind.wrFormFeed:
-            eng.write("\f")
+            if eng.currentChannel == 0:
+              eng.write("\f")
+            elif eng.channels[eng.currentChannel].isOpen:
+              let handle = eng.channels[eng.currentChannel]
+              discard posix.write(handle.fd, cstring("\f"), 1)
           of WriteKind.wrColumn:
-            eng.write(" ".repeat(arg.col))
+            if eng.currentChannel == 0:
+              eng.write(" ".repeat(arg.col))
+            elif eng.channels[eng.currentChannel].isOpen:
+              let handle = eng.channels[eng.currentChannel]
+              let spaces = " ".repeat(arg.col)
+              discard posix.write(handle.fd, cstring(spaces), spaces.len)
 
       of CmdKind.cIf:
         if cmd.ifCond != nil:
@@ -246,7 +282,27 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cRead:
         for varExpr in cmd.readVars:
           if varExpr.kind == eVar:
-            let val = readLine(stdin)
+            var val = ""
+            if eng.currentChannel == 0:
+              # Read from stdin
+              val = readLine(stdin)
+            elif eng.channels[eng.currentChannel].isOpen:
+              let handle = eng.channels[eng.currentChannel]
+              # Read one character at a time until newline or EOF
+              var ch: array[1, char]
+              var bytesRead = 0
+              while true:
+                let n = posix.read(handle.fd, addr ch[0], 1)
+                if n <= 0:
+                  # EOF reached
+                  eng.globals[].setSpecialVar("$ZEOF", "1")
+                  break
+                bytesRead += 1
+                if ch[0] == '\n':
+                  break
+                val.add(ch[0])
+              if bytesRead > 0:
+                eng.globals[].setSpecialVar("$ZEOF", "0")
             eng.globals[].set(varExpr.vname, @[], val)
 
       of CmdKind.cHang:
@@ -254,8 +310,82 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let seconds = parseFloat(eng.evaluator[].eval(cmd.hangExpr))
           os.sleep(int(seconds * 1000))
 
-      of CmdKind.cLock, CmdKind.cMerge,
-         CmdKind.cOpen, CmdKind.cUse, CmdKind.cClose:
+      of CmdKind.cOpen:
+        # OPEN channel:(file:mode)[:timeout]
+        let channel = parseInt(eng.evaluator[].eval(cmd.openChannel))
+        let deviceName = eng.evaluator[].eval(cmd.openDevice)
+        let mode = eng.evaluator[].eval(cmd.openMode).toUpperAscii
+        
+        # Validate channel number
+        if channel < 0 or channel > 63:
+          eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
+          eng.testValue = false
+        elif channel == 0:
+          eng.globals[].setSpecialVar("$ECODE", "M25:Cannot open channel 0")
+          eng.testValue = false
+        else:
+          # Parse mode
+          var flags = O_RDWR or O_CREAT
+          if mode == "READ" or mode == "R":
+            flags = O_RDONLY
+          elif mode == "WRITE" or mode == "W":
+            flags = O_WRONLY or O_CREAT or O_TRUNC
+          elif mode == "APPEND" or mode == "A":
+            flags = O_WRONLY or O_CREAT or O_APPEND
+          elif mode == "IO":
+            flags = O_RDWR or O_CREAT
+          
+          try:
+            let fd = posix.open(cstring(deviceName), flags, 0o644)
+            if fd < 0:
+              raiseOSError(osLastError())
+            
+            # Reset file pointer to beginning
+            discard lseek(fd, 0, SEEK_SET)
+            
+            eng.channels[channel] = DeviceHandle(fd: fd, readBuf: "", readPos: 0, isOpen: true)
+            eng.testValue = true
+          except:
+            eng.testValue = false
+            let errorMsg = getCurrentExceptionMsg()
+            eng.globals[].setSpecialVar("$ECODE", "M1:" & errorMsg)
+
+      of CmdKind.cUse:
+        # USE channel[:params]
+        let channel = parseInt(eng.evaluator[].eval(cmd.useChannel))
+        
+        # Validate channel number
+        if channel < 0 or channel > 63:
+          eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
+          eng.testValue = false
+        elif not eng.channels[channel].isOpen:
+          eng.globals[].setSpecialVar("$ECODE", "M2:Channel not open: " & $channel)
+          eng.testValue = false
+        else:
+          eng.currentChannel = channel
+          eng.testValue = true
+
+      of CmdKind.cClose:
+        # CLOSE channel
+        let channel = parseInt(eng.evaluator[].eval(cmd.closeChannel))
+        
+        # Validate channel number
+        if channel < 0 or channel > 63:
+          eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
+          eng.testValue = false
+        elif channel == 0:
+          # Closing channel 0 is always ignored
+          eng.testValue = true
+        elif eng.channels[channel].isOpen:
+          discard posix.close(eng.channels[channel].fd)
+          eng.channels[channel] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: false)
+          if eng.currentChannel == channel:
+            eng.currentChannel = 0
+          eng.testValue = true
+        else:
+          eng.testValue = false
+
+      of CmdKind.cLock, CmdKind.cMerge:
         discard
 
       of CmdKind.cBreak:
