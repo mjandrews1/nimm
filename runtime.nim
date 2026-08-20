@@ -99,6 +99,51 @@ proc parseLabels(routine: var Routine) =
           let label = trimmed[0..<labelEnd].toUpperAscii()
           routine.labels[label] = i
 
+proc stripMComment(line: string): string =
+  ## Strip M-style comments from a line.
+  ## In M, `;` starts a comment to end of line, but NOT inside string literals.
+  result = ""
+  var inString = false
+  var i = 0
+  while i < line.len:
+    let c = line[i]
+    if c == '"':
+      inString = not inString
+      result.add(c)
+    elif c == ';' and not inString:
+      break
+    else:
+      result.add(c)
+    inc i
+
+proc filterRoutineLines(lines: var seq[string]) =
+  ## Strip comments and blank lines from routine source.
+  ## Must be called after mergeDotContinuations and before parseLabels.
+  var filtered: seq[string] = @[]
+  for line in lines:
+    let stripped = stripMComment(line).strip()
+    if stripped.len > 0:
+      filtered.add(stripped)
+  lines = filtered
+
+proc mergeDotContinuations(lines: var seq[string]) =
+  ## Merge dot-continuation lines into parent lines.
+  ## In M, a line starting with `.` is a continuation of the previous
+  ## line's command body (DO, FOR, IF, ELSE).
+  ## This merges `. BODY` into `PARENT DO BODY`.
+  var merged: seq[string] = @[]
+  for line in lines:
+    let trimmed = line.strip()
+    if trimmed.len > 0 and trimmed[0] == '.':
+      # Dot continuation — append to previous line
+      if merged.len > 0:
+        let bodyPart = trimmed[1..^1].strip()
+        if bodyPart.len > 0:
+          merged[^1] = merged[^1] & " " & bodyPart
+    else:
+      merged.add(line)
+  lines = merged
+
 proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
   ## Load a routine from a file
   let name = extractFilename(filepath).splitFile().name.toUpperAscii()
@@ -114,6 +159,12 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
     # Remove trailing whitespace
     routine.lines.add(line.strip(trailing = true))
   
+  # Merge dot-continuation lines
+  mergeDotContinuations(routine.lines)
+  
+  # Strip comments and blank lines
+  filterRoutineLines(routine.lines)
+  
   # Parse labels
   parseLabels(routine)
   
@@ -126,6 +177,12 @@ proc loadRoutineFromString*(rt: var Runtime, name: string, code: string): Routin
   
   for line in code.splitLines():
     routine.lines.add(line.strip(trailing = true))
+  
+  # Merge dot-continuation lines
+  mergeDotContinuations(routine.lines)
+  
+  # Strip comments and blank lines
+  filterRoutineLines(routine.lines)
   
   parseLabels(routine)
   
@@ -152,6 +209,43 @@ proc getLine*(rt: Runtime, routineName: string, label: string, offset: int = 0):
     return ""
   
   return routine.lines[lineIdx]
+
+proc collectDotBody*(rt: Runtime, routineName: string, label: string, startOffset: int): tuple[body: string, linesConsumed: int] =
+  ## Collect dot-continuation lines after a bare DO/FOR/IF
+  ## Returns the concatenated body (dots stripped) and how many lines were consumed
+  let name = routineName.toUpperAscii()
+  let lbl = label.toUpperAscii()
+  result.body = ""
+  result.linesConsumed = 0
+  
+  if name notin rt.routines:
+    return
+  
+  let routine = rt.routines[name]
+  
+  if lbl notin routine.labels:
+    return
+  
+  var offset = startOffset
+  while true:
+    let lineIdx = routine.labels[lbl] + offset
+    if lineIdx < 0 or lineIdx >= routine.lines.len:
+      break
+    
+    let srcLine = routine.lines[lineIdx]
+    let trimmed = srcLine.strip()
+    
+    if trimmed.len == 0 or trimmed[0] != '.':
+      break
+    
+    # Strip the dot prefix and any leading whitespace
+    let bodyLine = trimmed[1..^1].strip()
+    if result.body.len > 0:
+      result.body.add(" ")
+    result.body.add(bodyLine)
+    
+    offset.inc
+    result.linesConsumed.inc
 
 proc getLine*(rt: Runtime, spec: string): string =
   ## Parse $TEXT spec: label+offset^routine

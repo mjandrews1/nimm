@@ -123,8 +123,11 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
   for i, k in keys:
     if forward and k > lastSub:
       return k
-    elif not forward and k < lastSub:
-      return k
+  # For backward: return the last key that is less than lastSub
+  # (keys are sorted ascending, so iterate to find the closest one)
+  for i in countdown(keys.len - 1, 0):
+    if keys[i] < lastSub:
+      return keys[i]
   
   return ""
 

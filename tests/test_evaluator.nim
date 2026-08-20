@@ -2,13 +2,15 @@
 
 import ../evaluator
 import ../globals
+import ../runtime
 import ../ast
 
 proc main() =
   echo "Testing evaluator..."
   
   var g = newGlobals()
-  var ev = newEvaluator(g)
+  var rt = newRuntime()
+  var ev = newEvaluator(g, rt)
   
   # Test numeric literals
   let numExpr = Expr(kind: numLit, sval: "42")
@@ -30,13 +32,13 @@ proc main() =
   let addExpr = Expr(kind: eBinary, op: bAdd,
     left: Expr(kind: numLit, sval: "3"),
     right: Expr(kind: numLit, sval: "4"))
-  assert ev.eval(addExpr) == "7.0"
+  assert ev.eval(addExpr) == "7"
   echo "OK Addition"
   
   let mulExpr = Expr(kind: eBinary, op: bMul,
     left: Expr(kind: numLit, sval: "3"),
     right: Expr(kind: numLit, sval: "4"))
-  assert ev.eval(mulExpr) == "12.0"
+  assert ev.eval(mulExpr) == "12"
   echo "OK Multiplication"
   
   # Test string concatenation

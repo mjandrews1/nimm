@@ -275,7 +275,6 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 let gotLine = eng.runtime[].getLine(routine, label, offset)
                 if gotLine.len == 0:
                   break
-                # Skip label lines (they start with a word followed by space or no space)
                 let parsed = parseLine(gotLine)
                 if parsed != nil and parsed.cmds.len > 0:
                   let r = eng.execute(parsed, depth + 1)
@@ -310,17 +309,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               # Read one character at a time until newline or EOF
               var ch: array[1, char]
               var bytesRead = 0
+              var hitEof = false
               while true:
                 let n = posix.read(handle.fd, addr ch[0], 1)
                 if n <= 0:
                   # EOF reached
+                  hitEof = true
                   eng.globals[].setSpecialVar("$ZEOF", "1")
                   break
                 bytesRead += 1
                 if ch[0] == '\n':
                   break
                 val.add(ch[0])
-              if bytesRead > 0:
+              if bytesRead > 0 and not hitEof:
                 eng.globals[].setSpecialVar("$ZEOF", "0")
             eng.globals[].set(varExpr.vname, @[], val)
 

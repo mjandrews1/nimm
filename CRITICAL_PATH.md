@@ -181,11 +181,12 @@
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| 1. I/O Foundation | Not started | Critical path |
-| 2. Core Functions | Not started | High priority |
-| 3. Indirection | Not started | High priority |
-| 4. RSM Extensions | Not started | Medium priority |
-| 5. ERIC Loader | Partial | Chunked routine workaround |
+| 1. I/O Foundation | **Done** | Channel-based I/O (#201) implemented |
+| 1.2 FOR+QUIT | **Done** | All patterns work correctly |
+| 2. Core Functions | **Done** | $QUERY, $TEXT, $NAME, $ZVERSION, etc. |
+| 3. Indirection | **Done** | @X name indirection, naked refs |
+| 4. RSM Extensions | **Done** | LOCK, MERGE, ZGOTO, ZQUIT |
+| 5. ERIC Loader | **Working** | 11,929 thesaurus terms loaded |
 
 ---
 

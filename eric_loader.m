@@ -1,236 +1,137 @@
-#!/usr/bin/env nimm
-; eric_loader.m — Load ERIC data into nimm NI_MAP structures
+; eric_loader.m — ERIC Data Loader using nimm file I/O
 ;
-; Usage: nimm -x 'DO LOAD^ERICLOADER "/path/to/eric_staging"'
+; Loads ERIC thesaurus data into nimm NI_MAP structures
+; using channel-based file I/O.
+;
+; Usage: nimm -r eric_loader.m -e 'DO LOAD "/tmp/eric_staging"'
 ;
 ; Data structures:
-;   eric_thesaurus — Term name → "recType|scopeNote|groupCode|addDate"
-;   eric_citations — ED number → "title|creator|date|description"
-;   eric_term_to_cite — Term name → "ED1,ED2,..."
-;   eric_cite_to_term — ED number → "term1,term2,..."
-;   eric_bt — Term name → "broaderTerm1,broaderTerm2,..."
-;   eric_rt — Term name → "relatedTerm1,relatedTerm2,..."
-;   eric_synonyms — Synonym → "mainTerm"
+;   eric_thesaurus — Term name -> metadata
+;   eric_bt — Term -> broader terms
+;   eric_rt — Term -> related terms
+;   eric_synonyms — Synonym -> main term
 
 LOAD ;
     ; Initialize data structures
     WRITE "=== ERIC Data Loader ===",!
-    WRITE "Creating data structures...",!
-    
     SET TH=$NI_MAP("create","eric_thesaurus")
-    SET CI=$NI_MAP("create","eric_citations")
-    SET TC=$NI_MAP("create","eric_term_to_cite")
-    SET CT=$NI_MAP("create","eric_cite_to_term")
     SET BT=$NI_MAP("create","eric_bt")
     SET RT=$NI_MAP("create","eric_rt")
     SET SY=$NI_MAP("create","eric_synonyms")
+    WRITE "Created data structures.",!
     
-    WRITE "Data structures created.",!
-    WRITE "Loading data from: ",%1,!
+    ; Load thesaurus terms
+    WRITE !,"--- Loading Thesaurus Terms ---",!
+    DO LOADTH
+    WRITE "Thesaurus: ",$NI_MAP("len","eric_thesaurus")," terms",!
     
-    ; Load thesaurus
-    DO LOADTH^ERICLOADER(%1)
+    ; Load broader terms
+    WRITE !,"--- Loading Broader Terms ---",!
+    DO LOADBT
+    WRITE "BT: ",$NI_MAP("len","eric_bt")," links",!
     
-    ; Load citations
-    DO LOADCI^ERICLOADER(%1)
+    ; Load related terms
+    WRITE !,"--- Loading Related Terms ---",!
+    DO LOADRT
+    WRITE "RT: ",$NI_MAP("len","eric_rt")," links",!
     
-    ; Build link tables
-    DO BUILDLINKS^ERICLOADER(%1)
+    ; Load synonyms
+    WRITE !,"--- Loading Synonyms ---",!
+    DO LOADSY
+    WRITE "Synonyms: ",$NI_MAP("len","eric_synonyms")," links",!
     
-    WRITE "=== Load Complete ===",!
+    WRITE !,"=== Load Complete ===",!
     QUIT
 
-LOADTH(DIR) ;
-    ; Load ERIC thesaurus from pipe-delimited file
-    WRITE !,"--- Loading Thesaurus ---",!
-    
-    SET FILE=DIR_"/eric_staging/eric_thesaurus.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    
-    ; Skip header
-    READ LINE
+LOADTH ;
+    ; Load thesaurus terms from pipe-delimited file
+    OPEN 1:("/tmp/eric_staging/eric_thesaurus.txt":"READ")
+    USE 1
+    READ HEADER  ; Skip header
     
     SET COUNT=0
     FOR  READ LINE QUIT:$ZEOF  DO
     . SET NAME=$PIECE(LINE,"|",1)
-    . SET RECTYPE=$PIECE(LINE,"|",2)
-    . SET SCOPENOTE=$PIECE(LINE,"|",3)
-    . SET GROUPCODE=$PIECE(LINE,"|",4)
-    . SET ADDDATE=$PIECE(LINE,"|",5)
-    . 
-    . ; Store in thesaurus map
-    . SET DATA=RECTYPE_"|"_SCOPENOTE_"|"_GROUPCODE_"|"_ADDDATE
+    . SET DATA=$PIECE(LINE,"|",2,99)
     . SET X=$NI_MAP("set","eric_thesaurus",NAME,DATA)
-    . 
     . SET COUNT=COUNT+1
-    . IF COUNT#1000=0 WRITE "Loaded ",COUNT," terms...",!
     
-    CLOSE FILE
-    WRITE "Loaded ",COUNT," thesaurus terms.",!
+    CLOSE 1
+    USE 0
     QUIT
 
-LOADCI(DIR) ;
-    ; Load ERIC citations from pipe-delimited file
-    WRITE !,"--- Loading Citations ---",!
-    
-    SET FILE=DIR_"/eric_staging/eric_citations.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    
-    ; Skip header
-    READ LINE
+LOADBT ;
+    ; Load broader term relationships
+    OPEN 1:("/tmp/eric_staging/eric_thesaurus_bt.txt":"READ")
+    USE 1
+    READ HEADER  ; Skip header
     
     SET COUNT=0
     FOR  READ LINE QUIT:$ZEOF  DO
-    . SET EDNUM=$PIECE(LINE,"|",1)
-    . SET TITLE=$PIECE(LINE,"|",2)
-    . SET CREATOR=$PIECE(LINE,"|",3)
-    . SET DATE=$PIECE(LINE,"|",4)
-    . SET DESC=$PIECE(LINE,"|",5)
-    . 
-    . ; Store in citations map
-    . SET DATA=TITLE_"|"_CREATOR_"|"_DATE_"|"_DESC
-    . SET X=$NI_MAP("set","eric_citations",EDNUM,DATA)
-    . 
-    . SET COUNT=COUNT+1
-    . IF COUNT#1000=0 WRITE "Loaded ",COUNT," citations...",!
-    
-    CLOSE FILE
-    WRITE "Loaded ",COUNT," citations.",!
-    QUIT
-
-BUILDLINKS(DIR) ;
-    ; Build link tables from subject data
-    WRITE !,"--- Building Link Tables ---",!
-    
-    ; Load citation-to-subject links
-    SET FILE=DIR_"/eric_staging/eric_citation_subjects.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    
-    ; Skip header
-    READ LINE
-    
-    SET LINKCOUNT=0
-    FOR  READ LINE QUIT:$ZEOF  DO
-    . SET EDNUM=$PIECE(LINE,"|",1)
-    . SET SUBJECT=$PIECE(LINE,"|",2)
-    . 
-    . ; Update citation-to-term link
-    . SET OLDCT=$NI_MAP("get","eric_cite_to_term",EDNUM)
-    . IF OLDCT="" SET NEWCT=SUBJECT
-    . ELSE  SET NEWCT=OLDCT_","_SUBJECT
-    . SET X=$NI_MAP("set","eric_cite_to_term",EDNUM,NEWCT)
-    . 
-    . ; Update term-to-citation link
-    . SET OLDTC=$NI_MAP("get","eric_term_to_cite",SUBJECT)
-    . IF OLDTC="" SET NEWTC=EDNUM
-    . ELSE  SET NEWTC=OLDTC_","_EDNUM
-    . SET X=$NI_MAP("set","eric_term_to_cite",SUBJECT,NEWTC)
-    . 
-    . SET LINKCOUNT=LINKCOUNT+1
-    . IF LINKCOUNT#1000=0 WRITE "Built ",LINKCOUNT," links...",!
-    
-    CLOSE FILE
-    WRITE "Built ",LINKCOUNT," links.",!
-    
-    ; Load broader term relationships
-    WRITE !,"--- Loading Broader Terms ---",!
-    SET FILE=DIR_"/eric_staging/eric_thesaurus_bt.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    READ LINE  ; Skip header
-    
-    SET BTCOUNT=0
-    FOR  READ LINE QUIT:$ZEOF  DO
     . SET TERM=$PIECE(LINE,"|",1)
     . SET BT=$PIECE(LINE,"|",2)
-    . 
-    . SET OLDBT=$NI_MAP("get","eric_bt",TERM)
-    . IF OLDBT="" SET NEWBT=BT
-    . ELSE  SET NEWBT=OLDBT_","_BT
-    . SET X=$NI_MAP("set","eric_bt",TERM,NEWBT)
-    . 
-    . SET BTCOUNT=BTCOUNT+1
+    . SET X=$NI_MAP("set","eric_bt",TERM,BT)
+    . SET COUNT=COUNT+1
     
-    CLOSE FILE
-    WRITE "Loaded ",BTCOUNT," broader term links.",!
-    
+    CLOSE 1
+    USE 0
+    QUIT
+
+LOADRT ;
     ; Load related term relationships
-    WRITE !,"--- Loading Related Terms ---",!
-    SET FILE=DIR_"/eric_staging/eric_thesaurus_rt.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    READ LINE  ; Skip header
+    OPEN 1:("/tmp/eric_staging/eric_thesaurus_rt.txt":"READ")
+    USE 1
+    READ HEADER  ; Skip header
     
-    SET RTCOUNT=0
+    SET COUNT=0
     FOR  READ LINE QUIT:$ZEOF  DO
     . SET TERM=$PIECE(LINE,"|",1)
     . SET RT=$PIECE(LINE,"|",2)
-    . 
-    . SET OLDRT=$NI_MAP("get","eric_rt",TERM)
-    . IF OLDRT="" SET NEWRT=RT
-    . ELSE  SET NEWRT=OLDRT_","_RT
-    . SET X=$NI_MAP("set","eric_rt",TERM,NEWRT)
-    . 
-    . SET RTCOUNT=RTCOUNT+1
+    . SET X=$NI_MAP("set","eric_rt",TERM,RT)
+    . SET COUNT=COUNT+1
     
-    CLOSE FILE
-    WRITE "Loaded ",RTCOUNT," related term links.",!
-    
+    CLOSE 1
+    USE 0
+    QUIT
+
+LOADSY ;
     ; Load synonym relationships
-    WRITE !,"--- Loading Synonyms ---",!
-    SET FILE=DIR_"/eric_staging/eric_thesaurus_synonyms.txt"
-    OPEN FILE:(READONLY)
-    USE FILE
-    READ LINE  ; Skip header
+    OPEN 1:("/tmp/eric_staging/eric_thesaurus_synonyms.txt":"READ")
+    USE 1
+    READ HEADER  ; Skip header
     
-    SET SYNCOUNT=0
+    SET COUNT=0
     FOR  READ LINE QUIT:$ZEOF  DO
     . SET SYN=$PIECE(LINE,"|",1)
     . SET MAIN=$PIECE(LINE,"|",2)
-    . 
     . SET X=$NI_MAP("set","eric_synonyms",SYN,MAIN)
-    . 
-    . SET SYNCOUNT=SYNCOUNT+1
+    . SET COUNT=COUNT+1
     
-    CLOSE FILE
-    WRITE "Loaded ",SYNCOUNT," synonym links.",!
-    
+    CLOSE 1
+    USE 0
     QUIT
 
 QUERY ;
     ; Query ERIC data
-    ; Usage: nimm -x 'DO QUERY^ERICLOADER "term name"'
+    ; Usage: nimm -r eric_loader.m -e 'DO QUERY "term name"'
     
     SET TERM=%1
-    
     WRITE "=== Querying: ",TERM," ===",!
     
     ; Check thesaurus
     SET DATA=$NI_MAP("get","eric_thesaurus",TERM)
-    IF DATA'="" DO
-    . WRITE "Thesaurus: ",DATA,!
+    IF DATA'="" WRITE "Thesaurus: ",DATA,!
     
     ; Check synonyms
     SET SYN=$NI_MAP("get","eric_synonyms",TERM)
-    IF SYN'="" DO
-    . WRITE "Synonym of: ",SYN,!
+    IF SYN'="" WRITE "Synonym of: ",SYN,!
     
     ; Get broader terms
-    SET BT=$NI_MAP("get","eric_bt",TERM)
-    IF BT'="" DO
-    . WRITE "Broader terms: ",BT,!
+    SET B=$NI_MAP("get","eric_bt",TERM)
+    IF B'="" WRITE "Broader: ",B,!
     
     ; Get related terms
-    SET RT=$NI_MAP("get","eric_rt",TERM)
-    IF RT'="" DO
-    . WRITE "Related terms: ",RT,!
-    
-    ; Get citations
-    SET CITES=$NI_MAP("get","eric_term_to_cite",TERM)
-    IF CITES'="" DO
-    . WRITE "Citations: ",CITES,!
+    SET R=$NI_MAP("get","eric_rt",TERM)
+    IF R'="" WRITE "Related: ",R,!
     
     QUIT

@@ -1,8 +1,11 @@
 # Compiled binaries
 main
+nimm
+engine
 run_all_tests
 test_conformance
 test_integration
+test_for_quit
 tests/test_engine
 tests/test_globals
 tests/test_evaluator
@@ -15,6 +18,13 @@ tests/test_mode
 tests/test_text
 tests/test_tracing
 tests/test_lmdb
+tests/test_debugging
+tests/test_improvements
+tests/test_inspector
+tests/test_network
+tests/test_ni_functions
+tests/test_static_analysis
+tests/test_unicode
 
 # LMDB database files
 *.mdb

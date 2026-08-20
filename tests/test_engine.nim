@@ -11,8 +11,8 @@ proc main() =
   echo "Testing engine..."
 
   var g = newGlobals()
-  var ev = newEvaluator(g)
   var rt = newRuntime()
+  var ev = newEvaluator(g, rt)
   var eng = newEngine(g, ev, rt)
 
   # Test SET
@@ -39,7 +39,7 @@ proc main() =
   eng.clearOutput()
   let arith = parseLine("SET Z = 2 + 3 WRITE Z")
   discard eng.execute(arith)
-  assert eng.getOutput() == "5.0"
+  assert eng.getOutput() == "5"
   echo "OK Arithmetic"
 
   # Test KILL
