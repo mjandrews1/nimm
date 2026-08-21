@@ -148,7 +148,9 @@ proc isCommandWord(p: Parser, w: string): bool =
      "GOTO", "G", "BREAK", "B", "ELSE", "E", "READ", "R", "OPEN", "O", "CLOSE", "C",
      "USE", "U", "VIEW", "V", "JOB", "J", "HALT",
      "ZWRITE", "ZKILL", "ZBREAK", "ZGOTO", "ZPRINT", "ZQUIT", "ZSAVE",
-     "ZSYSTEM", "ZHALT", "ZMESSAGE", "ZTRAP",
+     "ZSYSTEM", "ZHALT", "ZMESSAGE", "ZTRAP", "ZLOAD", "ZSTEP", "ZCONTINUE",
+     "ZREMOVE", "ZEDIT", "ZE", "ZLINK", "ZL", "ZALLOCATE", "ZA",
+     "ZDEALLOCATE", "ZD",
      "YOPEN", "YLISTEN", "YREAD", "YWRITE", "YCLOSE":
     true
   else:
@@ -881,6 +883,31 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       removeExpr = p.parseExpr()
     cmd = Cmd(kind: cZremove, zremoveExpr: removeExpr)
+  of "ZEDIT", "ZE":
+    var editExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      editExpr = p.parseExpr()
+    cmd = Cmd(kind: cZedit, zeditExpr: editExpr)
+  of "ZLINK", "ZL":
+    var linkExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      linkExpr = p.parseExpr()
+    cmd = Cmd(kind: cZlink, zlinkExpr: linkExpr)
+  of "VIEW", "V":
+    var viewExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      viewExpr = p.parseExpr()
+    cmd = Cmd(kind: cView, viewExpr: viewExpr)
+  of "ZALLOCATE", "ZA":
+    var allocRefs: seq[Expr] = @[]
+    if isExprStart(p) and not p.atCommandPos():
+      allocRefs = parseExprList(p)
+    cmd = Cmd(kind: cZallocate, zallocRefs: allocRefs)
+  of "ZDEALLOCATE", "ZD":
+    var deallocRefs: seq[Expr] = @[]
+    if isExprStart(p) and not p.atCommandPos():
+      deallocRefs = parseExprList(p)
+    cmd = Cmd(kind: cZdeallocate, zdeallocRefs: deallocRefs)
   of "OPEN", "O":
     # OPEN channel:(file:mode)[:timeout]
     let channelExpr = p.parseExpr()

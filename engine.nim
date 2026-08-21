@@ -572,6 +572,42 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # ZQUIT — Exit with value (Z-version of QUIT)
         return "QUIT"
 
+      of CmdKind.cZedit:
+        # ZEDIT routine — Open routine in external editor
+        if cmd.zeditExpr != nil:
+          let routineName = eng.evaluator[].eval(cmd.zeditExpr)
+          let currentFile = eng.runtime[].currentFile
+          if currentFile.len > 0:
+            let editor = getEnv("EDITOR", "vi")
+            discard execShellCmd(editor & " " & currentFile)
+
+      of CmdKind.cZlink:
+        # ZLINK routine — Reload routine from disk
+        if cmd.zlinkExpr != nil:
+          let routineName = eng.evaluator[].eval(cmd.zlinkExpr)
+          let currentFile = eng.runtime[].currentFile
+          if currentFile.len > 0:
+            try:
+              let routine = eng.runtime[].loadRoutine(currentFile)
+              eng.runtime[].currentRoutine = routine.name
+            except:
+              discard
+          else:
+            discard
+
+      of CmdKind.cView:
+        # VIEW expr — View/modify system parameters
+        # Implemented as no-op (VIEW is implementation-defined)
+        discard
+
+      of CmdKind.cZallocate:
+        # ZALLOCATE ^global — Pre-allocate global storage (no-op in nimm)
+        discard
+
+      of CmdKind.cZdeallocate:
+        # ZDEALLOCATE ^global — Deallocate global storage (no-op in nimm)
+        discard
+
       else:
         discard
 

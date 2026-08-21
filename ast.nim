@@ -378,7 +378,8 @@ type
     cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
     cZwrite, cZkill, cOpen, cUse, cClose, cRead, cJob,
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
-    cZload, cZstep, cZcontinue, cZremove
+    cZload, cZstep, cZcontinue, cZremove,
+    cZedit, cZlink, cView, cZallocate, cZdeallocate
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -487,3 +488,13 @@ type
       discard
     of cZremove:
       zremoveExpr*: Expr
+    of cZedit:
+      zeditExpr*: Expr
+    of cZlink:
+      zlinkExpr*: Expr
+    of cView:
+      viewExpr*: Expr
+    of cZallocate:
+      zallocRefs*: seq[Expr]
+    of cZdeallocate:
+      zdeallocRefs*: seq[Expr]
