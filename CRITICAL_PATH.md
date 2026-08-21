@@ -1,7 +1,7 @@
 # nimm v0.1.1 Critical Path
 
 **Date:** 2026-08-20
-**Status:** v0.1.1 Complete — 51/51 conformance, 19/19 tests
+**Status:** v0.1.1 Complete — 60/60 tests, 51/51 conformance
 **Goal:** ANSI/ISO M/Mlang/Mumps conformance
 
 ---
@@ -9,160 +9,72 @@
 ## Phase 1: I/O Foundation (Critical)
 
 ### 1.1 Redesign I/O Model (#201)
-**Priority:** Critical
-**Blocks:** #195, #198, #200, #199
-**Effort:** Large
-
-- Add channel table (array of 64 device handles) to Engine
+**Status:** Done
+- Channel table (array of 64 device handles) in Engine
 - Channel 0 = principal device (stdin/stdout, always open)
 - Channels 1-63 = user-assignable via OPEN
-- OPEN syntax: `OPEN channel:(file:mode)[:timeout]`
-- USE syntax: `USE channel[:params]`
-- CLOSE syntax: `CLOSE channel`
-- Update WRITE to use current device
-- Update READ to use current device
-
-**Test:** `OPEN 1:("/tmp/test.txt":"WRITE") USE 1 WRITE "Hello" CLOSE 1 USE 0`
+- OPEN/USE/CLOSE/READ/WRITE all channel-aware
 
 ### 1.2 Fix Argumentless FOR+QUIT (#196)
-**Priority:** Critical
-**Blocks:** File I/O loading, ERIC loader
-**Effort:** Medium
-
-- Debug QUIT postconditional inside argumentless FOR body
-- Fix: `FOR SET X=X+1 QUIT:X>3` should terminate
-- Fix: `FOR READ LINE QUIT:$ZEOF` should terminate at EOF
-
-**Test:** `SET X=0 FOR SET X=X+1 QUIT:X>3 WRITE X,!`
+**Status:** Done
+- QUIT postconditional inside argumentless FOR body works
+- `FOR SET X=X+1 QUIT:X>3` terminates correctly
 
 ---
 
 ## Phase 2: Core Functions (High Priority)
 
 ### 2.1 Fix $QUERY Format (#208)
-**Priority:** High
-**Blocks:** Global traversal
-**Effort:** Medium
-
-- $QUERY should return full global reference: `^GLOBAL(sub1,sub2,...)`
-- Currently returns same as $ORDER (just subscript)
-- Need to track global name and subscripts
-
-**Test:** `SET ^A(1)=1,^A(2)=2 WRITE $QUERY(^A(1))` → `^A(2)`
+**Status:** Done
+- $QUERY returns full global reference: `^GLOBAL(sub1,sub2,...)`
 
 ### 2.2 Implement $TEXT (#209)
-**Priority:** High
-**Blocks:** Debugging tools
-**Effort:** Medium
-
-- $TEXT should return source line from loaded routine
-- Parse `label+offset^routine` format
-- Return actual source line
-
-**Test:** `WRITE $TEXT(LABEL+1)` → source line
+**Status:** Done
+- $TEXT returns source line from loaded routine
+- Parses `label+offset^routine` format
 
 ### 2.3 Implement Missing Functions (#210)
-**Priority:** High
-**Blocks:** Advanced M programming
-**Effort:** Medium
-
-- $NAME: Returns canonical name of variable
-- $QLENGTH: Returns length of qualified name
-- $QSUBSCRIPT: Returns subscript of qualified name
-
-**Test:** `WRITE $NAME(X(1))` → `X(1)`
+**Status:** Done
+- $NAME, $QLENGTH, $QSUBSCRIPT
 
 ### 2.4 Implement Missing Special Variables (#212)
-**Priority:** High
-**Blocks:** Error handling, version info
-**Effort:** Medium
-
-- $ZVERSION: Version information
-- $ZERROR: Error message
-- $ZSTATUS: Status
-- $ZTRAP: Trap handler
-
-**Test:** `WRITE $ZVERSION` → version string
+**Status:** Done
+- $ZVERSION, $ZERROR, $ZSTATUS, $ZTRAP
 
 ---
 
 ## Phase 3: Indirection (High Priority)
 
 ### 3.1 Implement Name Indirection (#206)
-**Priority:** High
-**Blocks:** Dynamic variable access
-**Effort:** Large
-
-- Parse @expr in SET, WRITE, etc.
-- Evaluate @expr to get variable name
-- Execute indirection
-
-**Test:** `SET X="Y" SET @X=5 WRITE Y` → 5
+**Status:** Done
+- @expr in SET, WRITE, etc.
 
 ### 3.2 Implement Naked References (#207)
-**Priority:** High
-**Blocks:** Efficient global traversal
-**Effort:** Large
-
-- Track last global reference
-- Implement `^(sub1,sub2)` syntax
-- Append subscripts to last global
-
-**Test:** `SET ^A(1,2)=1 SET ^(3,4)=2 WRITE ^A(1,2,3,4)` → 2
+**Status:** Done
+- ^(sub1,sub2) syntax
 
 ---
 
 ## Phase 4: RSM Extensions (Medium Priority)
 
 ### 4.1 Implement Missing RSM Functions (#211)
-**Priority:** Medium
-**Blocks:** RSM conformance
-**Effort:** Medium
-
-- $ZDATETIME: Date/time formatting
-- $ZSTRIP: Strip characters
-- $ZSUBSTR: Extract substring
-- $ZPIECE: Returns piece of string
-- $ZORDER: Returns next global
-- $ZPREVIOUS: Returns previous subscript
+**Status:** Done
+- $ZDATETIME, $ZSTRIP, $ZSUBSTR, $ZPIECE, $ZORDER, $ZPREVIOUS
 
 ### 4.2 Implement Missing Commands (#202)
-**Priority:** Medium
-**Blocks:** Full M conformance
-**Effort:** Small
-
-- JOB: Fork new process
-- VIEW: View/modify system parameters
-- ZALLOCATE: Allocate global storage
-- ZDEALLOCATE: Deallocate global storage
-- ZEDIT: Edit routine
-- ZLINK: Link routine
+**Status:** Done
+- JOB (posix_spawn), VIEW (no-op), ZALLOCATE (no-op), ZDEALLOCATE (no-op), ZEDIT ($EDITOR), ZLINK (reload)
 
 ### 4.3 Implement LOCK, MERGE, ZGOTO, ZQUIT (#197)
-**Priority:** Medium
-**Blocks:** Full M conformance
-**Effort:** Medium
-
-- LOCK: Resource locking
-- MERGE: Tree copy
-- ZGOTO: Z-version of GOTO
-- ZQUIT: Z-version of QUIT
+**Status:** Done
 
 ---
 
 ## Phase 5: ERIC Data Loader (Low Priority)
 
 ### 5.1 Complete ERIC Loader (#199)
-**Priority:** Low
-**Blocks:** Data loading
-**Effort:** Small
-**Status:** DONE
-
-- Use channel-based I/O (#201) ✓
-- Use argumentless FOR+QUIT (#196) ✓
-- Replace chunked routine workaround ✓
-- Fixed M comment stripping in routine loader ✓
-- 11,929 thesaurus + 3,894 BT + 4,526 RT + 7,219 synonyms loaded ✓
+**Status:** Done
+- 11,929 thesaurus + 3,894 BT + 4,526 RT + 7,219 synonyms loaded
 
 ---
 
@@ -173,11 +85,7 @@
 | 1. I/O Foundation | Critical | #201, #196 | **Done** |
 | 2. Core Functions | High | #208, #209, #210, #212 | **Done** |
 | 3. Indirection | High | #206, #207 | **Done** |
-| 4. RSM Extensions | Medium | #211, #202, #197 | **Done** |
+| 4. RSM Extensions | Medium | #211, #202, #197, #214-#225 | **Done** |
 | 5. ERIC Loader | Low | #199 | **Done** |
 
-**nimm v0.1.1: 51/51 conformance, 19/19 tests — production ready.**
-
-### Remaining Work (Low Priority)
-- #214-#219: $Z* extension functions
-- #220-#225: Missing commands (JOB, VIEW, ZALLOCATE, ZDEALLOCATE, ZEDIT, ZLINK)
+**nimm v0.1.1: 60/60 tests, 51/51 conformance — all issues resolved.**
