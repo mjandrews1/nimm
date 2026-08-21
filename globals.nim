@@ -15,6 +15,7 @@ type
     ## Variable storage with local/global separation and scoping
     scopes*: seq[Table[string, string]]  # Stack of local scopes (flat key -> value)
     globals*: LmdbStore                   # LMDB-backed global storage
+    memGlobals: Table[string, string]     # In-memory global store (when no -db)
     specialGetters*: Table[string, SpecialVarGetter]
     specialSetters*: Table[string, SpecialVarSetter]
     dbPath*: string
@@ -109,6 +110,30 @@ proc killAllLocal*(g: var Globals) =
   g.ensureWritable()
   g.scopes[^1].clear()
 
+proc killAllExceptLocal*(g: var Globals, keep: seq[string]) =
+  ## Exclusive KILL: delete every local whose base variable is not in keep
+  g.ensureWritable()
+  var toDelete: seq[string] = @[]
+  for key in g.scopes[^1].keys:
+    let base = key.split('\x00')[0]
+    if base notin keep:
+      toDelete.add(key)
+  for key in toDelete:
+    g.scopes[^1].del(key)
+
+proc killAllGlobalsExcept*(g: var Globals, keep: seq[string]) =
+  ## Exclusive KILL: delete every global whose base name is not in keep
+  if g.dbPath.len == 0: return
+  let allKeys = g.globals.listKeys("")
+  for key in allKeys:
+    let base = key.split('\x00')[0]
+    if base.startsWith("^") and base notin keep:
+      # Reconstruct subscript list from the stored key
+      var subs: seq[string] = @[]
+      if '\0' in key:
+        subs = key.split('\x00')[1..^1]
+      g.globals.delete(base, subs)
+
 proc dataLocal*(g: Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA for local variables
   let key = makeKey(name, subs)
@@ -151,13 +176,14 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
   
   # Find the next key after the given subscript
   let lastSub = subs[^1]
-  for i, k in keys:
-    if forward and k > lastSub:
-      return k
-  # For backward: return the last key that is less than lastSub
-  # (keys are sorted ascending, so iterate to find the closest one)
+  if forward:
+    for k in keys:
+      if mCollationCmp(k, lastSub) > 0:
+        return k
+    return ""
+  # Backward: return the last key that is less than lastSub
   for i in countdown(keys.len - 1, 0):
-    if keys[i] < lastSub:
+    if mCollationCmp(keys[i], lastSub) < 0:
       return keys[i]
   
   return ""
@@ -165,21 +191,35 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
 # --- Global variable operations ---
 
 proc getGlobal*(g: Globals, name: string, subs: seq[string] = @[]): string =
-  ## Get global variable value from LMDB
-  if g.dbPath.len == 0: return ""
+  ## Get global variable value from LMDB (or in-memory store when no -db)
+  if g.dbPath.len == 0: return g.memGlobals.getOrDefault(makeKey(name, subs), "")
   return g.globals.get(name, subs)
 
 proc setGlobal*(g: var Globals, name: string, subs: seq[string], value: string) =
-  ## Set global variable value in LMDB
-  if g.dbPath.len == 0: return
-  g.globals.put(name, subs, value)
+  ## Set global variable value in LMDB (or in-memory store when no -db)
   # Track last global reference for naked indirection
   g.nakedGlobal = name
   g.nakedSubs = subs
+  if g.dbPath.len == 0:
+    g.memGlobals[makeKey(name, subs)] = value
+    return
+  g.globals.put(name, subs, value)
 
 proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
   ## Kill global variable
-  if g.dbPath.len == 0: return
+  if g.dbPath.len == 0:
+    let key = makeKey(name, subs)
+    if subs.len == 0:
+      # Kill node and all descendants (keys starting with name\x00)
+      var toDelete: seq[string] = @[]
+      for k in g.memGlobals.keys:
+        if k == key or k.startsWith(key & "\x00"):
+          toDelete.add(k)
+      for k in toDelete:
+        g.memGlobals.del(k)
+    else:
+      g.memGlobals.del(key)
+    return
   g.globals.delete(name, subs)
 
 # --- Unified get/set (auto-detect local vs global) ---
@@ -205,11 +245,33 @@ proc kill*(g: var Globals, name: string, subs: seq[string] = @[]) =
   else:
     g.killLocal(name, subs)
 
+proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool): string =
+  ## $ORDER over the in-memory global store
+  let prefix = name & "\x00"
+  var keys: seq[string] = @[]
+  for k in g.memGlobals.keys:
+    if k.startsWith(prefix):
+      let rest = k[prefix.len..^1]
+      if '\0' notin rest:
+        keys.add(rest)
+  keys.sort(mCollationCmp)
+  if keys.len == 0: return ""
+  if subs.len == 0:
+    return if forward: keys[0] else: keys[^1]
+  let lastSub = subs[^1]
+  if forward:
+    for k in keys:
+      if mCollationCmp(k, lastSub) > 0: return k
+    return ""
+  for i in countdown(keys.len - 1, 0):
+    if mCollationCmp(keys[i], lastSub) < 0: return keys[i]
+  return ""
+
 proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
   ## $ORDER (auto-detect local vs global)
   if name.len > 0 and name[0] == '^':
-    # For globals, use LMDB cursor
-    if g.dbPath.len == 0: return ""
+    # For globals, use LMDB cursor (or in-memory store when no -db)
+    if g.dbPath.len == 0: return orderGlobalMem(g, name, subs, forward)
     return g.globals.order(name, subs, forward)
   else:
     return g.orderLocal(name, subs, forward)
@@ -231,12 +293,33 @@ proc query*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = t
     result.add(nextSub)
     return result
 
+proc dataGlobalMem(g: Globals, name: string, subs: seq[string]): int =
+  ## $DATA tri-state over the in-memory global store
+  let key = makeKey(name, subs)
+  let hasValue = key in g.memGlobals
+  let prefix = key & "\x00"
+  var hasChildren = false
+  for k in g.memGlobals.keys:
+    if k.startsWith(prefix):
+      hasChildren = true
+      break
+  if hasValue and hasChildren: return 11
+  if hasValue: return 1
+  if hasChildren: return 10
+  return 0
+
 proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
-  ## $DATA (auto-detect local vs global)
+  ## $DATA (auto-detect local vs global, tri-state per ANSI/ISO 8.5)
   if name.len > 0 and name[0] == '^':
-    let val = g.getGlobal(name, subs)
-    if val.len > 0: return 1
-    return 0
+    if g.dbPath.len == 0:
+      return dataGlobalMem(g, name, subs)
+    let val = g.globals.get(name, subs)
+    if val.len > 0:
+      # Node has a value; check for descendants via listSubs
+      let kids = g.globals.listSubs(name, subs)
+      return if kids.len > 0: 11 else: 1
+    let kids = g.globals.listSubs(name, subs)
+    return if kids.len > 0: 10 else: 0
   else:
     return g.dataLocal(name, subs)
 

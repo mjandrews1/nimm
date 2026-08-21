@@ -71,6 +71,8 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       if expr.vname == "^":
         if ev.globals[].nakedGlobal.len == 0: return ""
         return ev.globals[].get(ev.globals[].nakedGlobal, ev.globals[].nakedSubs)
+      if expr.vname.startsWith("^"):
+        return ev.globals[].get(expr.vname, @[])
       return ev.globals[].getLocalDirect(expr.vname)
     var subs: seq[string] = @[]
     for sub in expr.subs:
@@ -332,9 +334,15 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   ## Call an intrinsic function
   case name
   of "ASCII", "A":
-    if args.len < 1: return ""
-    if args[0].len == 0: return ""
-    return $int(uint8(args[0][0]))
+    if args.len < 1: return "-1"
+    let s = args[0]
+    if s.len == 0: return "-1"
+    var pos = 1
+    if args.len > 1:
+      try: pos = parseInt(args[1])
+      except: return "-1"
+    if pos < 1 or pos > s.len: return "-1"
+    return $int(uint8(s[pos - 1]))
   of "CHAR", "C":
     var result = ""
     for a in args:
@@ -348,23 +356,30 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if args.len < 1: return ""
     let s = args[0]
     if s.len == 0: return ""
-    var start = 0
-    var length = s.len
-    if args.len > 1:
-      try: start = parseInt(args[1]) - 1
-      except: discard
+    if args.len == 1:
+      return $s[0]
+    var first = 0
+    var last = -1
+    try: first = parseInt(args[1])
+    except: discard
     if args.len > 2:
-      try: length = parseInt(args[2]) - start
-      except: discard
-    if start < 0: start = 0
-    if start >= s.len: return ""
-    let endIdx = min(start + length, s.len)
-    return s[start..<endIdx]
+      try: last = parseInt(args[2])
+      except: last = first
+    if args.len < 3: last = first
+    if first < 1: first = 1
+    if last > s.len: last = s.len
+    if last < first: return ""
+    if first > s.len: return ""
+    return s[(first - 1)..<last]
   of "FIND", "F":
     if args.len < 2: return ""
     let s = args[0]
     let f = args[1]
-    let start = if args.len > 2: parseInt(args[2]) else: 0
+    var start = 0
+    if args.len > 2:
+      try: start = parseInt(args[2]) - 1
+      except: start = 0
+    if start < 0: start = 0
     let pos = s.find(f, start)
     if pos >= 0: return $(pos + f.len + 1)
     return "0"

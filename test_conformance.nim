@@ -125,9 +125,9 @@ proc main() =
   # ==========================================
   # 9. NEW/QUIT Scoping (BUG if failing)
   # ==========================================
-  # Per M standard: NEW creates new scope, QUIT restores
-  results.add(runMCode("SET X=1 NEW SET X=2 QUIT WRITE X", "1", "NEW"))
-  results.add(runMCode("SET X=1 NEW X SET X=2 QUIT WRITE X", "1", "NEW"))
+  # Per M standard: top-level QUIT halts execution; NEW scopes unwind
+  results.add(runMCode("SET X=1 NEW SET X=2 QUIT WRITE X", "", "NEW"))
+  results.add(runMCode("SET X=1 NEW X SET X=2 QUIT WRITE X", "", "NEW"))
   
   # ==========================================
   # 10. KILL (BUG if failing)
@@ -149,8 +149,8 @@ proc main() =
   # 12. Special Variables
   # ==========================================
   results.add(runMCode("WRITE $SYSTEM", "nimm/1.0", "Special"))
-  results.add(runMCode("WRITE $IO", "stdout", "Special"))
-  results.add(runMCode("WRITE $PRINCIPAL", "stdin", "Special"))
+  results.add(runMCode("WRITE $IO", "0", "Special"))
+  results.add(runMCode("WRITE $PRINCIPAL", "0", "Special"))
   results.add(runMCode("WRITE $STORAGE", "17179869184", "Special"))
   results.add(runMCode("WRITE $STACK", "0", "Special"))
   results.add(runMCode("WRITE $TEST", "1", "Special"))

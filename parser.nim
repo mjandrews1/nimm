@@ -1191,7 +1191,7 @@ proc parseKill(p: var Parser): Cmd =
     if p.peek() == tokRParen:
       discard p.advance()
     Cmd(kind: cKillExcept, killKeep: vars)
-  elif p.peek() == tokWord:
+  elif p.peek() == tokWord or p.peek() == tokCaret:
     # KILL var,var,... — parse as variable list
     # Always treat the next word as a variable name, even if it's a command word
     var refs: seq[Expr] = @[]

@@ -33,6 +33,8 @@ type
     debugger*: Debugger
     output*: string
     testValue*: bool
+    quitAll*: bool  # Set by top-level QUIT: unwind everything and halt
+    doDepth*: int   # DO/XECUTE/extrinsic frame depth (0 = top level)
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
     currentChannel: int  # Current channel number (0 = principal)
     jobTable*: JobTable  # Job table for JOB command
@@ -46,6 +48,8 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.output = ""
   result.testValue = false
   result.currentChannel = 0
+  result.quitAll = false
+  result.doDepth = 0
   result.jobTable = newJobTable()
   
   # Initialize channel array
@@ -81,6 +85,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   result = ""
 
   for cmdNode in line.cmds:
+    if eng.quitAll: break
     if cmdNode == nil: continue
 
     # Check postconditional
@@ -105,6 +110,8 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               elif item.target.tname == "^":
                 if eng.globals[].nakedGlobal.len > 0:
                   eng.globals[].set(eng.globals[].nakedGlobal, eng.globals[].nakedSubs, value)
+              elif item.target.tname.startsWith("^"):
+                eng.globals[].set(item.target.tname, @[], value)
               else:
                 eng.globals[].setLocalDirect(item.target.tname, value)
             else:
@@ -219,8 +226,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           while true:
             if cmd.forBody != nil:
               let r = eng.execute(cmd.forBody, depth + 1)
-              if r == "QUIT":
+              if r == "QUIT" or eng.quitAll:
                 break
+            elif eng.quitAll:
+              break
         else:
           let init = parseFloat(eng.evaluator[].eval(cmd.forSpec.initE))
           let step = if cmd.forSpec.stepE != nil:
@@ -235,27 +244,27 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.globals[].setLocalDirect(varName, formatNumber(current))
             if cmd.forBody != nil:
               let r = eng.execute(cmd.forBody, depth + 1)
-              if r == "QUIT":
+              if r == "QUIT" or eng.quitAll:
                 break
+            elif eng.quitAll:
+              break
             current += step
 
       of CmdKind.cQuit:
-        # Pop scope if we're in a NEW block
-        if eng.globals[].scopes.len > 1:
+        # Unwind NEW scopes created since frame entry (or all at top level)
+        while eng.globals[].scopes.len > 1:
           eng.globals[].popScope()
-          # Restore $ETRAP from stack
           if eng.runtime[].etrapStack.len > 0:
             let savedEtrap = eng.runtime[].etrapStack[^1]
             eng.runtime[].etrapStack.setLen(eng.runtime[].etrapStack.len - 1)
             eng.globals[].setSpecialVar("$ETRAP", savedEtrap)
-          # After popping scope, continue execution (don't return QUIT)
-          if cmd.quitVal != nil:
-            discard eng.evaluator[].eval(cmd.quitVal)
-        else:
-          # Not in a NEW scope - this is a real QUIT (exit DO/FOR)
-          if cmd.quitVal != nil:
-            return eng.evaluator[].eval(cmd.quitVal)
-          return "QUIT"
+        if cmd.quitVal != nil:
+          discard eng.evaluator[].eval(cmd.quitVal)
+        if eng.doDepth == 0:
+          # Top-level QUIT: terminate execution entirely (ANSI/ISO 10.3)
+          eng.quitAll = true
+          return ""
+        return "QUIT"
 
       of CmdKind.cKill:
         if cmd.killRefs.len == 0:
@@ -268,6 +277,17 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               for sub in killRef.subs:
                 subs.add(eng.evaluator[].eval(sub))
               eng.globals[].kill(killRef.vname, subs)
+
+      of CmdKind.cKillExcept:
+        # Exclusive KILL (A,B): kill everything except listed vars.
+        # Per ANSI/ISO 12.2 this spans locals AND globals; a global named in
+        # the keep list survives, otherwise all globals are deleted.
+        var keep: seq[string] = @[]
+        for keepRef in cmd.killKeep:
+          if keepRef.kind == eVar:
+            keep.add(keepRef.vname)
+        eng.globals[].killAllExceptLocal(keep)
+        eng.globals[].killAllGlobalsExcept(keep)
 
       of CmdKind.cNew:
         # Save $ETRAP before pushing scope
@@ -283,6 +303,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             if routine.len > 0:
               # Execute from label until QUIT or next label
               pushStack()
+              eng.doDepth.inc
               var offset = 0
               while true:
                 let gotLine = eng.runtime[].getLine(routine, label, offset)
@@ -291,15 +312,18 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 let parsed = eng.cachedParseLine(gotLine)
                 if parsed != nil and parsed.cmds.len > 0:
                   let r = eng.execute(parsed, depth + 1)
-                  if r == "QUIT":
+                  if r == "QUIT" or eng.quitAll:
                     break
                 offset.inc
+              eng.doDepth.dec
               popStack()
 
       of CmdKind.cDoInline:
         # Inline DO: execute the body directly
         if cmd.doInlineBody != nil:
+          eng.doDepth.inc
           result = eng.execute(cmd.doInlineBody, depth + 1)
+          eng.doDepth.dec
 
       of CmdKind.cGoto:
         if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:
@@ -449,7 +473,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:
           let code = eng.evaluator[].eval(cmd.xecExpr)
+          eng.doDepth.inc
           result = eng.execute(eng.cachedParseLine(code), depth + 1)
+          eng.doDepth.dec
 
       of CmdKind.cJob:
         # JOB entryref[:timeout] — start new process to run routine
