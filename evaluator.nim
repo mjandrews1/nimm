@@ -641,6 +641,83 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     days += day
     let seconds = now.hour * 3600 + now.minute * 60 + now.second
     return $days & "," & $seconds
+  of "ZDATETIME":
+    # $ZDATETIME(horolog, format) - Format $HOROLOG with format string
+    # Format tokens: YYYY, YY, MM, DD, HH, MI, SS, 12h, AM, nn (AM/PM lowercase)
+    if args.len < 1: return ""
+    let horolog = args[0]
+    let parts = horolog.split(",")
+    if parts.len < 2: return ""
+    var year, month, day, hour, minute, second: int
+    try:
+      let days = parseInt(parts[0])
+      let secs = parseInt(parts[1])
+      # Convert days since 1840-12-31 to date
+      let baseYear = 1840
+      var remaining = days
+      year = baseYear
+      while true:
+        let daysInYear = if year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 366 else: 365
+        if remaining < daysInYear: break
+        remaining -= daysInYear
+        year.inc
+      let monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+      month = 1
+      for md in monthDays:
+        let daysInMonth = if month == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 29 else: md
+        if remaining < daysInMonth: break
+        remaining -= daysInMonth
+        month.inc
+      day = remaining + 1
+      # Convert seconds to time
+      hour = secs div 3600
+      minute = (secs mod 3600) div 60
+      second = secs mod 60
+    except:
+      return ""
+    # If no format string, return default ISO format
+    if args.len < 2:
+      return align($year, 4, '0') & "-" & align($month, 2, '0') & "-" & align($day, 2, '0') & " " &
+             align($hour, 2, '0') & ":" & align($minute, 2, '0') & ":" & align($second, 2, '0')
+    let fmt = args[1]
+    var result = ""
+    var i = 0
+    while i < fmt.len:
+      if i + 3 < fmt.len and fmt[i..i+3] == "YYYY":
+        result.add(align($year, 4, '0'))
+        i += 4
+      elif i + 1 < fmt.len and fmt[i..i+1] == "YY":
+        result.add(align($(year mod 100), 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "MM":
+        result.add(align($month, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "DD":
+        result.add(align($day, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "HH":
+        result.add(align($hour, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "MI":
+        result.add(align($minute, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "SS":
+        result.add(align($second, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "12":
+        let h12 = if hour == 0: 12 elif hour > 12: hour - 12 else: hour
+        result.add(align($h12, 2, '0'))
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "AM":
+        result.add(if hour < 12: "AM" else: "PM")
+        i += 2
+      elif i + 1 < fmt.len and fmt[i..i+1] == "nn":
+        result.add(if hour < 12: "am" else: "pm")
+        i += 2
+      else:
+        result.add(fmt[i])
+        i.inc
+    return result
   of "ZCONVERT":
     # $ZCONVERT(expr, type) - Convert string case
     if args.len < 2: return args[0]

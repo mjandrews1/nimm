@@ -25,6 +25,7 @@ type
   Runtime* = object
     routines*: Table[string, Routine]
     currentRoutine*: string
+    currentFile*: string
     currentLine*: int
     mode*: Mode
     config*: ModeConfig
