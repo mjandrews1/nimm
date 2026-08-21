@@ -33,3 +33,4 @@ tests/test_unicode
 
 # Nim cache
 nimcache/
+__pycache__/
