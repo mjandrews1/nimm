@@ -2,6 +2,7 @@
 main
 nimm
 engine
+bench/bench
 run_all_tests
 test_conformance
 test_integration

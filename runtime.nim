@@ -4,6 +4,7 @@
 import os
 import strutils
 import tables
+import ast
 
 type
   Mode* = enum
@@ -45,6 +46,8 @@ type
     stepMode*: string       # ZSTEP mode: off, into, over, out
     stepping*: bool         # Currently stepping
     debugOutput*: seq[string] # Debug output buffer
+    # Parser cache: source line -> parsed AST
+    parseCache*: Table[string, Line]
 
 proc getModeConfig*(mode: Mode): ModeConfig =
   ## Get configuration for a mode

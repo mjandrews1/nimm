@@ -34,6 +34,16 @@ var niSorted: Table[string, NiSorted] = initTable[string, NiSorted]()
 var niDeques: Table[string, NiDeque] = initTable[string, NiDeque]()
 var niBags: Table[string, NiBag] = initTable[string, NiBag]()
 
+# $ZDATETIME cache (keyed by horolog string, 1-second TTL)
+var zdtCacheHorolog: string = ""
+var zdtCacheYear, zdtCacheMonth, zdtCacheDay: int
+var zdtCacheHour, zdtCacheMinute, zdtCacheSecond: int
+var zdtCacheTime: int64 = 0
+
+# $ZHOROLOG cache (1-second TTL)
+var zhorologCache: string = ""
+var zhorologCacheTime: int64 = 0
+
 proc newEvaluator*(globals: var Globals, runtime: var Runtime, mode: string = "nimm"): Evaluator =
   result.globals = globals.addr
   result.runtime = runtime.addr
@@ -47,6 +57,8 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   case expr.kind
   of numLit:
     # Normalize number to canonical M form
+    if expr.hasCachedFloat:
+      return formatNumber(expr.cachedFloat)
     try:
       let v = parseFloat(expr.sval)
       return formatNumber(v)
@@ -55,13 +67,17 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   of eStr:
     return expr.sval
   of eVar:
+    if expr.subs.len == 0:
+      if expr.vname == "^":
+        if ev.globals[].nakedGlobal.len == 0: return ""
+        return ev.globals[].get(ev.globals[].nakedGlobal, ev.globals[].nakedSubs)
+      return ev.globals[].getLocalDirect(expr.vname)
     var subs: seq[string] = @[]
     for sub in expr.subs:
       subs.add(ev.eval(sub))
     # Handle naked references: ^ with no name uses last global reference
     if expr.vname == "^":
       if ev.globals[].nakedGlobal.len == 0: return ""
-      # Append new subscripts to existing naked subscripts
       var allSubs = ev.globals[].nakedSubs
       for sub in subs:
         allSubs.add(sub)
@@ -161,9 +177,9 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
         result.add(sub)
       result.add(")")
       return result
-    var args: seq[string] = @[]
-    for arg in expr.fargs:
-      args.add(ev.eval(arg))
+    var args = newSeq[string](expr.fargs.len)
+    for i, arg in expr.fargs:
+      args[i] = ev.eval(arg)
     return ev.callFunction(expr.fname, args)
   of eSvar:
     let sv = ev.globals[].getSpecialVar("$" & expr.sname)
@@ -171,6 +187,8 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     # If not found as special var, try as function (e.g. $ZHOROLOG)
     return ev.callFunction(expr.sname, @[])
   of eNeg:
+    if expr.operand.kind == numLit and expr.operand.hasCachedFloat:
+      return formatNumber(-expr.operand.cachedFloat)
     let val = ev.eval(expr.operand)
     try:
       return formatNumber(-parseFloat(val))
@@ -182,6 +200,17 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       return "1"
     return "0"
   of eBinary:
+    # Short-circuit evaluation for & (AND) and ! (OR)
+    if expr.op == bAnd:
+      let left = ev.eval(expr.left)
+      if left == "0" or left == "":
+        return "0"
+      return ev.eval(expr.right)
+    if expr.op == bOr:
+      let left = ev.eval(expr.left)
+      if left != "0" and left != "":
+        return "1"
+      return ev.eval(expr.right)
     let left = ev.eval(expr.left)
     let right = ev.eval(expr.right)
     case expr.op
@@ -642,11 +671,16 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return ""
   of "ZHOROLOG":
     # $ZHOROLOG - Get current date/time in $HOROLOG format
-    let now = times.now()
+    # Cache with 1-second TTL (same pattern as $HOROLOG)
+    let now = getTime()
+    let epochSec = now.toUnix()
+    if epochSec == zhorologCacheTime and zhorologCache.len > 0:
+      return zhorologCache
+    let nowTime = times.now()
     # Days from 1840-12-31 to now
-    let year = now.year
-    let month = now.month.ord
-    let day = now.monthday
+    let year = nowTime.year
+    let month = nowTime.month.ord
+    let day = nowTime.monthday
     var days = 0
     for y in 1840..<year:
       if y mod 4 == 0 and (y mod 100 != 0 or y mod 400 == 0):
@@ -659,8 +693,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       if m == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0):
         days.inc
     days += day
-    let seconds = now.hour * 3600 + now.minute * 60 + now.second
-    return $days & "," & $seconds
+    let seconds = nowTime.hour * 3600 + nowTime.minute * 60 + nowTime.second
+    zhorologCache = $days & "," & $seconds
+    zhorologCacheTime = epochSec
+    return zhorologCache
   of "ZDATETIME":
     # $ZDATETIME(horolog, format) - Format $HOROLOG with format string
     # Format tokens: YYYY, YY, MM, DD, HH, MI, SS, 12h, AM, nn (AM/PM lowercase)
@@ -670,29 +706,48 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if parts.len < 2: return ""
     var year, month, day, hour, minute, second: int
     try:
-      let days = parseInt(parts[0])
-      let secs = parseInt(parts[1])
-      # Convert days since 1840-12-31 to date
-      let baseYear = 1840
-      var remaining = days
-      year = baseYear
-      while true:
-        let daysInYear = if year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 366 else: 365
-        if remaining < daysInYear: break
-        remaining -= daysInYear
-        year.inc
-      let monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-      month = 1
-      for md in monthDays:
-        let daysInMonth = if month == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 29 else: md
-        if remaining < daysInMonth: break
-        remaining -= daysInMonth
-        month.inc
-      day = remaining + 1
-      # Convert seconds to time
-      hour = secs div 3600
-      minute = (secs mod 3600) div 60
-      second = secs mod 60
+      let now = getTime()
+      let epochSec = now.toUnix()
+      if horolog == zdtCacheHorolog and epochSec == zdtCacheTime:
+        year = zdtCacheYear
+        month = zdtCacheMonth
+        day = zdtCacheDay
+        hour = zdtCacheHour
+        minute = zdtCacheMinute
+        second = zdtCacheSecond
+      else:
+        let days = parseInt(parts[0])
+        let secs = parseInt(parts[1])
+        # Convert days since 1840-12-31 to date
+        let baseYear = 1840
+        var remaining = days
+        year = baseYear
+        while true:
+          let daysInYear = if year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 366 else: 365
+          if remaining < daysInYear: break
+          remaining -= daysInYear
+          year.inc
+        let monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        month = 1
+        for md in monthDays:
+          let daysInMonth = if month == 2 and year mod 4 == 0 and (year mod 100 != 0 or year mod 400 == 0): 29 else: md
+          if remaining < daysInMonth: break
+          remaining -= daysInMonth
+          month.inc
+        day = remaining + 1
+        # Convert seconds to time
+        hour = secs div 3600
+        minute = (secs mod 3600) div 60
+        second = secs mod 60
+        # Update cache
+        zdtCacheHorolog = horolog
+        zdtCacheYear = year
+        zdtCacheMonth = month
+        zdtCacheDay = day
+        zdtCacheHour = hour
+        zdtCacheMinute = minute
+        zdtCacheSecond = second
+        zdtCacheTime = epochSec
     except:
       return ""
     # If no format string, return default ISO format

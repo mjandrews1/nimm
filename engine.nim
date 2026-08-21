@@ -15,6 +15,7 @@ import parser
 import special_vars
 import debugger
 import jobs
+import value
 
 type
   DeviceHandle = ref object
@@ -69,6 +70,7 @@ proc clearOutput*(eng: var Engine) =
 const MaxRecursionDepth = 1000  # Prevent stack overflow
 
 proc parseLine*(code: string): Line
+proc cachedParseLine*(eng: var Engine, code: string): Line
 
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   ## Execute a line of M code (Line is already ref object)
@@ -97,21 +99,28 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let value = eng.evaluator[].eval(item.value)
           case item.target.kind
           of SetKind.stVar:
-            var subs: seq[string] = @[]
-            for sub in item.target.tsubs:
-              subs.add(eng.evaluator[].eval(sub))
-            # Check if this is a special variable
-            if item.target.tname.startsWith("$"):
-              eng.globals[].setSpecialVar(item.target.tname, value)
-            elif item.target.tname == "^":
-              # Naked reference: ^(subs) uses last global reference
-              if eng.globals[].nakedGlobal.len > 0:
-                var allSubs = eng.globals[].nakedSubs
-                for sub in subs:
-                  allSubs.add(sub)
-                eng.globals[].set(eng.globals[].nakedGlobal, allSubs, value)
+            if item.target.tsubs.len == 0:
+              if item.target.tname.startsWith("$"):
+                eng.globals[].setSpecialVar(item.target.tname, value)
+              elif item.target.tname == "^":
+                if eng.globals[].nakedGlobal.len > 0:
+                  eng.globals[].set(eng.globals[].nakedGlobal, eng.globals[].nakedSubs, value)
+              else:
+                eng.globals[].setLocalDirect(item.target.tname, value)
             else:
-              eng.globals[].set(item.target.tname, subs, value)
+              var subs: seq[string] = @[]
+              for sub in item.target.tsubs:
+                subs.add(eng.evaluator[].eval(sub))
+              if item.target.tname.startsWith("$"):
+                eng.globals[].setSpecialVar(item.target.tname, value)
+              elif item.target.tname == "^":
+                if eng.globals[].nakedGlobal.len > 0:
+                  var allSubs = eng.globals[].nakedSubs
+                  for sub in subs:
+                    allSubs.add(sub)
+                  eng.globals[].set(eng.globals[].nakedGlobal, allSubs, value)
+              else:
+                eng.globals[].set(item.target.tname, subs, value)
           of SetKind.stPiece:
             let varName = item.target.targetVar
             let current = eng.globals[].get(varName)
@@ -133,7 +142,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             for i, p in pieces:
               if i > 0: joined.add(delim)
               joined.add(p)
-            eng.globals[].set(varName, @[], joined)
+            eng.globals[].setLocalDirect(varName, joined)
           of SetKind.stExtract:
             let varName = item.target.targetVar
             let current = eng.globals[].get(varName)
@@ -148,7 +157,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             res.add(value)
             if endIdx + 1 < current.len:
               res.add(current[endIdx + 1..^1])
-            eng.globals[].set(varName, @[], res)
+            eng.globals[].setLocalDirect(varName, res)
           of SetKind.stIndirect:
             # SET @expr = value — indirect assignment
             let varName = eng.evaluator[].eval(item.target.indirectExpr)
@@ -221,9 +230,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             parseFloat(eng.evaluator[].eval(cmd.forSpec.limitE))
           else: 0.0
           var current = init
-          # Handle both positive and negative steps
+          let varName = cmd.forSpec.varName
           while (step > 0 and current <= limit) or (step < 0 and current >= limit):
-            eng.globals[].set(cmd.forSpec.varName, @[], $current)
+            eng.globals[].setLocalDirect(varName, formatNumber(current))
             if cmd.forBody != nil:
               let r = eng.execute(cmd.forBody, depth + 1)
               if r == "QUIT":
@@ -279,7 +288,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 let gotLine = eng.runtime[].getLine(routine, label, offset)
                 if gotLine.len == 0:
                   break
-                let parsed = parseLine(gotLine)
+                let parsed = eng.cachedParseLine(gotLine)
                 if parsed != nil and parsed.cmds.len > 0:
                   let r = eng.execute(parsed, depth + 1)
                   if r == "QUIT":
@@ -299,7 +308,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           if routine.len > 0:
             let gotLine = eng.runtime[].getLine(routine, label, 0)
             if gotLine.len > 0:
-              result = eng.execute(parseLine(gotLine), depth + 1)
+              result = eng.execute(eng.cachedParseLine(gotLine), depth + 1)
 
       of CmdKind.cRead:
         for varExpr in cmd.readVars:
@@ -440,7 +449,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:
           let code = eng.evaluator[].eval(cmd.xecExpr)
-          result = eng.execute(parseLine(code), depth + 1)
+          result = eng.execute(eng.cachedParseLine(code), depth + 1)
 
       of CmdKind.cJob:
         # JOB entryref[:timeout] — start new process to run routine
@@ -566,7 +575,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           if routine.len > 0:
             let gotLine = eng.runtime[].getLine(routine, label, 0)
             if gotLine.len > 0:
-              result = eng.execute(parseLine(gotLine), depth + 1)
+              result = eng.execute(eng.cachedParseLine(gotLine), depth + 1)
 
       of CmdKind.cZquit:
         # ZQUIT — Exit with value (Z-version of QUIT)
@@ -621,7 +630,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       let etrap = eng.globals[].getSpecialVar("$ETRAP")
       if etrap.len > 0:
         try:
-          discard eng.execute(parseLine(etrap), depth + 1)
+          discard eng.execute(eng.cachedParseLine(etrap), depth + 1)
         except:
           eng.output.add("Error in $ETRAP: " & getCurrentExceptionMsg() & "\n")
       else:
@@ -633,3 +642,11 @@ proc parseLine*(code: string): Line =
   ## Parse a line of M code (Line is ref object)
   var p = newParser(code)
   return p.parseLine()
+
+proc cachedParseLine*(eng: var Engine, code: string): Line =
+  ## Parse with cache lookup. Reuses AST for repeated identical source lines.
+  if code in eng.runtime[].parseCache:
+    return eng.runtime[].parseCache[code]
+  let parsed = parseLine(code)
+  eng.runtime[].parseCache[code] = parsed
+  return parsed

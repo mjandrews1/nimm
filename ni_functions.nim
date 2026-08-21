@@ -7,6 +7,16 @@ import os
 import strutils
 import times
 
+const hexChars = "0123456789abcdef"
+
+var urandomFile: File
+var urandomOpen = false
+
+proc ensureUrandom() =
+  if not urandomOpen:
+    urandomFile = open("/dev/urandom")
+    urandomOpen = true
+
 proc niHttp*(httpMethod: string, url: string, body: string = ""): string =
   ## $NI_HTTP: HTTP client
   ## Returns response body or empty string on error
@@ -63,34 +73,35 @@ proc niJson*(action: string, data: string): string =
 
 proc niUuid*(): string =
   ## $NI_UUID: Generate UUID v4
-  
-  # Use /dev/urandom for random bytes
+
+  ensureUrandom()
+
+  # Read 16 random bytes
   var bytes: array[16, uint8]
-  let f = open("/dev/urandom")
-  discard f.readBytes(bytes, 0, 16)
-  f.close()
-  
+  discard urandomFile.readBytes(bytes, 0, 16)
+
   # Set version (4) and variant (10)
   bytes[6] = (bytes[6] and 0x0f'u8) or 0x40'u8
   bytes[8] = (bytes[8] and 0x3f'u8) or 0x80'u8
-  
-  # Format as UUID string
-  result = ""
-  for i in 0..3:
-    result.add(bytes[i].toHex(2))
-  result.add('-')
-  for i in 4..5:
-    result.add(bytes[i].toHex(2))
-  result.add('-')
-  for i in 6..7:
-    result.add(bytes[i].toHex(2))
-  result.add('-')
-  for i in 8..9:
-    result.add(bytes[i].toHex(2))
-  result.add('-')
-  for i in 10..15:
-    result.add(bytes[i].toHex(2))
-  result = result.toLowerAscii()
+
+  # Format as UUID string (36 chars + null = 37 byte buffer)
+  result = newString(36)
+  var pos = 0
+  template writeHex(b: uint8) =
+    result[pos] = hexChars[b shr 4]
+    result[pos+1] = hexChars[b and 0x0f'u8]
+    pos += 2
+
+  # 4-2-2-2-6 byte groups separated by dashes
+  for i in 0..3: writeHex(bytes[i])
+  result[pos] = '-'; inc pos
+  for i in 4..5: writeHex(bytes[i])
+  result[pos] = '-'; inc pos
+  for i in 6..7: writeHex(bytes[i])
+  result[pos] = '-'; inc pos
+  for i in 8..9: writeHex(bytes[i])
+  result[pos] = '-'; inc pos
+  for i in 10..15: writeHex(bytes[i])
 
 proc niSleep*(seconds: float) =
   ## $NI_SLEEP: Sleep for specified seconds

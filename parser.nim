@@ -140,21 +140,49 @@ proc precededByWs(p: Parser, t: Token): bool =
 ## Note: "ELSE" is a command in M but is handled specially — it's really
 ## just "IF '0" (IF NOT false). We include it for recognition but the
 ## parser doesn't have a specific ELSE handler.
+proc equiWord(a, b: string): bool {.inline.} =
+  if a.len != b.len: return false
+  for i in 0..<a.len:
+    if a[i].toLowerAscii() != b[i].toLowerAscii():
+      return false
+  return true
+
 proc isCommandWord(p: Parser, w: string): bool =
-  let u = w.toUpperAscii
-  case u
-  of "SET", "S", "WRITE", "W", "IF", "I", "FOR", "F", "QUIT", "Q", "KILL", "K",
-     "NEW", "N", "HANG", "H", "LOCK", "L", "MERGE", "M", "XECUTE", "X", "DO", "D",
-     "GOTO", "G", "BREAK", "B", "ELSE", "E", "READ", "R", "OPEN", "O", "CLOSE", "C",
-     "USE", "U", "VIEW", "V", "JOB", "J", "HALT",
-     "ZWRITE", "ZKILL", "ZBREAK", "ZGOTO", "ZPRINT", "ZQUIT", "ZSAVE",
-     "ZSYSTEM", "ZHALT", "ZMESSAGE", "ZTRAP", "ZLOAD", "ZSTEP", "ZCONTINUE",
-     "ZREMOVE", "ZEDIT", "ZE", "ZLINK", "ZL", "ZALLOCATE", "ZA",
-     "ZDEALLOCATE", "ZD",
-     "YOPEN", "YLISTEN", "YREAD", "YWRITE", "YCLOSE":
-    true
-  else:
-    false
+  if w.len == 0: return false
+  let c = w[0].toLowerAscii()
+  case c
+  of 's': equiWord(w, "SET") or equiWord(w, "S")
+  of 'w': equiWord(w, "WRITE") or equiWord(w, "W")
+  of 'i': equiWord(w, "IF") or equiWord(w, "I")
+  of 'f': equiWord(w, "FOR") or equiWord(w, "F")
+  of 'q': equiWord(w, "QUIT") or equiWord(w, "Q")
+  of 'k': equiWord(w, "KILL") or equiWord(w, "K")
+  of 'n': equiWord(w, "NEW") or equiWord(w, "N")
+  of 'h': equiWord(w, "HANG") or equiWord(w, "H") or equiWord(w, "HALT")
+  of 'l': equiWord(w, "LOCK") or equiWord(w, "L")
+  of 'm': equiWord(w, "MERGE") or equiWord(w, "M")
+  of 'x': equiWord(w, "XECUTE") or equiWord(w, "X")
+  of 'd': equiWord(w, "DO") or equiWord(w, "D")
+  of 'g': equiWord(w, "GOTO") or equiWord(w, "G")
+  of 'b': equiWord(w, "BREAK") or equiWord(w, "B")
+  of 'e': equiWord(w, "ELSE") or equiWord(w, "E")
+  of 'r': equiWord(w, "READ") or equiWord(w, "R")
+  of 'o': equiWord(w, "OPEN") or equiWord(w, "O")
+  of 'c': equiWord(w, "CLOSE") or equiWord(w, "C")
+  of 'u': equiWord(w, "USE") or equiWord(w, "U")
+  of 'v': equiWord(w, "VIEW") or equiWord(w, "V")
+  of 'j': equiWord(w, "JOB") or equiWord(w, "J")
+  of 'z':
+    equiWord(w, "ZWRITE") or equiWord(w, "ZKILL") or equiWord(w, "ZBREAK") or
+    equiWord(w, "ZGOTO") or equiWord(w, "ZPRINT") or equiWord(w, "ZQUIT") or
+    equiWord(w, "ZSAVE") or equiWord(w, "ZSYSTEM") or equiWord(w, "ZHALT") or
+    equiWord(w, "ZMESSAGE") or equiWord(w, "ZTRAP") or equiWord(w, "ZLOAD") or
+    equiWord(w, "ZSTEP") or equiWord(w, "ZCONTINUE") or equiWord(w, "ZREMOVE") or
+    equiWord(w, "ZEDIT") or equiWord(w, "ZE") or equiWord(w, "ZLINK") or
+    equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
+    equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD")
+  of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
+  else: false
 
 ## atCommandPos — Test if Current Token Starts a Command
 ##
@@ -341,9 +369,9 @@ proc parsePrimary(p: var Parser): Expr =
     if p.peek() == tokDot and p.peek2() == tokNumber:
       discard p.advance()
       let f = p.advance()
-      Expr(kind: numLit, sval: t.text & "." & f.text)
+      Expr(kind: numLit, sval: t.text & "." & f.text, cachedFloat: parseFloat(t.text & "." & f.text), hasCachedFloat: true)
     else:
-      Expr(kind: numLit, sval: t.text)
+      Expr(kind: numLit, sval: t.text, cachedFloat: parseFloat(t.text), hasCachedFloat: true)
   of tokStr:
     let t = p.advance()
     Expr(kind: eStr, sval: t.text)
@@ -416,7 +444,7 @@ proc parsePrimary(p: var Parser): Expr =
   else:
     # Unexpected token — return a zero literal as fallback
     discard p.advance()
-    Expr(kind: numLit, sval: "0")
+    Expr(kind: numLit, sval: "0", cachedFloat: 0.0, hasCachedFloat: true)
 
 ## parseSubscripts — Parse Variable Subscripts
 ##
@@ -714,7 +742,7 @@ proc parseCommand(p: var Parser): CommandNode =
       if p.peek() == tokEof:
         break
       # Check if next token is ELSE
-      if p.peek() == tokWord and p.cur.text.toUpperAscii == "ELSE":
+      if p.peek() == tokWord and equiWord(p.cur.text, "ELSE"):
         break
       if p.atCommandPos():
         body.cmds.add parseCommand(p)
@@ -816,7 +844,7 @@ proc parseCommand(p: var Parser): CommandNode =
   of "DO", "D":
     # DO can execute inline commands or call labels
     # Check if next token is a command word (inline DO) or a variable name (label DO)
-    if p.peek() == tokWord and isCommandWord(p, p.cur.text.toUpperAscii):
+    if p.peek() == tokWord and isCommandWord(p, p.cur.text):
       # Inline DO: DO command
       let body = p.parseLine()
       cmd = Cmd(kind: cDoInline, doInlineBody: body)

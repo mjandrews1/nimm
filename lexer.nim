@@ -218,21 +218,27 @@ proc nextToken*(lex: var Lexer): Token =
   # contains the string hello"world.
   if c == '"':
     inc lex.pos
-    var s = ""
+    var s = newString(min(32, lex.src.len - lex.pos))
+    var sLen = 0
     while true:
       let ch = lex.peekAt(0)
       if ch == '\0':
         break
       if ch == '"':
         if lex.peekAt(1) == '"':
-          s.add '"'
+          if sLen >= s.len: s.setLen(s.len * 2)
+          s[sLen] = '"'
+          inc sLen
           lex.pos += 2
         else:
           inc lex.pos
           break
       else:
-        s.add ch
+        if sLen >= s.len: s.setLen(s.len * 2)
+        s[sLen] = ch
+        inc sLen
         inc lex.pos
+    s.setLen(sLen)
     return Token(kind: tokStr, text: s, start: start)
 
   # Number (integer, decimal, or scientific notation)
@@ -240,26 +246,40 @@ proc nextToken*(lex: var Lexer): Token =
   # by a decimal point and more digits. Scientific notation uses E or e.
   # No leading sign — that's a unary operator in M.
   if c in {'0'..'9'}:
-    var n = ""
+    var n = newString(min(16, lex.src.len - lex.pos))
+    var nLen = 0
     while lex.peekAt(0) in {'0'..'9'}:
-      n.add lex.peekAt(0)
+      if nLen >= n.len: n.setLen(n.len * 2)
+      n[nLen] = lex.peekAt(0)
+      inc nLen
       inc lex.pos
     if lex.peekAt(0) == '.' and lex.peekAt(1) in {'0'..'9'}:
-      n.add '.'
+      if nLen >= n.len: n.setLen(n.len * 2)
+      n[nLen] = '.'
+      inc nLen
       inc lex.pos
       while lex.peekAt(0) in {'0'..'9'}:
-        n.add lex.peekAt(0)
+        if nLen >= n.len: n.setLen(n.len * 2)
+        n[nLen] = lex.peekAt(0)
+        inc nLen
         inc lex.pos
     # Scientific notation: E or e followed by optional sign and digits
     if lex.peekAt(0) in {'E', 'e'}:
-      n.add lex.peekAt(0)
+      if nLen >= n.len: n.setLen(n.len * 2)
+      n[nLen] = lex.peekAt(0)
+      inc nLen
       inc lex.pos
       if lex.peekAt(0) in {'+', '-'}:
-        n.add lex.peekAt(0)
+        if nLen >= n.len: n.setLen(n.len * 2)
+        n[nLen] = lex.peekAt(0)
+        inc nLen
         inc lex.pos
       while lex.peekAt(0) in {'0'..'9'}:
-        n.add lex.peekAt(0)
+        if nLen >= n.len: n.setLen(n.len * 2)
+        n[nLen] = lex.peekAt(0)
+        inc nLen
         inc lex.pos
+    n.setLen(nLen)
     return Token(kind: tokNumber, text: n, start: start)
 
   # Name / word (letters, %, digits after first)
@@ -267,10 +287,14 @@ proc nextToken*(lex: var Lexer): Token =
   # with letters, digits, or %. Maximum 32 characters in the standard.
   # RSM extends this to longer names.
   if c in {'A'..'Z', 'a'..'z'} or c == '%':
-    var w = ""
+    var w = newString(min(32, lex.src.len - lex.pos))
+    var wLen = 0
     while isNameChar(lex.peekAt(0)):
-      w.add lex.peekAt(0)
+      if wLen >= w.len: w.setLen(w.len * 2)
+      w[wLen] = lex.peekAt(0)
+      inc wLen
       inc lex.pos
+    w.setLen(wLen)
     return Token(kind: tokWord, text: w, start: start)
 
   # Operators and delimiters

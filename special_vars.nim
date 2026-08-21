@@ -28,6 +28,9 @@ var
   jobNumber: int = 0  # M job number for $JOB
   isChildProcess: bool = false  # true if spawned by JOB command
   parentJobNum: int = 0  # parent's job number (negative in child)
+  # $HOROLOG cache (1-second TTL)
+  horologCache: string = ""
+  horologCacheTime: int64 = 0  # epoch seconds when cache was written
 
 proc getDevice(): string =
   return device
@@ -49,12 +52,18 @@ proc setEtrap(val: string) =
 
 proc getHorolog(): string =
   # $HOROLOG returns days since Dec 31, 1840,seconds since midnight
-  let now = times.now()
+  # Cache with 1-second TTL to avoid recomputing on every call
+  let now = times.getTime()
+  let epochSec = now.toUnix()
+  if epochSec == horologCacheTime and horologCache.len > 0:
+    return horologCache
+
+  let nowTime = times.now()
   # Calculate days since Dec 31, 1840
   # This is a simplified calculation
-  let year = now.year
-  let month = now.month.ord
-  let day = now.monthday
+  let year = nowTime.year
+  let month = nowTime.month.ord
+  let day = nowTime.monthday
   
   # Days from 1840 to current year
   var days = 0
@@ -72,8 +81,10 @@ proc getHorolog(): string =
       days += 1
   days += day
   
-  let seconds = now.hour * 3600 + now.minute * 60 + now.second
-  return $days & "," & $seconds
+  let seconds = nowTime.hour * 3600 + nowTime.minute * 60 + nowTime.second
+  horologCache = $days & "," & $seconds
+  horologCacheTime = epochSec
+  return horologCache
 
 proc getIo(): string =
   return io

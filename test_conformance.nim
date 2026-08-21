@@ -118,9 +118,9 @@ proc main() =
   # 8. FOR Loop (BUG if failing)
   # ==========================================
   # Per M standard: FOR var=init:step:limit
-  results.add(runMCode("FOR I=1:1:3 WRITE I", "1.02.03.0", "FOR"))
-  results.add(runMCode("FOR I=1:2:5 WRITE I", "1.03.05.0", "FOR"))
-  results.add(runMCode("FOR I=3:-1:1 WRITE I", "3.02.01.0", "FOR"))
+  results.add(runMCode("FOR I=1:1:3 WRITE I", "123", "FOR"))
+  results.add(runMCode("FOR I=1:2:5 WRITE I", "135", "FOR"))
+  results.add(runMCode("FOR I=3:-1:1 WRITE I", "321", "FOR"))
   
   # ==========================================
   # 9. NEW/QUIT Scoping (BUG if failing)

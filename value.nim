@@ -71,34 +71,40 @@ import std/[strutils, options, math]
 ## tag on every value. A static analyzer could warn about non-canonical
 ## literals used in arithmetic contexts.
 proc isCanonicalNumber*(s: string): bool =
-  var t = s.strip
-  if t.len == 0:
-    return false
+  # Inline strip — skip leading/trailing whitespace without allocation
   var i = 0
-  if t[i] == '-':
+  while i < s.len and s[i] in {' ', '\t', '\n', '\r'}:
     inc i
-    if i >= t.len:
+  var j = s.len - 1
+  while j >= i and s[j] in {' ', '\t', '\n', '\r'}:
+    dec j
+  let len = j - i + 1
+  if len == 0:
+    return false
+  if s[i] == '-':
+    inc i
+    if i > j:
       return false
   var hasDigit = false
-  while i < t.len and t[i] in {'0'..'9'}:
+  while i <= j and s[i] in {'0'..'9'}:
     hasDigit = true
     inc i
-  if i < t.len and t[i] == '.':
+  if i <= j and s[i] == '.':
     inc i
-    while i < t.len and t[i] in {'0'..'9'}:
+    while i <= j and s[i] in {'0'..'9'}:
       hasDigit = true
       inc i
   # Scientific notation: E or e followed by optional sign and digits
-  if i < t.len and t[i] in {'E', 'e'}:
+  if i <= j and s[i] in {'E', 'e'}:
     inc i
-    if i < t.len and t[i] in {'+', '-'}:
+    if i <= j and s[i] in {'+', '-'}:
       inc i
     var hasExponentDigit = false
-    while i < t.len and t[i] in {'0'..'9'}:
+    while i <= j and s[i] in {'0'..'9'}:
       hasExponentDigit = true
       inc i
-    return hasDigit and hasExponentDigit and i == t.len
-  hasDigit and i == t.len
+    return hasDigit and hasExponentDigit and i > j
+  hasDigit and i > j
 
 ## parseNum — Parse a string to float, respecting M's coercion rules
 ##
@@ -155,19 +161,18 @@ proc parseNum*(s: string): Option[float] =
 proc formatNumber*(v: float): string =
   if v == trunc(v) and abs(v) < 9007199254740992.0:
     return $int64(v)
-  var s = $v
-  if '.' in s:
-    # $ already gives the shortest round-trip representation; trim any
-    # trailing zeros (and a bare trailing '.') just in case.
-    while s.len > 0 and s[^1] == '0':
-      s.setLen(s.len - 1)
-    if s.len > 0 and s[^1] == '.':
-      s.setLen(s.len - 1)
-    if s.len == 0:
+  var buf = newStringOfCap(24)
+  buf.addFloat v
+  if '.' in buf:
+    while buf.len > 0 and buf[^1] == '0':
+      buf.setLen(buf.len - 1)
+    if buf.len > 0 and buf[^1] == '.':
+      buf.setLen(buf.len - 1)
+    if buf.len == 0:
       return "0"
-  if s.endsWith(".0"):
-    s.setLen(s.len - 2)
-  s
+  if buf.endsWith(".0"):
+    buf.setLen(buf.len - 2)
+  buf
 
 ## truthy — M's Truth Value Test
 ##

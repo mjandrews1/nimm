@@ -164,6 +164,8 @@ type
     case kind*: ExprKind
     of numLit, eStr:
       sval*: string
+      cachedFloat*: float    # pre-computed at parse time for numLit
+      hasCachedFloat*: bool  # true for numLit nodes
     of eVar:
       ## Variable reference: name (with leading '^' for globals) + subscript exprs.
       vname*: string

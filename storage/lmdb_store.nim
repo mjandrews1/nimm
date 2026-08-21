@@ -12,6 +12,7 @@ type
     dbi: Dbi
     path: string
     mapSize: int64
+    readTxn: ptr Txn    # Persistent read transaction (reused across reads)
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
   ## Initialize LMDB store
@@ -52,30 +53,41 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
   rc = txnCommit(txn)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB txn_commit failed")
+  
+  # Open persistent read transaction
+  rc = txnBegin(store.env, nil, RDONLY, addr store.readTxn)
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB read txn_begin failed")
 
 proc close*(store: var LmdbStore) =
   ## Close LMDB store
   if store.env != nil:
+    if store.readTxn != nil:
+      abort(store.readTxn)
+      store.readTxn = nil
     dbiClose(store.env, store.dbi)
     envClose(store.env)
     store.env = nil
 
+proc renewReadTxn*(store: var LmdbStore) =
+  ## Reset the persistent read transaction (call after writes)
+  if store.readTxn != nil:
+    abort(store.readTxn)
+  var rc = txnBegin(store.env, nil, RDONLY, addr store.readTxn)
+  if rc != SUCCESS:
+    store.readTxn = nil
+
 proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
   ## Get value for global[sub1,sub2,...]
+  if store.readTxn == nil: return ""
   let key = encodeKey(global, subs)
-  
-  var txn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
-  if rc != SUCCESS:
-    return ""
   
   var mdbKey: Val
   mdbKey.mvSize = cast[uint](key.len)
   mdbKey.mvData = cast[pointer](unsafeAddr key[0])
   
   var mdbVal: Val
-  rc = get(txn, store.dbi, addr mdbKey, addr mdbVal)
-  abort(txn)
+  let rc = get(store.readTxn, store.dbi, addr mdbKey, addr mdbVal)
   
   if rc != SUCCESS:
     return ""
@@ -86,7 +98,7 @@ proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
   else:
     result = ""
 
-proc put*(store: LmdbStore, global: string, subs: seq[string], value: string) =
+proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string) =
   ## Set value for global[sub1,sub2,...]
   let key = encodeKey(global, subs)
   
@@ -113,11 +125,14 @@ proc put*(store: LmdbStore, global: string, subs: seq[string], value: string) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
+    
+    # Reset read transaction so it sees the new data
+    store.renewReadTxn()
   except:
     abort(txn)
     raise
 
-proc delete*(store: LmdbStore, global: string, subs: seq[string] = @[]) =
+proc delete*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
   ## Delete global[sub1,sub2,...]
   let key = encodeKey(global, subs)
   
@@ -139,6 +154,9 @@ proc delete*(store: LmdbStore, global: string, subs: seq[string] = @[]) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
+    
+    # Reset read transaction so it sees the deletion
+    store.renewReadTxn()
   except:
     abort(txn)
     raise
@@ -147,7 +165,7 @@ proc sync*(store: LmdbStore) =
   ## Flush data to disk
   discard envSync(store.env, 1)
 
-proc batchPut*(store: LmdbStore, items: seq[(string, seq[string], string)]) =
+proc batchPut*(store: var LmdbStore, items: seq[(string, seq[string], string)]) =
   ## Batch put multiple key-value pairs in a single transaction
   var txn: ptr Txn
   var rc = txnBegin(store.env, nil, 0, addr txn)
@@ -174,11 +192,12 @@ proc batchPut*(store: LmdbStore, items: seq[(string, seq[string], string)]) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
+    store.renewReadTxn()
   except:
     abort(txn)
     raise
 
-proc batchDelete*(store: LmdbStore, keys: seq[(string, seq[string])]) =
+proc batchDelete*(store: var LmdbStore, keys: seq[(string, seq[string])]) =
   ## Batch delete multiple keys in a single transaction
   var txn: ptr Txn
   var rc = txnBegin(store.env, nil, 0, addr txn)
@@ -200,32 +219,25 @@ proc batchDelete*(store: LmdbStore, keys: seq[(string, seq[string])]) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
+    store.renewReadTxn()
   except:
     abort(txn)
     raise
 
 proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
   ## Get next/previous key in LMDB (for $ORDER)
-  ## Returns the next subscript at the same level, or "" if none
+  if store.readTxn == nil: return ""
   let prefix = encodeKey(global, subs)
   
-  # Build the parent prefix (global + all subscripts except last)
-  # This is used to verify the next key is a sibling, not a child/descendant
   var parentPrefix = global
   for i in 0..<subs.len:
     parentPrefix.add('\0')
     parentPrefix.add(subs[i])
   parentPrefix.add('\0')
   
-  var txn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
-  if rc != SUCCESS:
-    return ""
-  
   var cursor: LMDBCursor
-  rc = cursorOpen(txn, store.dbi, addr cursor)
+  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(txn)
     return ""
   
   # Position cursor at prefix
@@ -238,7 +250,6 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(txn)
     return ""
   
   # Move to next/previous
@@ -249,7 +260,6 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(txn)
     return ""
   
   # Decode the key from mdbKey
@@ -260,41 +270,31 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
-    abort(txn)
     return ""
   
   # Verify the key is at the same level (same number of subscripts)
   if decoded[1].len != subs.len:
     cursorClose(cursor)
-    abort(txn)
     return ""
   
   # Verify all subscripts except the last match (same parent)
   for i in 0..<subs.len - 1:
     if decoded[1][i] != subs[i]:
       cursorClose(cursor)
-      abort(txn)
       return ""
   
   # Return the last subscript (the next one at this level)
   cursorClose(cursor)
-  abort(txn)
   return decoded[1][^1]
 
 proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
   ## Get next/previous node in LMDB (for $QUERY)
-  ## Returns ALL subscripts of the next node (any depth), or empty if none
+  if store.readTxn == nil: return @[]
   let prefix = encodeKey(global, subs)
   
-  var txn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
-  if rc != SUCCESS:
-    return @[]
-  
   var cursor: LMDBCursor
-  rc = cursorOpen(txn, store.dbi, addr cursor)
+  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(txn)
     return @[]
   
   # Position cursor at prefix
@@ -307,7 +307,6 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(txn)
     return @[]
   
   # Move to next/previous
@@ -318,7 +317,6 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(txn)
     return @[]
   
   # Decode the key from mdbKey
@@ -329,28 +327,20 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
-    abort(txn)
     return @[]
   
   # Return all subscripts
   cursorClose(cursor)
-  abort(txn)
   return decoded[1]
 
 proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[seq[string]] =
   ## List all subscripts under a given global[sub1,sub2,...]
-  ## Returns a sequence of subscript sequences
+  if store.readTxn == nil: return @[]
   let prefix = encodeKey(global, subs)
   
-  var txn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
-  if rc != SUCCESS:
-    return @[]
-  
   var cursor: LMDBCursor
-  rc = cursorOpen(txn, store.dbi, addr cursor)
+  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(txn)
     return @[]
   
   # Position cursor at prefix
@@ -363,7 +353,6 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(txn)
     return @[]
   
   var result: seq[seq[string]] = @[]
@@ -374,13 +363,10 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
     copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
     let decoded = decodeKey(key)
     
-    # Check if key starts with the same global name
     if decoded[0] != global:
       break
     
-    # Check if key has more subscripts than the prefix
     if decoded[1].len > subs.len:
-      # Check that all prefix subscripts match
       var match = true
       for i in 0..<subs.len:
         if decoded[1][i] != subs[i]:
@@ -389,24 +375,18 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
       if match:
         result.add(decoded[1])
     
-    # Move to next key
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
-  abort(txn)
   return result
 
 proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix
-  var txn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr txn)
-  if rc != SUCCESS:
-    return @[]
+  if store.readTxn == nil: return @[]
   
   var cursor: LMDBCursor
-  rc = cursorOpen(txn, store.dbi, addr cursor)
+  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(txn)
     return @[]
   
   var mdbKey: Val
@@ -428,4 +408,3 @@ proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
-  abort(txn)

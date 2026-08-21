@@ -20,16 +20,25 @@ type
     dbPath*: string
     nakedGlobal*: string                  # Last global name for naked references
     nakedSubs*: seq[string]               # Last subscripts for naked references
+    scopeShared*: seq[bool]               # True if scope shares parent (COW pending)
 
 proc makeKey(name: string, subs: seq[string]): string =
-  ## Create flat key for storage
-  result = name
+  ## Create flat key for storage (pre-computed exact size)
+  var size = name.len
   for sub in subs:
-    result.add('\0')
-    result.add(sub)
+    size += 1 + sub.len
+  result = newString(size)
+  var pos = name.len
+  result[0..<pos] = name
+  for sub in subs:
+    result[pos] = '\0'
+    inc pos
+    result[pos..<pos+sub.len] = sub
+    pos += sub.len
 
 proc newGlobals*(dbPath: string = ""): Globals =
   result.scopes = @[initTable[string, string]()]
+  result.scopeShared = @[false]
   result.dbPath = dbPath
   result.specialGetters = initTable[string, SpecialVarGetter]()
   result.specialSetters = initTable[string, SpecialVarSetter]()
@@ -45,6 +54,8 @@ proc close*(g: var Globals) =
 
 # --- Local variable operations ---
 
+proc ensureWritable(g: var Globals)
+
 proc getLocal*(g: Globals, name: string, subs: seq[string] = @[]): string =
   ## Get local variable value (searches all scopes from inner to outer)
   let key = makeKey(name, subs)
@@ -53,16 +64,35 @@ proc getLocal*(g: Globals, name: string, subs: seq[string] = @[]): string =
       return g.scopes[i][key]
   return ""
 
+proc getLocalDirect*(g: Globals, name: string): string =
+  ## Get local variable value directly (no subscripts, no seq allocation)
+  for i in countdown(g.scopes.len - 1, 0):
+    if name in g.scopes[i]:
+      return g.scopes[i][name]
+  return ""
+
+proc ensureWritable(g: var Globals) =
+  ## Copy-on-write: if current scope is shared, duplicate it
+  if g.scopeShared.len > 0 and g.scopeShared[^1]:
+    g.scopes[^1] = g.scopes[^1]
+    g.scopeShared[^1] = false
+
 proc setLocal*(g: var Globals, name: string, subs: seq[string], value: string) =
   ## Set local variable value
+  g.ensureWritable()
   let key = makeKey(name, subs)
   g.scopes[^1][key] = value
 
+proc setLocalDirect*(g: var Globals, name: string, value: string) =
+  ## Set local variable value directly (no subscripts, no seq allocation)
+  g.ensureWritable()
+  g.scopes[^1][name] = value
+
 proc killLocal*(g: var Globals, name: string, subs: seq[string] = @[]) =
   ## Kill local variable
+  g.ensureWritable()
   let scope = addr g.scopes[^1]
   if subs.len == 0:
-    # Kill all with this name prefix
     let prefix = name & "\x00"
     var toDelete: seq[string] = @[]
     for k in scope[].keys:
@@ -76,6 +106,7 @@ proc killLocal*(g: var Globals, name: string, subs: seq[string] = @[]) =
 
 proc killAllLocal*(g: var Globals) =
   ## Kill all local variables in current scope
+  g.ensureWritable()
   g.scopes[^1].clear()
 
 proc dataLocal*(g: Globals, name: string, subs: seq[string] = @[]): int =
@@ -243,13 +274,15 @@ proc listSubs*(g: Globals, name: string, subs: seq[string] = @[]): seq[seq[strin
 # --- NEW/QUIT scoping ---
 
 proc pushScope*(g: var Globals) =
-  ## Push new local scope (NEW) — inherits current scope
-  g.scopes.add(g.scopes[^1])
+  ## Push new local scope (NEW) — shares parent scope (COW)
+  g.scopes.add(g.scopes[^1])  # Share reference (cheap)
+  g.scopeShared.add(true)     # Mark as shared
 
 proc popScope*(g: var Globals) =
   ## Pop local scope (QUIT) — discards current scope
   if g.scopes.len > 1:
     g.scopes.setLen(g.scopes.len - 1)
+    g.scopeShared.setLen(g.scopeShared.len - 1)
 
 proc scopeDepth*(g: Globals): int =
   return g.scopes.len
