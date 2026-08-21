@@ -200,6 +200,24 @@ proc setY(val: string) =
   except:
     discard
 
+proc advanceDevicePos*(s: string) =
+  ## Track $X/$Y for text written to the principal device (§6.3.22/23):
+  ## newline advances $Y and resets $X; form feed resets $X; other
+  ## characters advance $X by one.
+  for ch in s:
+    case ch
+    of '\n':
+      inc(y)
+      x = 0
+    of '\f':
+      x = 0
+    else:
+      inc(x)
+
+proc getEstack(): string = return "0"
+proc getTlevel(): string = return "0"
+proc getTrestart(): string = return "0"
+
 proc getZeof(): string =
   return zeof
 
@@ -231,6 +249,7 @@ proc registerAllSpecialVars*(g: var Globals) =
   ## Register all special variables with the globals system
   g.registerSpecialVar("$DEVICE", getDevice, setDevice)
   g.registerSpecialVar("$ECODE", getEcode, setEcode)
+  g.registerSpecialVar("$ESTACK", getEstack)
   g.registerSpecialVar("$ETRAP", getEtrap, setEtrap)
   g.registerSpecialVar("$HOROLOG", getHorolog)
   g.registerSpecialVar("$H", getHorolog)
@@ -244,6 +263,8 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$STACK", getStack)
   g.registerSpecialVar("$SYSTEM", getSystem)
   g.registerSpecialVar("$TEST", getTest, setTest)
+  g.registerSpecialVar("$TLEVEL", getTlevel)
+  g.registerSpecialVar("$TRESTART", getTrestart)
   g.registerSpecialVar("$X", getX, setX)
   g.registerSpecialVar("$Y", getY, setY)
   g.registerSpecialVar("$ZEOF", getZeof, setZeof)

@@ -128,6 +128,15 @@ proc advance(p: var Parser): Token =
 proc precededByWs(p: Parser, t: Token): bool =
   t.start == 0 or p.src[t.start - 1] in {' ', '\t', '\r', '\n'}
 
+## cmdSepBefore — True when a two-space command separator precedes token t
+##
+## ANSI/ISO Section 7.1.1: a command that takes no arguments (or an
+## argument list that has ended) is terminated by TWO spaces; the next
+## word then starts a new command rather than continuing the arguments.
+proc cmdSepBefore(p: Parser, t: Token): bool =
+  t.start >= 2 and p.src[t.start - 1] in {' ', '\t'} and
+    p.src[t.start - 2] in {' ', '\t'}
+
 ## isCommandWord — Test if a Word is a Known M Command
 ##
 ## Returns true if the word (case-insensitive) matches a known command.
@@ -221,11 +230,15 @@ proc readWord(p: var Parser): string =
 ## We uppercase the result because M function names are case-insensitive.
 proc readDollarName(p: var Parser): string =
   result = p.readWord()
-  while p.peek() == tokConcat:
-    discard p.advance() # consume _
-    let next = p.readWord()
-    result.add("_")
-    result.add(next)
+  # Only NI_* extension functions use compound underscore names ($NI_HTTP);
+  # for everything else an underscore is the concat operator, so
+  # "$JOB_"z"" must parse as $JOB _ "z".
+  if result.toUpperAscii == "NI":
+    while p.peek() == tokConcat:
+      discard p.advance() # consume _
+      let next = p.readWord()
+      result.add("_")
+      result.add(next)
   result = result.toUpperAscii
 
 ## isExprStart — Test if Current Token Could Start an Expression
@@ -574,10 +587,13 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         try: count = parseInt(numStr)
         except: count = 1
       
-      # Parse optional dot
+      # Parse optional dot — a bare dot (no explicit count) means the
+      # minimum is ZERO ("zero or more"), per §7.5.2.
       if pos < pendingWord.len and pendingWord[pos] == '.':
         inc pos
         orMore = true
+        if numStr.len == 0 and pendingCount < 0:
+          count = 0
         while pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
           inc pos
       
@@ -606,8 +622,17 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         pendingOrMore = orMore
         continue
       else:
+        # pendingWord exhausted. If it ended in a bare count (e.g. the
+        # word "L1" contributing '1'), carry that count into the next
+        # atom instead of aborting — the next atom may come from a
+        # separate token (string literal, etc.).
         pendingWord = ""
-        break
+        if numStr.len > 0 or pendingCount >= 0:
+          if numStr.len > 0:
+            pendingCount = count
+          pendingOrMore = orMore
+        else:
+          break
     else:
       # Read from parser tokens
       if pendingCount >= 0:
@@ -616,17 +641,22 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         orMore = pendingOrMore
         pendingOrMore = false
       
+      var explicitCount = false
       if p.peek() == tokNumber:
         try: count = parseInt(p.cur.text)
         except: count = 1
+        explicitCount = true
         discard p.advance()
-      
+
       if p.peek() == tokDot:
         discard p.advance()
         orMore = true
+        if not explicitCount:
+          # Bare dot: zero or more (§7.5.2)
+          count = 0
         if p.peek() == tokNumber:
           discard p.advance()
-      
+
       if p.peek() == tokWord:
         let word = p.cur.text
         if word.len == 1:
@@ -640,8 +670,10 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
           discard p.advance()
           continue
       elif p.peek() == tokStr:
+        # Literal string atom: must match exactly (§7.5.1)
+        let litVal = p.cur.text
         discard p.advance()
-        atoms.add PatternAtom(count: count, code: 'E', orMore: orMore)
+        atoms.add PatternAtom(count: count, code: '\0', orMore: false, lit: litVal)
         continue
       else:
         break
@@ -679,6 +711,7 @@ proc parseSetTarget(p: var Parser): SetTarget
 proc parseVarRef(p: var Parser): (string, seq[Expr])
 proc parseWriteArgs(p: var Parser): seq[WriteArg]
 proc parseForSpec(p: var Parser): ForSpec
+proc parseForArg(p: var Parser, varName: string): ForSpec
 proc parseKill(p: var Parser): Cmd
 proc parseExprList(p: var Parser): seq[Expr]
 proc parseNameList(p: var Parser): seq[string]
@@ -735,7 +768,11 @@ proc parseCommand(p: var Parser): CommandNode =
   of "WRITE", "W":
     cmd = Cmd(kind: cWrite, writeArgs: parseWriteArgs(p))
   of "IF", "I":
-    let cond = p.parseExpr()
+    # Comma-separated conditions (§7.2.8): all must be true; desugar to AND chain
+    var cond = p.parseExpr()
+    while p.peek() == tokComma:
+      discard p.advance()
+      cond = Expr(kind: eBinary, op: bAnd, left: cond, right: p.parseExpr())
     # Parse body until ELSE or end of line
     var body = Line(cmds: @[])
     while true:
@@ -764,32 +801,49 @@ proc parseCommand(p: var Parser): CommandNode =
   of "KILL", "K":
     cmd = parseKill(p)
   of "NEW", "N":
+    # Exclusive NEW (A,B): save+clear all locals EXCEPT listed (§7.2.12)
+    if p.peek() == tokLParen:
+      discard p.advance()
+      var keep: seq[string] = @[]
+      while true:
+        if p.peek() == tokWord:
+          keep.add(p.readWord())
+        else:
+          break
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      if p.peek() == tokRParen:
+        discard p.advance()
+      cmd = Cmd(kind: cNewExcept, newKeep: keep)
+    else:
     # NEW can have no arguments (push scope for all) or a list of variable names
     # The first word after NEW is always a variable name (even X = XECUTE)
     # But subsequent words should not be command words
-    var names: seq[string] = @[]
-    if p.peek() == tokWord:
-      let word = p.cur.text
-      # Check if this looks like a real command (not just X)
-      let upperWord = word.toUpperAscii
-      if upperWord != "X" and isCommandWord(p, upperWord):
-        # It's a real command like SET, WRITE — treat as NEW without args
-        discard
-      else:
-        # First word is a variable name
-        names.add(word)
-        discard p.advance()
-        # Additional variable names (comma-separated)
-        while p.peek() == tokComma:
+      var names: seq[string] = @[]
+      if p.peek() == tokWord:
+        let word = p.cur.text
+        # Check if this looks like a real command (not just X)
+        let upperWord = word.toUpperAscii
+        if upperWord != "X" and isCommandWord(p, upperWord):
+          # It's a real command like SET, WRITE — treat as NEW without args
+          discard
+        else:
+          # First word is a variable name
+          names.add(word)
           discard p.advance()
-          if p.peek() == tokWord:
-            let nextWord = p.cur.text
-            let upperNext = nextWord.toUpperAscii
-            if upperNext != "X" and isCommandWord(p, upperNext):
-              break
-            names.add(nextWord)
+          # Additional variable names (comma-separated)
+          while p.peek() == tokComma:
             discard p.advance()
-    cmd = Cmd(kind: cNew, newNames: names)
+            if p.peek() == tokWord:
+              let nextWord = p.cur.text
+              let upperNext = nextWord.toUpperAscii
+              if upperNext != "X" and isCommandWord(p, upperNext):
+                break
+              names.add(nextWord)
+              discard p.advance()
+      cmd = Cmd(kind: cNew, newNames: names)
   of "HANG", "H":
     cmd = Cmd(kind: cHang, hangExpr: p.parseExpr())
   of "LOCK", "L":
@@ -991,14 +1045,33 @@ proc parseCommand(p: var Parser): CommandNode =
 proc parseSetArgs(p: var Parser): seq[SetItem] =
   var items: seq[SetItem] = @[]
   while true:
-    let target = parseSetTarget(p)
-    let value =
+    if p.peek() == tokLParen:
+      # Grouped target list: SET (A,B,C)=7 (§7.2.20) — one value, many targets
+      discard p.advance()
+      var targets: seq[SetTarget] = @[]
+      while true:
+        targets.add(parseSetTarget(p))
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      if p.peek() == tokRParen:
+        discard p.advance()
+      var value = Expr(kind: eStr, sval: "")
       if p.peek() == tokEq:
         discard p.advance()
-        p.parseExpr()
-      else:
-        Expr(kind: eStr, sval: "")
-    items.add SetItem(target: target, value: value)
+        value = p.parseExpr()
+      for t in targets:
+        items.add SetItem(target: t, value: value)
+    else:
+      let target = parseSetTarget(p)
+      let value =
+        if p.peek() == tokEq:
+          discard p.advance()
+          p.parseExpr()
+        else:
+          Expr(kind: eStr, sval: "")
+      items.add SetItem(target: target, value: value)
     if p.peek() == tokComma:
       discard p.advance()
     else:
@@ -1149,23 +1222,36 @@ proc parseWriteArgs(p: var Parser): seq[WriteArg] =
 ## "FOR I=1:1:3" has I as the variable, but "FOR I QUIT" has I as a
 ## command argument (which doesn't make sense for FOR — but we need to
 ## distinguish the cases).
+proc parseForArg(p: var Parser, varName: string): ForSpec =
+  ## One FOR argument per §7.2.6: bare expr = one iteration;
+  ## expr:inc = infinite; expr:inc:expr = counted.
+  result = ForSpec(varName: varName, initE: nil, stepE: nil, limitE: nil,
+                   hasLimit: false)
+  result.initE = p.parseExpr()
+  if p.peek() == tokColon:
+    discard p.advance()
+    let s = p.parseExpr()
+    if p.peek() == tokColon:
+      discard p.advance()
+      result.stepE = s
+      result.limitE = p.parseExpr()
+      result.hasLimit = true
+    else:
+      result.stepE = s
+  else:
+    result.onceOnly = true
+
 proc parseForSpec(p: var Parser): ForSpec =
   result = ForSpec(varName: "", initE: nil, stepE: nil, limitE: nil)
   if p.peek() == tokWord:
     if p.peek2() == tokEq:
-      # Counted FOR: var=init:step:limit
-      result.varName = p.readWord()
+      # FOR var=arg,arg,arg — comma-separated args share the loop variable
+      let varName = p.readWord()
       discard p.advance() # consume =
-      result.initE = p.parseExpr()
-      if p.peek() == tokColon:
+      result = parseForArg(p, varName)
+      while p.peek() == tokComma:
         discard p.advance()
-        let s = p.parseExpr()
-        if p.peek() == tokColon:
-          discard p.advance()
-          result.stepE = s
-          result.limitE = p.parseExpr()
-        else:
-          result.limitE = s
+        result.altSpecs.add(parseForArg(p, varName))
 
 ## parseKill — Parse KILL Command
 ##
@@ -1193,9 +1279,13 @@ proc parseKill(p: var Parser): Cmd =
     Cmd(kind: cKillExcept, killKeep: vars)
   elif p.peek() == tokWord or p.peek() == tokCaret:
     # KILL var,var,... — parse as variable list
-    # Always treat the next word as a variable name, even if it's a command word
+    # A command word after the two-space separator ends the list (§7.1.1),
+    # e.g. "KILL  WRITE X" is bare KILL followed by WRITE.
     var refs: seq[Expr] = @[]
     while true:
+      if p.peek() == tokWord and cmdSepBefore(p, p.cur) and
+          isCommandWord(p, p.cur.text):
+        break
       let (name, subs) = parseVarRef(p)
       refs.add Expr(kind: eVar, vname: name, subs: subs)
       if p.peek() == tokComma:

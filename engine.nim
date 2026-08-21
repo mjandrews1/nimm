@@ -60,9 +60,11 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.channels[0] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: true)
 
 proc write*(eng: var Engine, s: string) =
+  advanceDevicePos(s)
   eng.output.add(s)
 
 proc writeln*(eng: var Engine, s: string) =
+  advanceDevicePos(s & "\n")
   eng.output.add(s & "\n")
 
 proc getOutput*(eng: Engine): string =
@@ -91,7 +93,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
     # Check postconditional
     if cmdNode.postcond != nil:
       let cond = eng.evaluator[].eval(cmdNode.postcond)
-      if cond == "0" or cond == "":
+      if not truthy(cond):
         continue
 
     let cmd = cmdNode.cmd
@@ -122,7 +124,12 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 eng.globals[].setSpecialVar(item.target.tname, value)
               elif item.target.tname == "^":
                 if eng.globals[].nakedGlobal.len > 0:
-                  var allSubs = eng.globals[].nakedSubs
+                  # §2.4.2: provided subscripts replace the last one
+                  var allSubs =
+                    if eng.globals[].nakedSubs.len > 0:
+                      eng.globals[].nakedSubs[0 ..< ^1]
+                    else:
+                      @[]
                   for sub in subs:
                     allSubs.add(sub)
                   eng.globals[].set(eng.globals[].nakedGlobal, allSubs, value)
@@ -211,7 +218,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cIf:
         if cmd.ifCond != nil:
           let cond = eng.evaluator[].eval(cmd.ifCond)
-          eng.testValue = (cond != "0" and cond != "")
+          eng.testValue = truthy(cond)
           if eng.testValue and cmd.ifBody != nil:
             result = eng.execute(cmd.ifBody, depth + 1)
 
@@ -231,24 +238,52 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             elif eng.quitAll:
               break
         else:
-          let init = parseFloat(eng.evaluator[].eval(cmd.forSpec.initE))
-          let step = if cmd.forSpec.stepE != nil:
-            parseFloat(eng.evaluator[].eval(cmd.forSpec.stepE))
-          else: 1.0
-          let limit = if cmd.forSpec.limitE != nil:
-            parseFloat(eng.evaluator[].eval(cmd.forSpec.limitE))
-          else: 0.0
-          var current = init
-          let varName = cmd.forSpec.varName
-          while (step > 0 and current <= limit) or (step < 0 and current >= limit):
-            eng.globals[].setLocalDirect(varName, formatNumber(current))
-            if cmd.forBody != nil:
-              let r = eng.execute(cmd.forBody, depth + 1)
-              if r == "QUIT" or eng.quitAll:
-                break
-            elif eng.quitAll:
-              break
-            current += step
+          # Comma-separated FOR args share the variable; QUIT exits all (§7.2.6)
+          var specs = @[cmd.forSpec]
+          for extra in cmd.forSpec.altSpecs:
+            specs.add(extra)
+          var quitFor = false
+          block forArgs:
+            for spec in specs:
+              let init = parseFloat(eng.evaluator[].eval(spec.initE))
+              if spec.onceOnly:
+                eng.globals[].setLocalDirect(cmd.forSpec.varName,
+                                             formatNumber(init))
+                if cmd.forBody != nil:
+                  let r = eng.execute(cmd.forBody, depth + 1)
+                  if r == "QUIT" or eng.quitAll:
+                    quitFor = true
+                    break forArgs
+                elif eng.quitAll:
+                  quitFor = true
+                  break forArgs
+                continue
+              let step = if spec.stepE != nil:
+                parseFloat(eng.evaluator[].eval(spec.stepE))
+              else: 1.0
+              let limit = if spec.hasLimit:
+                parseFloat(eng.evaluator[].eval(spec.limitE))
+              else: 0.0
+              var current = init
+              while true:
+                if spec.hasLimit:
+                  if not ((step > 0 and current <= limit) or
+                          (step < 0 and current >= limit)):
+                    break
+                eng.globals[].setLocalDirect(cmd.forSpec.varName,
+                                             formatNumber(current))
+                if cmd.forBody != nil:
+                  let r = eng.execute(cmd.forBody, depth + 1)
+                  if r == "QUIT" or eng.quitAll:
+                    quitFor = true
+                    break forArgs
+                elif eng.quitAll:
+                  quitFor = true
+                  break forArgs
+                if not spec.hasLimit and step == 0.0:
+                  break
+                current += step
+          discard quitFor
 
       of CmdKind.cQuit:
         # Unwind NEW scopes created since frame entry (or all at top level)
@@ -294,6 +329,14 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         let currentEtrap = eng.globals[].getSpecialVar("$ETRAP")
         eng.runtime[].etrapStack.add(currentEtrap)
         eng.globals[].pushScope()
+
+      of CmdKind.cNewExcept:
+        # Exclusive NEW (A,B): listed vars stay visible, all others cleared
+        # within the new scope; popScope restores them (§7.2.12)
+        let currentEtrap = eng.globals[].getSpecialVar("$ETRAP")
+        eng.runtime[].etrapStack.add(currentEtrap)
+        eng.globals[].pushScope()
+        eng.globals[].killAllExceptLocal(cmd.newKeep)
 
       of CmdKind.cDo:
         for arg in cmd.doArgs:

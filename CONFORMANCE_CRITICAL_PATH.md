@@ -5,6 +5,49 @@
 (identical failure set on macOS x86_64 and Linux x86_64/gcc15 — confirmed pure
 language bugs, not platform issues).
 
+> **STATUS: Phase 1 complete (44a8ede). 103/103 everywhere; issues #247-#254 closed.
+> Superseded by the ANSI/ISO suite below.**
+
+---
+
+# ANSI/ISO M Suite — 170 Tests (`tests/ansi_iso_m_conformance.py` @ 9e9bea9)
+
+## Frozen Reference Baselines
+
+RSM and RFC are **frozen** as stable reference points. All development happens
+on NimM V0.1.2; re-test against the frozen references only.
+
+| Implementation | Source commit | macOS binary sha256 | Linux binary sha256 |
+|---|---|---|---|
+| RSM V1.83.1 | `17458f03cf` | `996b9e69…a0d82f` | `47082d4b…8e5c63c8` |
+| RFC V1.83.1 | `ff9c938222` | `a493046a…5d03f346`* | `34ad9530…3af346`* |
+
+\* RFC macOS build additionally carries the local gcc-compat patch from rfc#11.
+
+Results matrix (identical failure sets across machines, verified by diff):
+RSM 153/170 (90.0%) · RFC 153/170 (90.0%) · NimM 135/170 (79.4%).
+The 17 shared RSM/RFC failures are frozen-in findings (rsm#11-15, rfc#12);
+NimM's target is 135 → 170/170 since it already passes the comparison tests.
+
+## NimM Fix Plan — Issues #264–#273 (35 failures)
+
+| Pri | Issue | Root cause area | Anchor |
+|-----|-------|----------------|--------|
+| 1 | #264 truth values | non-empty string ⇒ true; must use numeric-prefix rule §2.2.4 | evaluator truth fn |
+| 2 | #265 comma lists | SET `(A,B)=v`, IF `c1,c2`, FOR `v=1,3,5`, NEW `(A,B)` rejected | parser |
+| 3 | #271 numeric literals | `.5` parse fail; `-.25` → 0 | lexer |
+| 4 | #266 KILL subtree/bare | node kill leaves descendants; bare KILL no-op | globals/engine |
+| 5 | #267 MERGE | unimplemented | parser+engine+globals |
+| 6 | #268 naked refs | `^(3)` after `^G(1,2)` fails | evaluator/globals |
+| 7 | #269 $QUERY/$QS | no empty-subscript start; $QS keeps quotes | evaluator+globals |
+| 8 | #270 $X/$Y | never advance | engine/device state |
+| 9 | #272 patterns | ?3E, ""?.N, mixed literal seqs | pattern matcher |
+| 10 | #273 svars/misc | $ESTACK/$TLEVEL/$TRESTART, $RANDOM range, $HOROLOG shape | special_vars |
+
+Universal findings also affecting frozen references: `$TLEVEL`/`$TRESTART`
+(rsm#15), backward `$ORDER` empty start (rsm#14) — NimM fixing these exceeds
+the references' 90.0%.
+
 ## Failure → Root-Cause Map
 
 | # | Test(s) | Symptom | Root cause | Anchor |

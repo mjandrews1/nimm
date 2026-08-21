@@ -113,6 +113,7 @@ type
     count*: int
     code*: char
     orMore*: bool
+    lit*: string   # non-empty: literal string atom (code is unused)
 
   ## ExprKind — Expression Node Types
   ##
@@ -302,6 +303,9 @@ type
     initE*: Expr
     stepE*: Expr
     limitE*: Expr
+    hasLimit*: bool          # explicit limit given (else infinite per §7.2.6)
+    onceOnly*: bool          # bare expr arg: iterate exactly once
+    altSpecs*: seq[ForSpec]  # list form: FOR I=1,3,5 or I=1,2:1:3
 
   ## CommandNode — A Command with Its Postconditional
   ##
@@ -377,7 +381,7 @@ type
   ## postconditional, and execution status (executed/skipped/failed).
   CmdKind* = enum
     cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
-    cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
+    cNewExcept, cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
     cZwrite, cZkill, cOpen, cUse, cClose, cRead, cJob,
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
     cZload, cZstep, cZcontinue, cZremove,
@@ -427,6 +431,8 @@ type
       killKeep*: seq[Expr]
     of cNew:
       newNames*: seq[string]
+    of cNewExcept:
+      newKeep*: seq[string]
     of cHang:
       hangExpr*: Expr
     of cLock:

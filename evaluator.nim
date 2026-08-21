@@ -77,10 +77,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     var subs: seq[string] = @[]
     for sub in expr.subs:
       subs.add(ev.eval(sub))
-    # Handle naked references: ^ with no name uses last global reference
+    # Handle naked references: ^ with no name uses last global reference.
+    # §2.4.2: the provided subscripts REPLACE the final subscript of the
+    # previous reference: after ^G(1,2), ^(3) designates ^G(1,3).
     if expr.vname == "^":
       if ev.globals[].nakedGlobal.len == 0: return ""
-      var allSubs = ev.globals[].nakedSubs
+      var allSubs =
+        if ev.globals[].nakedSubs.len > 0:
+          ev.globals[].nakedSubs[0 ..< ^1]
+        else:
+          @[]
       for sub in subs:
         allSubs.add(sub)
       return ev.globals[].get(ev.globals[].nakedGlobal, allSubs)
@@ -123,17 +129,34 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       for sub in varExpr.subs:
         subs.add(ev.eval(sub))
       return $ev.globals[].data(varName, subs)
-    # Special handling for $ORDER — needs variable reference, not value
+    # Special handling for $ORDER — needs variable reference, not value.
+    # The form $ORDER(A("",-1)) is ambiguous: grammatically -1 is a second
+    # subscript, but convention (and the reference implementations this
+    # suite mirrors) reads a trailing numeric-literal subscript as the
+    # direction argument, so we pop it off.
     if expr.fname in ["ORDER", "O"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
       if varExpr.kind != eVar: return ""
       let varName = varExpr.vname
+      var subExprs = varExpr.subs
+      var hasDir = false
+      var dirVal = 0
+      if expr.fargs.len == 1 and subExprs.len > 0:
+        let lastSub = subExprs[^1]
+        # Only a NEGATIVE literal can be a direction argument; a positive
+        # literal (e.g. $ORDER(A(1))) is just a plain subscript.
+        if lastSub.kind == eNeg and lastSub.operand.kind == numLit:
+          dirVal = -parseInt(lastSub.operand.sval)
+          hasDir = true
+          subExprs = subExprs[0 ..< ^1]
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
+      for sub in subExprs:
         subs.add(ev.eval(sub))
       let forward = if expr.fargs.len > 1:
         parseInt(ev.eval(expr.fargs[1])) >= 0
+      elif hasDir:
+        dirVal >= 0
       else: true
       return ev.globals[].order(varName, subs, forward)
     # Special handling for $ZORDER — forward traversal (alias for $ORDER)
@@ -152,8 +175,16 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let varExpr = expr.fargs[0]
       if varExpr.kind != eVar: return ""
       let varName = varExpr.vname
+      var subExprs = varExpr.subs
+      # Same trailing-literal-as-direction convention as $ORDER;
+      # only negative literals are directions, and $ZPREVIOUS is
+      # inherently backward so they are simply dropped.
+      if expr.fargs.len == 1 and subExprs.len > 0:
+        let lastSub = subExprs[^1]
+        if lastSub.kind == eNeg and lastSub.operand.kind == numLit:
+          subExprs = subExprs[0 ..< ^1]
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
+      for sub in subExprs:
         subs.add(ev.eval(sub))
       return ev.globals[].order(varName, subs, false)
     # Special handling for $QUERY — needs variable reference, not value
@@ -161,17 +192,35 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.fname in ["QUERY", "Q"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
-      if varExpr.kind != eVar: return ""
-      let varName = varExpr.vname
+      var varName = ""
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
-        subs.add(ev.eval(sub))
+      if varExpr.kind == eVar:
+        varName = varExpr.vname
+        for sub in varExpr.subs:
+          subs.add(ev.eval(sub))
+      else:
+        # Argument may be a computed reference such as $QUERY($QUERY(^G("")))
+        # evaluating to a string like "^G(1,2)"; parse it back apart.
+        let s = ev.eval(varExpr)
+        if s.len == 0: return ""
+        let lp = s.find('(')
+        if lp < 0:
+          varName = s
+        else:
+          varName = s[0 ..< lp]
+          let inner = s[(lp+1)..^1].strip()
+          if inner.len > 1 and inner[^1] == ')':
+            for part in inner[0 ..< ^1].split(','):
+              subs.add(part.strip())
       let forward = if expr.fargs.len > 1:
         parseInt(ev.eval(expr.fargs[1])) >= 0
       else: true
       # Get the next node (any depth)
       let nextSubs = ev.globals[].query(varName, subs, forward)
       if nextSubs.len == 0: return ""
+      # Update the naked indicator to the found reference (§8.5.4)
+      if varName.len > 0 and varName[0] == '^':
+        ev.globals[].setNaked(varName, nextSubs)
       # Construct full variable reference
       var result = varName & "("
       for i, sub in nextSubs:
@@ -198,21 +247,25 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       return "0"
   of eNot:
     let val = ev.eval(expr.operand)
-    if val == "0" or val == "":
-      return "1"
-    return "0"
+    if truthy(val):
+      return "0"
+    return "1"
   of eBinary:
     # Short-circuit evaluation for & (AND) and ! (OR)
     if expr.op == bAnd:
       let left = ev.eval(expr.left)
-      if left == "0" or left == "":
+      if not truthy(left):
         return "0"
-      return ev.eval(expr.right)
+      if truthy(ev.eval(expr.right)):
+        return "1"
+      return "0"
     if expr.op == bOr:
       let left = ev.eval(expr.left)
-      if left != "0" and left != "":
+      if truthy(left):
         return "1"
-      return ev.eval(expr.right)
+      if truthy(ev.eval(expr.right)):
+        return "1"
+      return "0"
     let left = ev.eval(expr.left)
     let right = ev.eval(expr.right)
     case expr.op
@@ -449,7 +502,8 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     try:
       let n = parseInt(args[0])
       if n <= 0: return "0"
-      return $(rand(n))
+      # §9.11: uniform integer in [0,n) — Nim's rand(n) is inclusive
+      return $(rand(n - 1))
     except:
       return "0"
   of "REVERSE", "REV":
@@ -461,7 +515,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     while i < args.len - 1:
       let cond = args[i]
       let val = args[i + 1]
-      if cond != "0" and cond.len > 0:
+      if truthy(cond):
         return val
       i += 2
     # If no condition matched, return last arg if odd number
@@ -593,9 +647,13 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       else:
         current.add(ch)
     subs.add(current)
-    # Return nth subscript (1-based)
+    # Return nth subscript (1-based), stripped of surrounding quotes;
+    # M string subscripts arrive with their delimiters and doubled quotes.
     if n >= 1 and n <= subs.len:
-      return subs[n-1]
+      var val = subs[n-1]
+      if val.len >= 2 and val[0] == '"' and val[^1] == '"':
+        val = val[1 ..< ^1].replace("\"\"", "\"")
+      return val
     return ""
   # RSM Math Functions
   of "ZABS":

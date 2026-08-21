@@ -151,6 +151,17 @@ proc matchesCode*(c: char, code: char): bool =
 proc matchPattern*(s: string, atoms: seq[PatternAtom]): bool =
   var idx = 0
   for atom in atoms:
+    # Literal string atom: must appear exactly `count` times (§7.5.1)
+    if atom.lit.len > 0:
+      var repeats = atom.count
+      while repeats > 0:
+        if idx + atom.lit.len > s.len:
+          return false
+        if s[idx ..< idx + atom.lit.len] != atom.lit:
+          return false
+        inc idx, atom.lit.len
+        dec repeats
+      continue
     let min = atom.count
     var matched = 0
     # For orMore atoms, consume greedily; for exact atoms, consume exactly min

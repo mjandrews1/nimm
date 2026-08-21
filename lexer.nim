@@ -245,7 +245,8 @@ proc nextToken*(lex: var Lexer): Token =
   # ANSI/ISO Section 3.3: Numeric literals are digits optionally followed
   # by a decimal point and more digits. Scientific notation uses E or e.
   # No leading sign — that's a unary operator in M.
-  if c in {'0'..'9'}:
+  # §5.2 also permits a leading-dot fraction (.5) canonical form.
+  if c in {'0'..'9'} or (c == '.' and lex.peekAt(1) in {'0'..'9'}):
     var n = newString(min(16, lex.src.len - lex.pos))
     var nLen = 0
     while lex.peekAt(0) in {'0'..'9'}:
@@ -263,22 +264,29 @@ proc nextToken*(lex: var Lexer): Token =
         n[nLen] = lex.peekAt(0)
         inc nLen
         inc lex.pos
-    # Scientific notation: E or e followed by optional sign and digits
+    # Scientific notation: E or e followed by optional sign and digits.
+    # Only consume E/e when digits actually follow; otherwise it belongs
+    # to the next word (e.g. pattern atom "3E").
     if lex.peekAt(0) in {'E', 'e'}:
-      if nLen >= n.len: n.setLen(n.len * 2)
-      n[nLen] = lex.peekAt(0)
-      inc nLen
-      inc lex.pos
-      if lex.peekAt(0) in {'+', '-'}:
+      var ePos = 1
+      var hasExpDigits = false
+      if lex.peekAt(ePos) in {'+', '-'}: inc ePos
+      if lex.peekAt(ePos) in {'0'..'9'}: hasExpDigits = true
+      if hasExpDigits:
         if nLen >= n.len: n.setLen(n.len * 2)
         n[nLen] = lex.peekAt(0)
         inc nLen
         inc lex.pos
-      while lex.peekAt(0) in {'0'..'9'}:
-        if nLen >= n.len: n.setLen(n.len * 2)
-        n[nLen] = lex.peekAt(0)
-        inc nLen
-        inc lex.pos
+        if lex.peekAt(0) in {'+', '-'}:
+          if nLen >= n.len: n.setLen(n.len * 2)
+          n[nLen] = lex.peekAt(0)
+          inc nLen
+          inc lex.pos
+        while lex.peekAt(0) in {'0'..'9'}:
+          if nLen >= n.len: n.setLen(n.len * 2)
+          n[nLen] = lex.peekAt(0)
+          inc nLen
+          inc lex.pos
     n.setLen(nLen)
     return Token(kind: tokNumber, text: n, start: start)
 

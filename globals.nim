@@ -102,8 +102,15 @@ proc killLocal*(g: var Globals, name: string, subs: seq[string] = @[]) =
     for k in toDelete:
       scope[].del(k)
   else:
+    # Kill node and any descendants below it (§7.2.9)
     let key = makeKey(name, subs)
-    scope[].del(key)
+    let prefix = key & "\x00"
+    var toDelete: seq[string] = @[]
+    for k in scope[].keys:
+      if k == key or k.startsWith(prefix):
+        toDelete.add(k)
+    for k in toDelete:
+      scope[].del(k)
 
 proc killAllLocal*(g: var Globals) =
   ## Kill all local variables in current scope
@@ -176,6 +183,10 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
   
   # Find the next key after the given subscript
   let lastSub = subs[^1]
+  if lastSub.len == 0 and not forward:
+    # §9.9: the null subscript precedes everything, so backward from ""
+    # there is nothing left.
+    return ""
   if forward:
     for k in keys:
       if mCollationCmp(k, lastSub) > 0:
@@ -205,6 +216,11 @@ proc setGlobal*(g: var Globals, name: string, subs: seq[string], value: string) 
     return
   g.globals.put(name, subs, value)
 
+proc setNaked*(g: var Globals, name: string, subs: seq[string]) =
+  ## Update the naked indicator without touching stored data
+  g.nakedGlobal = name
+  g.nakedSubs = subs
+
 proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
   ## Kill global variable
   if g.dbPath.len == 0:
@@ -218,7 +234,14 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
       for k in toDelete:
         g.memGlobals.del(k)
     else:
-      g.memGlobals.del(key)
+      # Kill node and any descendants below it (§7.2.9)
+      let prefix = key & "\x00"
+      var toDelete: seq[string] = @[]
+      for k in g.memGlobals.keys:
+        if k == key or k.startsWith(prefix):
+          toDelete.add(k)
+      for k in toDelete:
+        g.memGlobals.del(k)
     return
   g.globals.delete(name, subs)
 
@@ -259,6 +282,9 @@ proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool):
   if subs.len == 0:
     return if forward: keys[0] else: keys[^1]
   let lastSub = subs[^1]
+  if lastSub.len == 0 and not forward:
+    # §9.9: backward from the null subscript there is nothing
+    return ""
   if forward:
     for k in keys:
       if mCollationCmp(k, lastSub) > 0: return k
@@ -276,22 +302,54 @@ proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = t
   else:
     return g.orderLocal(name, subs, forward)
 
+proc tupCollationCmp(a, b: seq[string]): int =
+  ## Collation-aware comparison of subscript tuples; shorter prefix sorts first,
+  ## which matches depth-first pre-order tree traversal.
+  for i in 0 ..< min(a.len, b.len):
+    let c = mCollationCmp(a[i], b[i])
+    if c != 0: return c
+  return system.cmp(a.len, b.len)
+
+proc queryGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool): seq[string] =
+  ## $QUERY over the in-memory global store: next node in DFS pre-order
+  let basePrefix = name & "\x00"
+  var tuples: seq[seq[string]] = @[]
+  for k in g.memGlobals.keys:
+    if k.startsWith(basePrefix):
+      tuples.add(k[basePrefix.len..^1].split('\x00'))
+  tuples.sort(tupCollationCmp)
+  if forward:
+    for t in tuples:
+      if tupCollationCmp(t, subs) > 0: return t
+    return @[]
+  else:
+    for i in countdown(tuples.len - 1, 0):
+      if tupCollationCmp(tuples[i], subs) < 0: return tuples[i]
+    return @[]
+
 proc query*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): seq[string] =
   ## $QUERY (auto-detect local vs global)
   ## Returns all subscripts of the next node (any depth)
   if name.len > 0 and name[0] == '^':
-    # For globals, use LMDB cursor
-    if g.dbPath.len == 0: return @[]
+    # For globals: LMDB cursor when persistent; mem store otherwise
+    if g.dbPath.len == 0: return queryGlobalMem(g, name, subs, forward)
     return g.globals.query(name, subs, forward)
   else:
-    # For locals, use order (same as $ORDER for locals)
-    let nextSub = g.orderLocal(name, subs, forward)
-    if nextSub.len == 0: return @[]
-    var result: seq[string] = @[]
-    for sub in subs:
-      result.add(sub)
-    result.add(nextSub)
-    return result
+    # For locals: same DFS pre-order over the current scope's keys
+    let prefix = name & "\x00"
+    var tuples: seq[seq[string]] = @[]
+    for k in g.scopes[^1].keys:
+      if k.startsWith(prefix):
+        tuples.add(k[prefix.len..^1].split('\x00'))
+    tuples.sort(tupCollationCmp)
+    if forward:
+      for t in tuples:
+        if tupCollationCmp(t, subs) > 0: return t
+      return @[]
+    else:
+      for i in countdown(tuples.len - 1, 0):
+        if tupCollationCmp(tuples[i], subs) < 0: return tuples[i]
+      return @[]
 
 proc dataGlobalMem(g: Globals, name: string, subs: seq[string]): int =
   ## $DATA tri-state over the in-memory global store
@@ -327,16 +385,37 @@ proc listSubs*(g: Globals, name: string, subs: seq[string] = @[]): seq[seq[strin
   ## List all subscripts under a given variable
   ## Returns a sequence of subscript sequences
   if name.len > 0 and name[0] == '^':
-    # For globals, use LMDB cursor
-    if g.dbPath.len == 0: return @[]
+    # For globals: LMDB cursor when persistent; scan memGlobals otherwise
+    if g.dbPath.len == 0:
+      let prefix = makeKey(name, subs) & "\x00"
+      var keys: seq[string] = @[]
+      for k in g.memGlobals.keys:
+        if k.startsWith(prefix):
+          keys.add(k)
+      keys.sort(system.cmp)
+      result = @[]
+      for k in keys:
+        let rest = k[prefix.len..^1]
+        var subSeq: seq[string] = @[]
+        var current = ""
+        for ch in rest:
+          if ch == '\x00':
+            subSeq.add(current)
+            current = ""
+          else:
+            current.add(ch)
+        subSeq.add(current)
+        result.add(subSeq)
+      return result
     return g.globals.listSubs(name, subs)
   else:
     # For locals, scan the scope table
     let scope = g.scopes[^1]
-    let prefix = makeKey(name, subs)
+    let base = makeKey(name, subs)
+    let prefix = base & "\x00"
     var result: seq[seq[string]] = @[]
     for k in scope.keys:
-      if k.startsWith(prefix) and k.len > prefix.len:
+      if k == base or k.startsWith(prefix):
         # Extract subscripts after the prefix
         let rest = k[prefix.len..^1]
         var subSeq: seq[string] = @[]
