@@ -172,27 +172,31 @@ proc formatNumber*(v: float): string =
       return "0"
   if buf.endsWith(".0"):
     buf.setLen(buf.len - 2)
+  # §5.2 canonical form drops the redundant integer zero: 0.5 → ".5",
+  # -0.25 → "-.25" (verified against frozen RSM baseline).
+  if buf.startsWith("-0."):
+    buf = "-" & buf[2 ..^ 1]
+  elif buf.startsWith("0.") and buf.len > 2:
+    buf = buf[1 ..^ 1]
   buf
 
 ## truthy — M's Truth Value Test
 ##
-## ANSI/ISO Section 5.3: "The truth value of a string is determined
-## as follows: if the string is a numeric string and its numeric value
-## is zero, the truth value is false. If the string is a numeric string
-## and its numeric value is not zero, the truth value is true. If the
-## string is not a numeric string and it has zero length, the truth
-## value is false. If the string is not a numeric string and it has
-## nonzero length, the truth value is true."
+## ANSI/ISO Section 2.2.4: a string's truth value is determined by
+## interpreting its longest leading numeric prefix as a number and
+## comparing that number to zero. No numeric prefix (or empty string)
+## means zero, i.e. FALSE.
 ##
-## This implements the complete truth table:
-##   "0"     → false  (numeric zero)
-##   "1"     → true   (numeric nonzero)
-##   ""      → false  (empty string)
-##   "abc"   → true   (non-empty non-numeric string)
-##   "042"   → true   (non-canonical but non-empty → true!)
-##
-## The last case is subtle: "042" is NOT a canonical number, so parseNum
-## returns none, so we check len > 0 → true. This matches the standard.
+## Truth table (verified against frozen RSM/RFC baselines):
+##   ""      → false  (no numeric prefix → 0)
+##   "0"     → false  (prefix 0)
+##   "0.00"  → false  (prefix 0.00 → zero)
+##   "abc"   → false  (no numeric prefix → 0)
+##   "1"     → true   (prefix 1)
+##   "042"   → true   (prefix 42)
+##   ".5x"   → true   (prefix .5)
+##   "3apples" → true (prefix 3)
+##   "2e3"   → true   (prefix 2e3 → 2000)
 ##
 ## Design Note: This is used everywhere — IF, postconditionals, $SELECT,
 ## $TEST, &/!/ternary. A Genera-style trace would log every truth test
@@ -203,8 +207,48 @@ proc formatNumber*(v: float): string =
 ##   - Called by: runtime.nim (runLine for cIf condition, postconditionals)
 ##   - Called by: runtime.nim (evalFunc for $SELECT)
 ##   - Sets: rt.test ($TEST special variable) in runtime.nim
+
+proc numPrefix*(s: string): float =
+  ## Longest leading numeric prefix of s per §2.2.2; 0.0 if none.
+  ## Grammar: [+-]? ( digit* (. digit+)? | digit+. ) with optional
+  ## exponent [eE] [+-]? digit+ appended only when digits follow.
+  var i = 0
+  let n = s.len
+  if i < n and (s[i] == '+' or s[i] == '-'):
+    inc i
+  let intStart = i
+  while i < n and s[i] in '0'..'9':
+    inc i
+  var hadDigits = i > intStart
+  var endNoExp = 0
+  if i < n and s[i] == '.':
+    let fracStart = i + 1
+    var j = fracStart
+    while j < n and s[j] in '0'..'9':
+      inc j
+    if j > fracStart:
+      hadDigits = true
+      endNoExp = j
+    elif hadDigits:
+      endNoExp = i  # "5." keeps prefix "5"; lone "." yields nothing extra
+  else:
+    endNoExp = i
+  if not hadDigits or endNoExp == 0:
+    return 0.0
+  var endWithExp = endNoExp
+  if endNoExp < n and (s[endNoExp] == 'e' or s[endNoExp] == 'E'):
+    var k = endNoExp + 1
+    if k < n and (s[k] == '+' or s[k] == '-'):
+      inc k
+    let expStart = k
+    while k < n and s[k] in '0'..'9':
+      inc k
+    if k > expStart:
+      endWithExp = k
+  try:
+    result = parseFloat(s[0 ..< endWithExp])
+  except ValueError:
+    return 0.0
+
 proc truthy*(s: string): bool =
-  let n = parseNum(s)
-  if n.isSome:
-    return n.get != 0.0
-  s.len > 0
+  numPrefix(s) != 0.0
