@@ -118,6 +118,26 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
         parseInt(ev.eval(expr.fargs[1])) >= 0
       else: true
       return ev.globals[].order(varName, subs, forward)
+    # Special handling for $ZORDER — forward traversal (alias for $ORDER)
+    if expr.fname in ["ZORDER"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      return ev.globals[].order(varName, subs, true)
+    # Special handling for $ZPREVIOUS — backward traversal
+    if expr.fname in ["ZPREVIOUS"]:
+      if expr.fargs.len < 1: return ""
+      let varExpr = expr.fargs[0]
+      if varExpr.kind != eVar: return ""
+      let varName = varExpr.vname
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      return ev.globals[].order(varName, subs, false)
     # Special handling for $QUERY — needs variable reference, not value
     # $QUERY returns the next node in the entire array (any depth), unlike $ORDER
     if expr.fname in ["QUERY", "Q"]:
@@ -744,6 +764,66 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     return $execShellCmd(args[0])
+  of "ZSTRIP":
+    # $ZSTRIP(string, code) - Strip characters
+    # Codes: "<" = leading, ">" = trailing, "*" = both
+    # Optional third arg = specific characters to strip (default: whitespace)
+    if args.len < 2: return args[0]
+    let s = args[0]
+    let code = args[1].toUpperAscii
+    let charsToStrip = if args.len > 2: args[2] else: " \t\r\n"
+    var stripLeading = false
+    var stripTrailing = false
+    for ch in code:
+      case ch
+      of '<': stripLeading = true
+      of '>': stripTrailing = true
+      of '*': stripLeading = true; stripTrailing = true
+      else: discard
+    if not stripLeading and not stripTrailing: return s
+    var start = 0
+    var finish = s.len
+    if stripLeading:
+      while start < finish and s[start] in charsToStrip:
+        start.inc
+    if stripTrailing:
+      while finish > start and s[finish - 1] in charsToStrip:
+        finish.dec
+    return s[start..<finish]
+  of "ZSUBSTR":
+    # $ZSUBSTR(string, start [, length]) - Extract substring (1-based)
+    if args.len < 2: return ""
+    let s = args[0]
+    let startPos = parseInt(args[1])
+    let length = if args.len > 2: parseInt(args[2]) else: s.len - startPos + 1
+    if startPos < 1 or startPos > s.len: return ""
+    let startIdx = startPos - 1  # M is 1-based
+    let ending = min(startIdx + length, s.len)
+    if startIdx >= ending: return ""
+    return s[startIdx..<ending]
+  of "ZPIECE":
+    # $ZPIECE(string, delimiter, from [, to]) - Same as $PIECE
+    if args.len < 3: return ""
+    let s = args[0]
+    let d = args[1]
+    let start = parseInt(args[2])
+    let stop = if args.len > 3: parseInt(args[3]) else: start
+    if d.len == 0: return s
+    var pieces: seq[string] = @[]
+    var current = ""
+    for ch in s:
+      if ch == d[0]:
+        pieces.add(current)
+        current = ""
+      else:
+        current.add(ch)
+    pieces.add(current)
+    var result = ""
+    for i in start..stop:
+      if i > 0 and i <= pieces.len:
+        if result.len > 0: result.add(d)
+        result.add(pieces[i - 1])
+    return result
   of "NI_HTTP":
     # $NI_HTTP(method, url, body) — HTTP client
     if args.len < 2: return ""
