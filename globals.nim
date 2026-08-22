@@ -4,6 +4,7 @@
 import tables
 import strutils
 import algorithm
+import sets
 import storage/lmdb_store
 import storage/key_encoding
 
@@ -22,6 +23,7 @@ type
     nakedGlobal*: string                  # Last global name for naked references
     nakedSubs*: seq[string]               # Last subscripts for naked references
     scopeShared*: seq[bool]               # True if scope shares parent (COW pending)
+    heldLocks*: HashSet[string]           # Lock names held by this process (#278)
 
 proc makeKey(name: string, subs: seq[string]): string =
   ## Create flat key for storage (pre-computed exact size)
@@ -201,8 +203,49 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
 
 # --- Global variable operations ---
 
+# --- LOCK table (#278) ---
+
+proc getSpecialVar*(g: Globals, name: string): string
+
+proc acquireLock*(g: var Globals, name: string) =
+  ## LOCK +name — record the resource as held by this process.
+  g.heldLocks.incl(name)
+
+proc releaseLock*(g: var Globals, name: string) =
+  ## LOCK -name — release the resource.
+  g.heldLocks.excl(name)
+
+proc releaseAllLocks*(g: var Globals) =
+  ## Bare LOCK — release all resources held by this process.
+  g.heldLocks.clear()
+
+proc lockHeld*(g: Globals, name: string): bool =
+  ## $DATA(^$LOCK(name)) support.
+  name in g.heldLocks
+
+proc ssvData*(g: Globals, name: string, subs: seq[string]): int =
+  ## $DATA over Structured System Variables (ISO §8.6).
+  ## Minimal single-process subset matching RSM/RFC consensus (#278):
+  ##   ^$JOB($JOB) → 1; ^$LOCK("x") → 1 while held, else 0.
+  case name
+  of "^$JOB":
+    if subs.len == 1 and subs[0] == g.getSpecialVar("$JOB"): return 1
+    return 0
+  of "^$LOCK":
+    if subs.len == 1 and subs[0] in g.heldLocks: return 1
+    return 0
+  else:
+    return 0
+
+proc ssvValue*(g: Globals, name: string, subs: seq[string]): string =
+  ## Value read of an SSV node — refs expose no values for the supported
+  ## subset, only $DATA tri-state; mirror that as "1"/"0".
+  return $g.ssvData(name, subs)
+
 proc getGlobal*(g: Globals, name: string, subs: seq[string] = @[]): string =
   ## Get global variable value from LMDB (or in-memory store when no -db)
+  if name.startsWith("^$"):
+    return g.ssvValue(name, subs)
   if g.dbPath.len == 0: return g.memGlobals.getOrDefault(makeKey(name, subs), "")
   return g.globals.get(name, subs)
 
@@ -369,6 +412,8 @@ proc dataGlobalMem(g: Globals, name: string, subs: seq[string]): int =
 proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA (auto-detect local vs global, tri-state per ANSI/ISO 8.5)
   if name.len > 0 and name[0] == '^':
+    if name.startsWith("^$"):
+      return g.ssvData(name, subs)
     if g.dbPath.len == 0:
       return dataGlobalMem(g, name, subs)
     let val = g.globals.get(name, subs)

@@ -138,7 +138,7 @@ type
   ## info for error reporting and debugging. A type inference pass
   ## could annotate nodes with [NUM], [STR], or [ANY].
   ExprKind* = enum
-    numLit, eStr, eVar, eFunc, eSvar, eNeg, eNot, eBinary, ePattern, eIndirect
+    numLit, eStr, eVar, eFunc, eSvar, eNeg, ePos, eNot, eBinary, ePattern, eIndirect
 
   ## Expr — Expression AST Node
   ##
@@ -178,7 +178,7 @@ type
     of eSvar:
       ## Special variable: name (e.g. "HOROLOG", "IO").
       sname*: string
-    of eNeg, eNot:
+    of eNeg, ePos, eNot:
       operand*: Expr
     of eBinary:
       op*: BinOp

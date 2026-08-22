@@ -78,6 +78,21 @@ const MaxRecursionDepth = 1000  # Prevent stack overflow
 proc parseLine*(code: string): Line
 proc cachedParseLine*(eng: var Engine, code: string): Line
 
+proc lockRefName(ev: var Evaluator, e: Expr): string =
+  ## Extract a LOCK argument's resource name (#278): the reference text
+  ## itself (^L1, ^L1(2), A), not the argument's value.
+  case e.kind
+  of eVar:
+    var name = e.vname
+    if e.subs.len > 0:
+      var subs: seq[string] = @[]
+      for sub in e.subs:
+        subs.add(ev.eval(sub))
+      name = name & "(" & subs.join(",") & ")"
+    return name
+  else:
+    return ev.eval(e)
+
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   ## Execute a line of M code (Line is already ref object)
   if line == nil: return ""
@@ -486,8 +501,25 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.testValue = false
 
       of CmdKind.cLock:
-        # LOCK var1,var2,... — Acquire resource locks
-        # Simple implementation: always succeeds (no actual locking)
+        # LOCK [+|-]ref[,(+|-)ref]... — resource locks (#278).
+        # Single-process semantics: held names are recorded in a process-
+        # local table; $DATA(^$LOCK("name")) reads it back. Bare LOCK
+        # releases everything. The parser folds "+" into ePos and "-" into
+        # eNeg, so unwrap those to recover the lock operator, then use the
+        # argument's NAME (not its value).
+        if cmd.lockRefs.len == 0:
+          eng.globals[].releaseAllLocks()
+        else:
+          for refExpr in cmd.lockRefs:
+            var op = "+"
+            var inner = refExpr
+            while inner.kind in {ePos, eNeg}:
+              if inner.kind == eNeg: op = "-"
+              inner = inner.operand
+            let lname = eng.evaluator[].lockRefName(inner)
+            if lname.len > 0:
+              if op == "-": eng.globals[].releaseLock(lname)
+              else: eng.globals[].acquireLock(lname)
         eng.testValue = true
 
       of CmdKind.cMerge:

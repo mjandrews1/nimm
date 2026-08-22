@@ -94,8 +94,9 @@ proc isCanonicalNumber*(s: string): bool =
     while i <= j and s[i] in {'0'..'9'}:
       hasDigit = true
       inc i
-  # Scientific notation: E or e followed by optional sign and digits
-  if i <= j and s[i] in {'E', 'e'}:
+  # Scientific notation: uppercase E followed by optional sign and digits.
+  # Lowercase 'e' is NOT accepted (RSM/RFC: "1e2" is not numeric, #280).
+  if i <= j and s[i] == 'E':
     inc i
     if i <= j and s[i] in {'+', '-'}:
       inc i
@@ -211,7 +212,10 @@ proc formatNumber*(v: float): string =
 proc numPrefix*(s: string): float =
   ## Longest leading numeric prefix of s per §2.2.2; 0.0 if none.
   ## Grammar: [+-]? ( digit* (. digit+)? | digit+. ) with optional
-  ## exponent [eE] [+-]? digit+ appended only when digits follow.
+  ## exponent E [+-]? digit+ appended only when digits follow.
+  ##
+  ## Reference behavior (RSM/RFC, verified 2026-08-21): only UPPERCASE 'E'
+  ## introduces an exponent — "1e2"+0 → 1, not 100 (#280 probes).
   var i = 0
   let n = s.len
   if i < n and (s[i] == '+' or s[i] == '-'):
@@ -236,7 +240,8 @@ proc numPrefix*(s: string): float =
   if not hadDigits or endNoExp == 0:
     return 0.0
   var endWithExp = endNoExp
-  if endNoExp < n and (s[endNoExp] == 'e' or s[endNoExp] == 'E'):
+  if endNoExp < n and s[endNoExp] == 'E':
+    # Uppercase E only — lowercase 'e' ends the numeric prefix (#280)
     var k = endNoExp + 1
     if k < n and (s[k] == '+' or s[k] == '-'):
       inc k

@@ -273,7 +273,7 @@ proc isExprStart(p: Parser): bool =
 # reflect precedence directly. A more sophisticated implementation would
 # use Pratt parsing or precedence climbing.
 
-proc parseExpr(p: var Parser): Expr
+proc parseExpr*(p: var Parser): Expr
 proc parsePrefix(p: var Parser): Expr
 proc parsePrimary(p: var Parser): Expr
 proc parseSubscripts(p: var Parser): seq[Expr]
@@ -338,9 +338,10 @@ proc parsePrefix(p: var Parser): Expr =
     discard p.advance()
     Expr(kind: eNeg, operand: parsePrefix(p))
   elif p.peek() == tokPlus:
-    # Unary plus — just skip it (no effect on value)
+    # Unary plus — numeric coercion per RSM/RFC: +"2E3"→"2000",
+    # +"01.50"→"1.5", +"abc"→"0". Explicit node (#280).
     discard p.advance()
-    parsePrefix(p)
+    Expr(kind: ePos, operand: parsePrefix(p))
   elif p.peek() == tokNot:
     discard p.advance()
     Expr(kind: eNot, operand: parsePrefix(p))
@@ -414,9 +415,14 @@ proc parsePrimary(p: var Parser): Expr =
       let subs = parseSubscripts(p)
       Expr(kind: eVar, vname: "^", subs: subs)
     else:
+      # ^NAME or ^$SSV (Structured System Variable, #278) or naked ^
+      var prefix = "^"
+      if p.peek() == tokDollar:
+        discard p.advance()
+        prefix = "^$"
       let name = p.readWord()
       let subs = parseSubscripts(p)
-      Expr(kind: eVar, vname: "^" & name, subs: subs)
+      Expr(kind: eVar, vname: prefix & name, subs: subs)
   of tokWord:
     # Local variable: NAME or NAME(subs...)
     let name = p.readWord()

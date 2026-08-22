@@ -15,6 +15,8 @@ import unicode_utils
 import ni_functions
 import data_structures
 import runtime
+import parser
+import lexer
 
 type
   Evaluator* = object
@@ -241,10 +243,14 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.operand.kind == numLit and expr.operand.hasCachedFloat:
       return formatNumber(-expr.operand.cachedFloat)
     let val = ev.eval(expr.operand)
-    try:
-      return formatNumber(-parseFloat(val))
-    except:
-      return "0"
+    return formatNumber(-numPrefix(val))
+  of ePos:
+    # Unary plus — full numeric coercion per RSM/RFC consensus (#280):
+    # +"2E3"→"2000", +"01.50"→"1.5", +".5"→".5", +"abc"→"0".
+    # Lowercase 'e' is NOT an exponent (refs: +"1e2"→"1").
+    if expr.operand.kind == numLit and expr.operand.hasCachedFloat:
+      return formatNumber(expr.operand.cachedFloat)
+    return formatNumber(numPrefix(ev.eval(expr.operand)))
   of eNot:
     let val = ev.eval(expr.operand)
     if truthy(val):
@@ -373,14 +379,24 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       return "1"
     return "0"
   of eIndirect:
-    # Indirection: @expr — expr evaluates to a variable name
+    # Indirection: @expr — per ISO §7.4 the evaluated text replaces the
+    # @-reference syntactically. The text may name a variable OR be a full
+    # expression ("1+2", "B+1", "$L(B)") — re-parse and evaluate (#279).
+    # Falls back to plain variable lookup when the text does not parse.
     let varName = ev.eval(expr.indirectExpr)
     if varName.len == 0: return ""
     # Evaluate subscripts if present
     var subs: seq[string] = @[]
     for sub in expr.indirectSubs:
       subs.add(ev.eval(sub))
-    # Get the variable value
+    # Try expression indirection first
+    try:
+      var p = newParser(varName)
+      let inner = p.parseExpr()
+      return ev.eval(inner)
+    except CatchableError:
+      discard
+    # Fallback — treat the text as a variable name
     return ev.globals[].get(varName, subs)
 
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
