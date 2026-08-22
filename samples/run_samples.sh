@@ -3,7 +3,7 @@
 #
 #   ./run_samples.sh nimm            # NimM only (runs all three samples)
 #   ./run_samples.sh rsm             # RSM: strict.m + rsmext.m
-#   ./run_samples.sh rfc             # RFC: strict.m + rsmext.m
+#   ./run_samples.sh rfc             # RFC: DEPRECATED — RSM is the sole reference engine
 #
 # Isolation discipline (see tests/mumps_extended_conformance.py): the RSM and
 # RFC daemons must NEVER run concurrently. Start one daemon, run its leg, then
@@ -31,6 +31,9 @@ run_mfile() {
       "$NIMM_BIN" -r "$mfile" -x "DO ${name}" 2>&1
       ;;
     rsm|rfc)
+      if [ "$ENGINE" = "rfc" ]; then
+        echo "WARNING: RFC is deprecated — RSM is the sole reference engine." >&2
+      fi
       local bin payload
       bin="$RSM_BIN"
       [ "$ENGINE" = "rfc" ] && bin="$RFC_BIN"

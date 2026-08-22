@@ -7,9 +7,8 @@
 #   3. ANSI/ISO 170-suite       (--runs)
 #   4. differential fuzz        (NimM vs RSM, seeded — tests/m_fuzz.py)
 #
-# Isolation: the RSM daemon must be UP before starting this script and NO
-# RFC daemon may run at any point during the night. This script never
-# starts or stops daemons itself.
+# Isolation: the RSM daemon must be UP before starting this script. RFC is
+# deprecated and no longer part of the test matrix.
 set -u
 CUTOFF="${1:?usage: overnight_nimm.sh CUTOFF_EPOCH}"
 cd "$HOME/nimm" || exit 1

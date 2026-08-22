@@ -438,7 +438,7 @@ def print_failures(results, engines, tests):
 
 def main():
     parser = argparse.ArgumentParser(description="ANSI/ISO M conformance cross-test")
-    parser.add_argument("--impls", default="nimm,rsm,rfc", help="Comma-separated engines to test")
+    parser.add_argument("--impls", default="nimm,rsm", help="Comma-separated engines to test (rfc deprecated)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print failures as they happen")
     parser.add_argument("--category", "-c", help="Run only this category")
     parser.add_argument("--failures", "-f", action="store_true", help="Print detailed failures")
@@ -447,6 +447,9 @@ def main():
     args = parser.parse_args()
     
     impls = [s.strip() for s in args.impls.split(",")]
+
+    if "rfc" in impls:
+        print("WARNING: RFC is deprecated — RSM is the sole reference engine.", file=sys.stderr)
     
     # Filter tests
     tests = TESTS

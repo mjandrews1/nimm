@@ -308,11 +308,15 @@ def print_failures(results, tests):
 
 def main():
     ap = argparse.ArgumentParser(description="Extended M conformance suite")
-    ap.add_argument("--impls", required=True, choices=["nimm", "rsm", "rfc"])
+    ap.add_argument("--impls", required=True, choices=["nimm", "rsm", "rfc"],
+                    help="rfc is deprecated — RSM is the sole reference engine")
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--timing", action="store_true")
     ap.add_argument("--failures", action="store_true")
     args = ap.parse_args()
+
+    if args.impls == "rfc":
+        print("WARNING: RFC is deprecated — RSM is the sole reference engine.", file=sys.stderr)
 
     engine = make_engine(args.impls)
     if engine is None:

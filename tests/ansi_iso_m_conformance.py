@@ -437,8 +437,8 @@ def print_timing(timings, engines, tests):
 
 def main():
     ap = argparse.ArgumentParser(description="ANSI/ISO M conformance suite")
-    ap.add_argument("--impls", default="nimm,rsm,rfc",
-                    help="comma-separated: nimm,rsm,rfc")
+    ap.add_argument("--impls", default="nimm,rsm",
+                    help="comma-separated: nimm,rsm (rfc deprecated)")
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--timing", action="store_true")
     ap.add_argument("--failures", action="store_true")
@@ -452,6 +452,8 @@ def main():
 
     engines = []
     for impl in [s.strip().lower() for s in args.impls.split(",")]:
+        if impl == "rfc":
+            print("WARNING: RFC is deprecated — RSM is the sole reference engine.", file=sys.stderr)
         eng = make_engine(impl)
         if eng is None:
             print(f"Unknown implementation: {impl}")
