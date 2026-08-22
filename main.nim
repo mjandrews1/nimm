@@ -8,7 +8,7 @@
 #   nimm --repl                                # Interactive REPL
 #   nimm -m strict -x 'SET X=1'               # Strict mode
 
-const Version* = "0.1.2"
+const Version* = "0.1.3"
 
 import os
 import strutils
