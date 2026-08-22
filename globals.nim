@@ -415,7 +415,10 @@ proc listSubs*(g: Globals, name: string, subs: seq[string] = @[]): seq[seq[strin
     let prefix = base & "\x00"
     var result: seq[seq[string]] = @[]
     for k in scope.keys:
-      if k == base or k.startsWith(prefix):
+      # Only keys strictly below the prefix enumerate as subscripts.
+      # Including the scalar root key here would make the slice below
+      # negative-length and crash (#276).
+      if k.startsWith(prefix):
         # Extract subscripts after the prefix
         let rest = k[prefix.len..^1]
         var subSeq: seq[string] = @[]

@@ -446,6 +446,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if args.len < 2: return ""
     let s = args[0]
     let width = parseInt(args[1])
+    if width < 0:
+      # Reference behavior (RSM/RFC consensus): negative width returns the
+      # string unchanged rather than ISO-style left-justify.
+      return s
     if args.len > 2:
       let precision = parseInt(args[2])
       try:
