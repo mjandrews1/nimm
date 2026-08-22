@@ -10,6 +10,18 @@
 #      word, but "SET A=1 WRITE" has SET and WRITE as separate commands.
 
 const MaxParseIterations = 10000  # Prevent livelock on malformed input
+
+## blockSep — merged-block boundary marker (#281)
+##
+## The routine loader (runtime.nim mergeDotContinuations) joins dot-
+## continuation lines into one logical line. Without a boundary marker, a
+## mid-block IF/FOR swallows its trailing siblings as part of its own body
+## (M scopes IF/FOR to end-of-line). After each true block-opener's subtree,
+## the loader emits this control character; body parsers consume exactly one
+## to close their scope. It cannot collide with user code: \x01 is not
+## valid in M source and lexes as a single-character word token.
+const blockSep* = "\x01"
+
 #   2. The parser must distinguish commands from variable names by context.
 #   3. M has no explicit statement terminator — commands end at the next
 #      command (identified by whitespace + known command word).
@@ -710,7 +722,7 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
 #   BREAK
 #   READ var,var,...
 
-proc parseLine*(p: var Parser): Line
+proc parseLine*(p: var Parser, inBody: bool = false): Line
 proc parseCommand(p: var Parser): CommandNode
 proc parseSetArgs(p: var Parser): seq[SetItem]
 proc parseSetTarget(p: var Parser): SetTarget
@@ -733,7 +745,11 @@ proc parseMergePairs(p: var Parser): seq[(string, string)]
 ## by the routine loader (runtime.nim) which scans for labels before
 ## parsing commands. This separation keeps the parser focused on
 ## command parsing.
-proc parseLine*(p: var Parser): Line =
+proc parseLine*(p: var Parser, inBody: bool = false): Line =
+  ## When inBody is true (FOR/ELSE/inline-DO bodies built from merged dot
+  ## continuations), a single BlockSep token terminates this body and is
+  ## consumed (#281). At top level, stray BlockSeps are skipped so trailing
+  ## commands after closed blocks still run.
   result = Line(cmds: @[])
   var iterations = 0
   while true:
@@ -742,6 +758,12 @@ proc parseLine*(p: var Parser): Line =
     inc iterations
     if p.peek() == tokEof:
       break
+    if p.peek() == tokWord and p.cur.text == blockSep:
+      discard p.advance()
+      if inBody:
+        break
+      else:
+        continue
     if p.atCommandPos():
       result.cmds.add parseCommand(p)
     else:
@@ -779,10 +801,13 @@ proc parseCommand(p: var Parser): CommandNode =
     while p.peek() == tokComma:
       discard p.advance()
       cond = Expr(kind: eBinary, op: bAnd, left: cond, right: p.parseExpr())
-    # Parse body until ELSE or end of line
+    # Parse body until ELSE, BlockSep (merged-block boundary), or end of line
     var body = Line(cmds: @[])
     while true:
       if p.peek() == tokEof:
+        break
+      if p.peek() == tokWord and p.cur.text == blockSep:
+        discard p.advance()
         break
       # Check if next token is ELSE
       if p.peek() == tokWord and equiWord(p.cur.text, "ELSE"):
@@ -793,11 +818,11 @@ proc parseCommand(p: var Parser): CommandNode =
         break
     cmd = Cmd(kind: cIf, ifCond: cond, ifBody: body)
   of "ELSE", "E":
-    let body = p.parseLine()
+    let body = p.parseLine(true)
     cmd = Cmd(kind: cElse, elseBody: body)
   of "FOR", "F":
     let spec = parseForSpec(p)
-    let body = p.parseLine()
+    let body = p.parseLine(true)
     cmd = Cmd(kind: cFor, forSpec: spec, forBody: body)
   of "QUIT", "Q":
     if isExprStart(p) and not p.atCommandPos():
@@ -906,7 +931,7 @@ proc parseCommand(p: var Parser): CommandNode =
     # Check if next token is a command word (inline DO) or a variable name (label DO)
     if p.peek() == tokWord and isCommandWord(p, p.cur.text):
       # Inline DO: DO command
-      let body = p.parseLine()
+      let body = p.parseLine(true)
       cmd = Cmd(kind: cDoInline, doInlineBody: body)
     else:
       # Label DO: DO label,label,...

@@ -111,16 +111,22 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let newVal = num + increment
       ev.globals[].set(varName, @[], formatNumber(newVal))
       return formatNumber(newVal)
-    # Special handling for $GET — needs variable name, not value
+    # Special handling for $GET — needs variable name, not value.
+    # ISO §8.4.2: returns the node's value, or "0" when the node has no
+    # value (or the caller's default). Subscripts must be honored —
+    # $GET(^G(1)) tests node ^G(1), never the ^G root (#281).
     if expr.fname in ["GET", "G"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
       if varExpr.kind != eVar: return ""
       let varName = varExpr.vname
-      let val = ev.globals[].get(varName)
+      var subs: seq[string] = @[]
+      for sub in varExpr.subs:
+        subs.add(ev.eval(sub))
+      let val = ev.globals[].get(varName, subs)
       if val.len > 0: return val
       if expr.fargs.len > 1: return ev.eval(expr.fargs[1])
-      return ""
+      return "0"
     # Special handling for $DATA — needs variable name, not value
     if expr.fname in ["DATA", "D"]:
       if expr.fargs.len < 1: return ""

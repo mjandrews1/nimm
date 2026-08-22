@@ -5,6 +5,7 @@ import os
 import strutils
 import tables
 import ast
+import parser
 
 type
   Mode* = enum
@@ -130,22 +131,137 @@ proc filterRoutineLines(lines: var seq[string]) =
       filtered.add(stripped)
   lines = filtered
 
+proc isBlockOpener(content: string): bool =
+  ## True when a (dot-stripped, comment-stripped) line opens an implicit
+  ## block that source-line boundaries must close: IF/ELSE/FOR always scope
+  ## to end-of-line or dot-block; DO only when bare (#281).
+  var i = 0
+  while i < content.len and content[i] in {' ', '\t'}: inc i
+  var w = ""
+  while i < content.len and content[i] in {'a'..'z', 'A'..'Z'}:
+    w.add(content[i]); inc i
+  case w.toUpperAscii
+  of "IF", "I", "ELSE", "E", "FOR", "F":
+    result = true
+  of "DO", "D":
+    # Bare DO opens a block; DO label^routine / DO entry:(args) do not.
+    # Skip postconditional chain (":expr" — exprs contain no spaces except
+    # inside quotes), then the opener is bare iff nothing remains.
+    while i < content.len and content[i] in {' ', '\t'}: inc i
+    var inStr = false
+    while i < content.len and content[i] == ':':
+      inc i
+      while i < content.len:
+        let c = content[i]
+        if c == '"': inStr = not inStr
+        elif not inStr and c == ' ': break
+        inc i
+      while i < content.len and content[i] in {' ', '\t'}: inc i
+    result = i >= content.len
+  else:
+    result = false
+
+proc firstCommandWord(content: string): string =
+  ## First whitespace-delimited word, uppercased ("" if none).
+  var i = 0
+  while i < content.len and content[i] in {' ', '\t'}: inc i
+  while i < content.len and content[i] != ' ' and content[i] != '\t':
+    result.add(content[i]); inc i
+  result = result.toUpperAscii
+
+proc trailingBareDo(content: string): bool =
+  ## True when the line's final token is a bare DO/D (optionally carrying a
+  ## leading postcondition like "DO:X>5"), making any dot-children an
+  ## inline-DO body that captures one extra parser frame (#281).
+  var i = content.len
+  while i > 0 and content[i-1] in {' ', '\t'}: dec i
+  if i == 0: return false
+  var j = i
+  while j > 0 and content[j-1] notin {' ', '\t'}: dec j
+  let tok = content[j..i-1].toUpperAscii
+  if tok == "DO" or tok == "D":
+    return true
+  # Postcondition attached to a trailing bare DO (e.g. "DO:X>5").
+  if tok.startsWith("DO:") or tok.startsWith("D:"):
+    return true
+  return false
+
+proc appendLineWithMarkers(outp: var string, content, childBlob: string) =
+  ## Append one logical line (its own text + merged children) to outp,
+  ## inserting one blockSep per parser frame the line opens (#281).
+  if outp.len > 0: outp.add(" ")
+  outp.add(content)
+  if childBlob.len > 0:
+    outp.add(" ")
+    outp.add(childBlob)
+  let fw = firstCommandWord(content)
+  let isOpen = fw in ["IF", "I", "ELSE", "E", "FOR", "F"]
+  if isOpen:
+    outp.add(" " & blockSep)
+  if trailingBareDo(content) and childBlob.len > 0:
+    outp.add(" " & blockSep)
+  elif not isOpen and fw in ["DO", "D"] and childBlob.len > 0:
+    outp.add(" " & blockSep)
+
+proc mergeGroup(lines: seq[string], startIdx: int, depth: int, outp: var string): int =
+  ## Render all sibling lines at `depth` (and their nested children) into
+  ## outp, inserting blockSep markers so each parsed body closes exactly at
+  ## its source-line boundary (#281). Returns the next unconsumed index.
+  ##
+  ## Marker rules, mirroring parser frame semantics:
+  ##   - A line starting with IF/ELSE/FOR opens one body frame -> one marker
+  ##     after its full logical extent (own text + merged children).
+  ##   - A line ending in bare DO whose children exist opens the inline-DO
+  ##     frame -> one more marker.
+  ##   - Plain lines add no markers; deeper orphans are absorbed recursively.
+  var i = startIdx
+  while i < lines.len:
+    let raw = lines[i].strip()
+    var d = 0
+    while d < raw.len and raw[d] == '.': inc d
+    if d < depth: break
+    if d > depth:
+      # Malformed jump past the expected child depth — absorb recursively.
+      i = mergeGroup(lines, i, d, outp)
+      continue
+    let content = stripMComment(raw[d..^1]).strip()
+    i.inc
+    if content.len == 0: continue
+    var childBlob = ""
+    i = mergeGroup(lines, i, depth + 1, childBlob)
+    appendLineWithMarkers(outp, content, childBlob)
+  return i
+
 proc mergeDotContinuations(lines: var seq[string]) =
-  ## Merge dot-continuation lines into parent lines.
-  ## In M, a line starting with `.` is a continuation of the previous
-  ## line's command body (DO, FOR, IF, ELSE).
-  ## This merges `. BODY` into `PARENT DO BODY`.
+  ## Merge dot-continuation lines into parent lines, preserving block
+  ## structure with parser.blockSep markers (#281).
+  ##
+  ## The old plain space-join let a mid-block IF/FOR swallow its trailing
+  ## siblings as part of its own rest-of-line body. Now each logical group
+  ## (a top-level line plus its dotted descendants) is rendered by
+  ## mergeGroup, which inserts one blockSep per opened parser frame so body
+  ## scopes end where their source lines did. Callers MUST run
+  ## filterRoutineLines BEFORE this proc.
   var merged: seq[string] = @[]
-  for line in lines:
-    let trimmed = line.strip()
-    if trimmed.len > 0 and trimmed[0] == '.':
-      # Dot continuation — append to previous line
-      if merged.len > 0:
-        let bodyPart = trimmed[1..^1].strip()
-        if bodyPart.len > 0:
-          merged[^1] = merged[^1] & " " & bodyPart
-    else:
-      merged.add(line)
+  var i = 0
+  while i < lines.len:
+    let raw = lines[i].strip()
+    var d = 0
+    while d < raw.len and raw[d] == '.': inc d
+    if d > 0:
+      # Dots with no preceding top-level line: absorb into a synthetic group.
+      var buf = ""
+      i = mergeGroup(lines, i, d, buf)
+      if buf.len > 0: merged.add(buf)
+      continue
+    let content = stripMComment(raw).strip()
+    i.inc
+    if content.len == 0: continue
+    var childBlob = ""
+    i = mergeGroup(lines, i, 1, childBlob)
+    var buf = ""
+    appendLineWithMarkers(buf, content, childBlob)
+    merged.add(buf)
   lines = merged
 
 proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
@@ -163,12 +279,14 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
     # Remove trailing whitespace
     routine.lines.add(line.strip(trailing = true))
   
+  # Strip comments and blank lines FIRST — mergeDotContinuations needs
+  # clean source lines so comment text can't swallow blockSep markers
+  # and blank lines can't break depth tracking (#281)
+  filterRoutineLines(routine.lines)
+
   # Merge dot-continuation lines
   mergeDotContinuations(routine.lines)
-  
-  # Strip comments and blank lines
-  filterRoutineLines(routine.lines)
-  
+
   # Parse labels
   parseLabels(routine)
   
@@ -182,11 +300,9 @@ proc loadRoutineFromString*(rt: var Runtime, name: string, code: string): Routin
   for line in code.splitLines():
     routine.lines.add(line.strip(trailing = true))
   
-  # Merge dot-continuation lines
-  mergeDotContinuations(routine.lines)
-  
-  # Strip comments and blank lines
+  # Same ordering as loadRoutine: filter, then merge (#281)
   filterRoutineLines(routine.lines)
+  mergeDotContinuations(routine.lines)
   
   parseLabels(routine)
   
