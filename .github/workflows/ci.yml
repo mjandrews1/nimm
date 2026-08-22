@@ -20,6 +20,9 @@ jobs:
       - name: Install LMDB
         run: sudo apt-get update && sudo apt-get install -y liblmdb-dev
 
+      - name: Install Nim LMDB wrapper
+        run: nimble install -y lmdb
+
       - name: Build nimm
         run: nim c -d:release -o:nimm main.nim
 
