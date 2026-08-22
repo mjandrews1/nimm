@@ -628,10 +628,16 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     return ""
   # M Standard Name Functions
   of "NAME", "N":
-    # $NAME(expr) — Returns canonical name of variable
+    # $NAME(expr) — Returns canonical name of variable (§9.8.1)
     if args.len < 1: return ""
-    # For now, return the argument as-is (basic implementation)
-    return args[0]
+    # Canonicalize: uppercase, preserve subscripts
+    let name = args[0]
+    let openParen = name.find('(')
+    if openParen < 0:
+      return name.toUpperAscii()
+    let base = name[0..<openParen].toUpperAscii()
+    let subs = name[openParen..^1]
+    return base & subs
   of "QLENGTH", "QL":
     # $QLENGTH(expr) — Returns number of subscripts in a qualified name
     if args.len < 1: return "0"
@@ -897,9 +903,16 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     of "l": return s.toLowerAscii
     else: return s
   of "ZWIDTH":
-    # $ZWIDTH(expr) - Get display width (simplified: just string length)
+    # $ZWIDTH(expr) — Get display width (§9.16.7)
+    # Counts visible characters, skipping control characters
     if args.len < 1: return "0"
-    return $args[0].len
+    let s = args[0]
+    var width = 0
+    for ch in s:
+      let code = ord(ch)
+      if code >= 32 and code != 127:  # Skip control chars and DEL
+        width += 1
+    return $width
   of "ZBIT":
     # $ZBIT(expr, bit) - Get bit value
     if args.len < 2: return "0"

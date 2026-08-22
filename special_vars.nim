@@ -19,6 +19,7 @@ var
   quit: string = "0"
   reference: string = ""
   globalsRef: ptr Globals = nil  # For $TLEVEL/$TRESTART access
+  doDepthRef: ptr int = nil      # For $ESTACK access
   test: string = "1"
   x: int = 0
   y: int = 0
@@ -215,7 +216,9 @@ proc advanceDevicePos*(s: string) =
     else:
       inc(x)
 
-proc getEstack(): string = return "0"
+proc getEstack(): string =
+  if doDepthRef != nil: return $doDepthRef[]
+  return "0"
 proc getTlevel(): string =
   if globalsRef != nil: return $globalsRef[].txn.levels.len
   return "0"
@@ -278,3 +281,7 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$ZSTATUS", getZstatus, setZstatus)
   g.registerSpecialVar("$ZTRAP", getZtrap, setZtrap)
   g.registerSpecialVar("$ZVERSION", getZversion)
+
+proc setDoDepthRef*(depth: var int) =
+  ## Wire $ESTACK to engine's doDepth (call after engine creation)
+  doDepthRef = addr depth

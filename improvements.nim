@@ -7,8 +7,7 @@ import os
 
 proc fnumber*(value: float, format: string = "", precision: int = 0): string =
   ## $FNUMBER: Number formatting with decimal places
-  ## Format flags: + (force sign), P (parentheses for negative)
-  ## Note: Comma formatting not yet implemented
+  ## Format flags: + (force sign), P (parentheses for negative), , (comma grouping)
   
   # Format the number with precision
   var s = ""
@@ -25,6 +24,25 @@ proc fnumber*(value: float, format: string = "", precision: int = 0): string =
     s = "+" & s
   elif 'P' in format and value < 0:
     s = "(" & s[1..^1] & ")"
+  
+  # Apply comma grouping (every 3 digits from decimal point)
+  if ',' in format:
+    let dotPos = s.find('.')
+    let endPos = if dotPos >= 0: dotPos else: s.len
+    var intPart = s[0..<endPos]
+    var fracPart = if dotPos >= 0: s[dotPos..^1] else: ""
+    # Handle sign
+    var sign = ""
+    if intPart.len > 0 and intPart[0] in {'+', '-', '(', ')'}:
+      sign = $intPart[0]
+      intPart = intPart[1..^1]
+    # Insert commas
+    var withCommas = ""
+    for i, ch in intPart:
+      if i > 0 and (intPart.len - i) mod 3 == 0:
+        withCommas.add(',')
+      withCommas.add(ch)
+    s = sign & withCommas & fracPart
   
   return s
 
