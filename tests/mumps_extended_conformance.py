@@ -13,6 +13,9 @@ Scope expansion beyond tests/ansi_iso_m_conformance.py (170 tests @ ISO/IEC
   RSMExt  — RSM-documented implementation extensions (scientific exponent
             notation enabled by default; numeric-first collation for
             canonical subscripts)
+  NimMExt — NimM-specific extensions ($NI_* data structures, $NI_JSON,
+            $NI_UUID, $CASE). Runs ONLY when --impls nimm; expected values
+            are NimM's own documented behavior (regression freeze).
 
 Expected values verified empirically against frozen references RSM V1.83.1
 and RFC V1.00.0 (both references agree on every test). NimM is under test.
@@ -174,6 +177,77 @@ TESTS = [
     ("COLL_MIXED_SEQ",
      'KILL C SET C(2)=1,C("10")=1,C(30)=1 WRITE $ORDER(C(2))_"/"_$ORDER(C("10"))',
      "10/30", "RSMExt", "rsm doc", "mixed collation sequence 2 < '10' < 30"),
+
+    # ── NimM extensions (run ONLY against NimM) ──
+    # Data structures take (action, id, ...) and return the id on create.
+    ("NIARR_BASIC",
+     'SET X=$NI_ARRAY("create","ca1") SET N=$NI_ARRAY("add","ca1","v1") '
+     'SET M=$NI_ARRAY("add","ca1","v2") '
+     'WRITE $NI_ARRAY("len","ca1"),"|",$NI_ARRAY("get","ca1","0"),"|",$NI_ARRAY("get","ca1","1")',
+     "2|v1|v2", "NimMExt", "nimm doc", "$NI_ARRAY add/get/len"),
+    ("NIARR_SETGET",
+     'SET X=$NI_ARRAY("create","ca2") SET Y=$NI_ARRAY("add","ca2","old") '
+     'SET Z=$NI_ARRAY("set","ca2","0","new") WRITE $NI_ARRAY("get","ca2","0")',
+     "new", "NimMExt", "nimm doc", "$NI_ARRAY set overwrites in place"),
+    ("NIOBJ_FIELDS",
+     'SET X=$NI_OBJECT("create","co1") SET Y=$NI_OBJECT("set","co1","name","val") '
+     'WRITE $NI_OBJECT("get","co1","name"),"|",$NI_OBJECT("has","co1","name"),"|"'
+     '_$NI_OBJECT("has","co1","missing"),"|",$NI_OBJECT("len","co1")',
+     "val|1|0|1", "NimMExt", "nimm doc", "$NI_OBJECT set/get/has/len"),
+    ("NISTK_LIFO",
+     'SET X=$NI_STACK("create","cs1") SET A=$NI_STACK("push","cs1","one") '
+     'SET B=$NI_STACK("push","cs1","two") '
+     'WRITE $NI_STACK("pop","cs1"),"|",$NI_STACK("peek","cs1"),"|",$NI_STACK("len","cs1")',
+     "two|one|1", "NimMExt", "nimm doc", "$NI_STACK LIFO order"),
+    ("NIQUE_FIFO",
+     'SET X=$NI_QUEUE("create","cq1") SET A=$NI_QUEUE("enqueue","cq1","first") '
+     'SET B=$NI_QUEUE("enqueue","cq1","second") '
+     'WRITE $NI_QUEUE("dequeue","cq1"),"|",$NI_QUEUE("peek","cq1")',
+     "first|second", "NimMExt", "nimm doc", "$NI_QUEUE FIFO order"),
+    ("NISET_UNIQ",
+     'SET X=$NI_SET("create","ct1") SET Y=$NI_SET("add","ct1","a") '
+     'SET Z=$NI_SET("add","ct1","a") SET W=$NI_SET("add","ct1","b") '
+     'WRITE $NI_SET("has","ct1","a"),"|",$NI_SET("len","ct1")',
+     "1|2", "NimMExt", "nimm doc", "$NI_SET deduplicates"),
+    ("NIMAP_KV",
+     'SET X=$NI_MAP("create","cm1") SET Y=$NI_MAP("set","cm1","k1","v1") '
+     'SET Z=$NI_MAP("set","cm1","k2","v2") '
+     'WRITE $NI_MAP("get","cm1","k2"),"|",$NI_MAP("has","cm1","k1"),"|",$NI_MAP("keys","cm1")',
+     "v2|1|k1,k2", "NimMExt", "nimm doc", "$NI_MAP get/has/keys"),
+    ("NISRT_ORDER",
+     'SET X=$NI_SORTED("create","cd1") SET A=$NI_SORTED("add","cd1","banana") '
+     'SET B=$NI_SORTED("add","cd1","apple") SET C=$NI_SORTED("add","cd1","cherry") '
+     'WRITE $NI_SORTED("toseq","cd1"),"|",$NI_SORTED("len","cd1")',
+     "apple,banana,cherry|3", "NimMExt", "nimm doc", "$NI_SORTED maintains order"),
+    ("NISRT_LEXICO",
+     'SET X=$NI_SORTED("create","cd2") SET A=$NI_SORTED("add","cd2","9") '
+     'SET B=$NI_SORTED("add","cd2","10") WRITE $NI_SORTED("toseq","cd2")',
+     "10,9", "NimMExt", "nimm doc", "$NI_SORTED orders lexicographically"),
+    ("NIDQ_ENDS",
+     'SET X=$NI_DEQUE("create","ce1") SET A=$NI_DEQUE("addfirst","ce1","f") '
+     'SET B=$NI_DEQUE("addlast","ce1","b") '
+     'WRITE $NI_DEQUE("peekfirst","ce1"),"|",$NI_DEQUE("poplast","ce1"),"|",$NI_DEQUE("len","ce1")',
+     "f|b|1", "NimMExt", "nimm doc", "$NI_DEQUE both ends"),
+    ("NIBAG_COUNT",
+     'SET X=$NI_BAG("create","cg1") SET A=$NI_BAG("add","cg1","x") '
+     'SET B=$NI_BAG("add","cg1","x") SET C=$NI_BAG("add","cg1","y") '
+     'WRITE $NI_BAG("count","cg1","x"),"|",$NI_BAG("len","cg1")',
+     "2|3", "NimMExt", "nimm doc", "$NI_BAG counts occurrences"),
+    ("NIJSON_ROUND",
+     'SET J=$NI_JSON("parse","[1,2,3]") SET S=$NI_JSON("stringify",J) WRITE "<"_S_">"',
+     "<[1,2,3]>", "NimMExt", "nimm doc", "$NI_JSON parse/stringify round-trip"),
+    ("NIJSON_STR",
+     'WRITE "<"_$NI_JSON("stringify","hello")_">"',
+     '<"hello">', "NimMExt", "nimm doc", "$NI_JSON string quoting"),
+    ("NIUUID_SHAPE",
+     'SET U=$NI_UUID() WRITE $LENGTH(U),"|",$EXTRACT(U,9),$EXTRACT(U,14),$EXTRACT(U,19),$EXTRACT(U,24)',
+     "36|----", "NimMExt", "nimm doc", "$NI_UUID v4 shape (36 chars, dashes)"),
+    ("NICASE_MATCH",
+     'WRITE $CASE("b","a":1,"b":2,"c":3)',
+     "2", "NimMExt", "nimm doc", "$CASE selects matching branch"),
+    ("NICASE_MISS",
+     'WRITE "["_$CASE("z","a":1,"b":2)_"]"',
+     "[]", "NimMExt", "nimm doc", "$CASE no match returns empty"),
 ]
 
 
@@ -245,6 +319,13 @@ def main():
         print("Unknown implementation.")
         sys.exit(1)
 
+    # NimMExt tests exercise NimM-specific extensions — only meaningful
+    # (and only run) against NimM.
+    cats = ("SSV", "Std99", "RSMExt")
+    if args.impls == "nimm":
+        cats += ("NimMExt",)
+    tests = [t for t in TESTS if t[3] in cats]
+
     print("Verifying engine...")
     out = engine.run('WRITE "hello"')
     if "hello" not in out:
@@ -252,7 +333,7 @@ def main():
         sys.exit(1)
     print(f"  {engine.name}: OK")
 
-    print(f"\nRunning {len(TESTS)} tests x {args.runs} run(s) "
+    print(f"\nRunning {len(tests)} tests x {args.runs} run(s) "
           f"against {engine.name}...\n")
 
     all_timings = {}
@@ -260,17 +341,17 @@ def main():
     for run in range(1, args.runs + 1):
         if args.runs > 1:
             print(f"-- Run {run}/{args.runs} --")
-        rr, tt = run_suite(engine, TESTS)
+        rr, tt = run_suite(engine, tests)
         if results is None:
             results = rr
         for tn, dt in tt.items():
             all_timings.setdefault(tn, []).append(dt)
 
-    print_summary(results, engine, TESTS)
+    print_summary(results, engine, tests)
     if args.timing or args.runs > 1:
-        print_timing(all_timings, engine, TESTS)
+        print_timing(all_timings, engine, tests)
     if args.failures:
-        print_failures(results, TESTS)
+        print_failures(results, tests)
     print()
 
 
