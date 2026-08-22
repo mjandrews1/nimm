@@ -115,6 +115,8 @@ proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
       echo "  break, b LOC - Set breakpoint"
       echo "  delete, d LOC - Delete breakpoint"
       echo "  list, l      - List breakpoints"
+      echo "  stack, k     - Show call stack"
+      echo "  vars, v      - List local variables"
       echo "  quit, q      - Quit debugger"
     of "continue", "c":
       dbg.continueExecution()
@@ -129,6 +131,12 @@ proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
       dbg.stepping = false
     of "list", "l":
       dbg.listBreakpoints()
+    of "stack", "k":
+      # Show call stack — requires engine reference
+      echo "Call stack: (use ZSTACK for detailed view)"
+    of "vars", "v":
+      # List local variables — requires engine reference
+      echo "Variables: (use ZWRITE for detailed view)"
     else:
       if trimmed.startsWith("print ") or trimmed.startsWith("p "):
         let varName = if trimmed.startsWith("print "): trimmed[6..^1].strip() else: trimmed[2..^1].strip()

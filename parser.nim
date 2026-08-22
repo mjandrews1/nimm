@@ -202,7 +202,7 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZSTEP") or equiWord(w, "ZCONTINUE") or equiWord(w, "ZREMOVE") or
     equiWord(w, "ZEDIT") or equiWord(w, "ZE") or equiWord(w, "ZLINK") or
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
-    equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD")
+    equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   of 't':
     equiWord(w, "TSTART") or equiWord(w, "T") or
@@ -1038,6 +1038,8 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       deallocRefs = parseExprList(p)
     cmd = Cmd(kind: cZdeallocate, zdeallocRefs: deallocRefs)
+  of "ZSTACK":
+    cmd = Cmd(kind: cZstack)
   of "OPEN", "O":
     # OPEN channel:(file:mode)[:timeout]
     let channelExpr = p.parseExpr()

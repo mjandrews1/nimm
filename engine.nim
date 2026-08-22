@@ -14,6 +14,8 @@ import runtime
 import parser
 import special_vars
 import debugger
+import inspector
+import debugger
 import jobs
 import value
 
@@ -31,6 +33,8 @@ type
     evaluator*: ptr Evaluator
     runtime*: ptr Runtime
     debugger*: Debugger
+    inspector*: Inspector
+    callStack*: seq[StackFrame]
     output*: string
     testValue*: bool
     quitAll*: bool  # Set by top-level QUIT: unwind everything and halt
@@ -45,6 +49,8 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.evaluator = evaluator.addr
   result.runtime = runtime.addr
   result.debugger = newDebugger()
+  result.inspector = newInspector()
+  result.callStack = @[]
   result.output = ""
   result.testValue = false
   result.currentChannel = 0
@@ -114,6 +120,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
     let cmd = cmdNode.cmd
     if cmd == nil: continue
 
+    # Record command execution for introspection
+    eng.inspector.recordCommand()
+
     try:
       case cmd.kind
       of CmdKind.cSet:
@@ -131,6 +140,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 eng.globals[].set(item.target.tname, @[], value)
               else:
                 eng.globals[].setLocalDirect(item.target.tname, value)
+              eng.inspector.recordVariableAccess(item.target.tname, value)
             else:
               var subs: seq[string] = @[]
               for sub in item.target.tsubs:
@@ -364,6 +374,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                         else:
                           eng.runtime[].currentRoutine
           if routine.len > 0 and label.len > 0:
+            # Push call stack frame for introspection
+            let frame = StackFrame(routine: routine, label: label, line: 0, variables: initTable[string, string]())
+            eng.callStack.add(frame)
             pushStack()
             eng.doDepth.inc
             var offset = 0
@@ -379,6 +392,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               offset.inc
             eng.doDepth.dec
             popStack()
+            # Pop call stack frame
+            if eng.callStack.len > 0:
+              discard eng.callStack.pop()
 
       of CmdKind.cDoInline:
         # Inline DO: execute the body directly
@@ -558,11 +574,12 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         eng.testValue = true
 
       of CmdKind.cBreak:
-        # BREAK - Enter debugger
-        # Note: Full debugger integration requires refactoring
-        # For now, just print debugger info
-        eng.writeln("BREAK: Debugger not available in this build")
-        eng.writeln("Use ZBREAK, ZSTEP, ZCONTINUE for debugging")
+        # BREAK — Enter interactive debugger
+        eng.writeln("BREAK")
+        # Note: Full debugger integration requires refactoring the evalProc
+        # closure capture. For now, enter step mode.
+        eng.debugger.setStepMode("into")
+        eng.writeln("Stepping enabled. Use ZCONTINUE to resume.")
 
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:
@@ -749,6 +766,15 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cZdeallocate:
         # ZDEALLOCATE ^global — Deallocate global storage (no-op in nimm)
         discard
+
+      of CmdKind.cZstack:
+        # ZSTACK — Display call stack for introspection
+        eng.writeln("Call Stack:")
+        if eng.callStack.len == 0:
+          eng.writeln("  (empty)")
+        else:
+          for i, frame in eng.callStack:
+            eng.writeln("  " & $i & ": " & frame.routine & ":" & frame.label)
 
       of CmdKind.cTstart:
         # TSTART — begin transaction (§11.1)

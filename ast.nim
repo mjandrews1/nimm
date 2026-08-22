@@ -390,7 +390,8 @@ type
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
     cZload, cZstep, cZcontinue, cZremove,
     cZedit, cZlink, cView, cZallocate, cZdeallocate,
-    cTstart, cTcommit, cTrollback
+    cTstart, cTcommit, cTrollback,
+    cZstack
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -516,4 +517,6 @@ type
     of cTcommit:
       discard
     of cTrollback:
+      discard
+    of cZstack:
       discard
