@@ -11,7 +11,7 @@
 
 const MaxParseIterations = 10000  # Prevent livelock on malformed input
 
-## blockSep — merged-block boundary marker (#281)
+## blockSep — merged-block boundary marker (#282)
 ##
 ## The routine loader (runtime.nim mergeDotContinuations) joins dot-
 ## continuation lines into one logical line. Without a boundary marker, a
@@ -748,7 +748,7 @@ proc parseMergePairs(p: var Parser): seq[(string, string)]
 proc parseLine*(p: var Parser, inBody: bool = false): Line =
   ## When inBody is true (FOR/ELSE/inline-DO bodies built from merged dot
   ## continuations), a single BlockSep token terminates this body and is
-  ## consumed (#281). At top level, stray BlockSeps are skipped so trailing
+  ## consumed (#282). At top level, stray BlockSeps are skipped so trailing
   ## commands after closed blocks still run.
   result = Line(cmds: @[])
   var iterations = 0

@@ -134,7 +134,7 @@ proc filterRoutineLines(lines: var seq[string]) =
 proc isBlockOpener(content: string): bool =
   ## True when a (dot-stripped, comment-stripped) line opens an implicit
   ## block that source-line boundaries must close: IF/ELSE/FOR always scope
-  ## to end-of-line or dot-block; DO only when bare (#281).
+  ## to end-of-line or dot-block; DO only when bare (#282).
   var i = 0
   while i < content.len and content[i] in {' ', '\t'}: inc i
   var w = ""
@@ -172,7 +172,7 @@ proc firstCommandWord(content: string): string =
 proc trailingBareDo(content: string): bool =
   ## True when the line's final token is a bare DO/D (optionally carrying a
   ## leading postcondition like "DO:X>5"), making any dot-children an
-  ## inline-DO body that captures one extra parser frame (#281).
+  ## inline-DO body that captures one extra parser frame (#282).
   var i = content.len
   while i > 0 and content[i-1] in {' ', '\t'}: dec i
   if i == 0: return false
@@ -188,7 +188,7 @@ proc trailingBareDo(content: string): bool =
 
 proc appendLineWithMarkers(outp: var string, content, childBlob: string) =
   ## Append one logical line (its own text + merged children) to outp,
-  ## inserting one blockSep per parser frame the line opens (#281).
+  ## inserting one blockSep per parser frame the line opens (#282).
   if outp.len > 0: outp.add(" ")
   outp.add(content)
   if childBlob.len > 0:
@@ -206,7 +206,7 @@ proc appendLineWithMarkers(outp: var string, content, childBlob: string) =
 proc mergeGroup(lines: seq[string], startIdx: int, depth: int, outp: var string): int =
   ## Render all sibling lines at `depth` (and their nested children) into
   ## outp, inserting blockSep markers so each parsed body closes exactly at
-  ## its source-line boundary (#281). Returns the next unconsumed index.
+  ## its source-line boundary (#282). Returns the next unconsumed index.
   ##
   ## Marker rules, mirroring parser frame semantics:
   ##   - A line starting with IF/ELSE/FOR opens one body frame -> one marker
@@ -234,7 +234,7 @@ proc mergeGroup(lines: seq[string], startIdx: int, depth: int, outp: var string)
 
 proc mergeDotContinuations(lines: var seq[string]) =
   ## Merge dot-continuation lines into parent lines, preserving block
-  ## structure with parser.blockSep markers (#281).
+  ## structure with parser.blockSep markers (#282).
   ##
   ## The old plain space-join let a mid-block IF/FOR swallow its trailing
   ## siblings as part of its own rest-of-line body. Now each logical group
@@ -281,7 +281,7 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
   
   # Strip comments and blank lines FIRST — mergeDotContinuations needs
   # clean source lines so comment text can't swallow blockSep markers
-  # and blank lines can't break depth tracking (#281)
+  # and blank lines can't break depth tracking (#282)
   filterRoutineLines(routine.lines)
 
   # Merge dot-continuation lines
@@ -300,7 +300,7 @@ proc loadRoutineFromString*(rt: var Runtime, name: string, code: string): Routin
   for line in code.splitLines():
     routine.lines.add(line.strip(trailing = true))
   
-  # Same ordering as loadRoutine: filter, then merge (#281)
+  # Same ordering as loadRoutine: filter, then merge (#282)
   filterRoutineLines(routine.lines)
   mergeDotContinuations(routine.lines)
   
