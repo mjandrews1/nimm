@@ -354,7 +354,7 @@ proc tstart*(g: var Globals) =
 proc tcommit*(g: var Globals) =
   ## TCOMMIT — commit current transaction level (§11.2).
   ## At level > 0: merge buffer into parent level.
-  ## At level > 0 after merge becomes level 0: persist to store.
+  ## At level 0: persist to store (LMDB batch or in-memory).
   if g.txn.levels.len == 0: return
   let current = g.txn.levels.pop()
   if g.txn.levels.len > 0:
@@ -365,10 +365,26 @@ proc tcommit*(g: var Globals) =
       g.txn.levels[^1].kills.incl(k)
       g.txn.levels[^1].writes.del(k)
   else:
-    for k, v in current.writes:
-      g.memGlobals[k] = v
-    for k in current.kills:
-      g.memGlobals.del(k)
+    if g.dbPath.len > 0:
+      # LMDB: batch all writes/kills in a single transaction for atomicity
+      var puts: seq[(string, seq[string], string)] = @[]
+      for k, v in current.writes:
+        let (name, subs) = decodeKey(k)
+        puts.add((name, subs, v))
+      if puts.len > 0:
+        g.globals.batchPut(puts)
+      var dels: seq[(string, seq[string])] = @[]
+      for k in current.kills:
+        let (name, subs) = decodeKey(k)
+        dels.add((name, subs))
+      if dels.len > 0:
+        g.globals.batchDelete(dels)
+    else:
+      # In-memory: direct write
+      for k, v in current.writes:
+        g.memGlobals[k] = v
+      for k in current.kills:
+        g.memGlobals.del(k)
 
 proc trollback*(g: var Globals) =
   ## TROLLBACK — discard current transaction level (§11.3).

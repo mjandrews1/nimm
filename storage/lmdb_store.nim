@@ -133,7 +133,7 @@ proc delete*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
     mdbKey.mvData = cast[pointer](unsafeAddr key[0])
     
     rc = del(txn, store.dbi, addr mdbKey, nil)
-    if rc != SUCCESS:
+    if rc != SUCCESS and rc != NOTFOUND:
       abort(txn)
       raise newException(IOError, "LMDB delete failed")
     
@@ -194,7 +194,7 @@ proc batchDelete*(store: var LmdbStore, keys: seq[(string, seq[string])]) =
       mdbKey.mvData = cast[pointer](unsafeAddr key[0])
       
       rc = del(txn, store.dbi, addr mdbKey, nil)
-      if rc != SUCCESS:
+      if rc != SUCCESS and rc != NOTFOUND:
         abort(txn)
         raise newException(IOError, "LMDB batch delete failed")
     
