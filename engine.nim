@@ -388,9 +388,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let label = cmd.gotoExpr.vname
           let routine = eng.runtime[].currentRoutine
           if routine.len > 0:
-            let gotLine = eng.runtime[].getLine(routine, label, 0)
-            if gotLine.len > 0:
-              result = eng.execute(eng.cachedParseLine(stripLabel(gotLine)), depth + 1)
+            # §7.2.4: GOTO transfers control to the label; execution
+            # continues forward until QUIT or end of routine (#287).
+            var offset = 0
+            while true:
+              let gotLine = eng.runtime[].getLine(routine, label, offset)
+              if gotLine.len == 0:
+                break
+              let parsed = eng.cachedParseLine(stripLabel(gotLine))
+              if parsed != nil and parsed.cmds.len > 0:
+                result = eng.execute(parsed, depth + 1)
+                if result == "QUIT" or eng.quitAll:
+                  break
+              offset.inc
 
       of CmdKind.cRead:
         for varExpr in cmd.readVars:
@@ -674,9 +684,17 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           let label = cmd.zgotoExpr.vname
           let routine = eng.runtime[].currentRoutine
           if routine.len > 0:
-            let gotLine = eng.runtime[].getLine(routine, label, 0)
-            if gotLine.len > 0:
-              result = eng.execute(eng.cachedParseLine(stripLabel(gotLine)), depth + 1)
+            var offset = 0
+            while true:
+              let gotLine = eng.runtime[].getLine(routine, label, offset)
+              if gotLine.len == 0:
+                break
+              let parsed = eng.cachedParseLine(stripLabel(gotLine))
+              if parsed != nil and parsed.cmds.len > 0:
+                result = eng.execute(parsed, depth + 1)
+                if result == "QUIT" or eng.quitAll:
+                  break
+              offset.inc
 
       of CmdKind.cZquit:
         # ZQUIT — Exit with value (Z-version of QUIT)
