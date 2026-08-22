@@ -314,6 +314,14 @@ TESTS = [
     ("GLB_GET_INTERIOR", 'KILL ^Gi SET ^Gi(1,2)="v" WRITE $GET(^Gi(1))',"","Globals","9.6",    "interior node has no value"),
     ("GLB_ORDER_ACROSS", 'SET ^Ga(1)="a",^Ga(2)="b" KILL ^Ga(1) WRITE $ORDER(^Ga(""))',"2","Globals","9.9","order reflects kills"),
 
+    # ── TRANSACTION: TSTART/TCOMMIT/TROLLBACK (§11) ──
+    ("TXN_COMMIT",       'KILL ^Txa TSTART SET ^Txa(1)="x" TCOMMIT WRITE $DATA(^Txa(1))',"1","Transaction","11.2","commit persists"),
+    ("TXN_ROLLBACK",     'KILL ^Txb TSTART SET ^Txb(1)="x" TROLLBACK WRITE $DATA(^Txb(1))',"0","Transaction","11.3","rollback discards"),
+    ("TXN_TLEVEL",       'WRITE $TLEVEL,"." TSTART WRITE $TLEVEL,"." TCOMMIT WRITE $TLEVEL',"0.1.0","Transaction","11.2","$TLEVEL tracks nesting"),
+    ("TXN_NESTED",       'KILL ^Txc SET ^Txc=99 TSTART SET ^Txc=1 TSTART SET ^Txc=2 TROLLBACK WRITE ^Txc,"." TCOMMIT WRITE ^Txc',"1.1","Transaction","11.2","inner rollback preserves outer"),
+    ("TXN_READ_OWN",     'KILL ^Txd TSTART SET ^Txd="v" WRITE ^Txd TCOMMIT',"v","Transaction","11.1","read-your-own-writes"),
+    ("TXN_KILL_ROLLBACK",'KILL ^Txe SET ^Txe=1 TSTART KILL ^Txe TROLLBACK WRITE $DATA(^Txe)',"1","Transaction","11.3","kill rolled back"),
+
     # ── SUSPECTBUGS: explicit regression tests for suspected bugs found
     #    during cross-implementation investigation. Expectations derived
     #    from the standard text, not from any implementation.

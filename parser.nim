@@ -204,6 +204,10 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
+  of 't':
+    equiWord(w, "TSTART") or equiWord(w, "T") or
+    equiWord(w, "TCOMMIT") or equiWord(w, "TC") or
+    equiWord(w, "TROLLBACK") or equiWord(w, "TRO")
   else: false
 
 proc isCommandWord(p: Parser, w: string): bool =
@@ -1070,6 +1074,15 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cClose, closeChannel: channelExpr)
   of "YOPEN", "YLISTEN", "YREAD", "YWRITE", "YCLOSE":
     cmd = Cmd(kind: cNoop)
+  of "TSTART", "T":
+    var tstartExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      tstartExpr = p.parseExpr()
+    cmd = Cmd(kind: cTstart, tstartExpr: tstartExpr)
+  of "TCOMMIT", "TC":
+    cmd = Cmd(kind: cTcommit)
+  of "TROLLBACK", "TRO":
+    cmd = Cmd(kind: cTrollback)
   else:
     cmd = Cmd(kind: cBreak)
   CommandNode(postcond: postcond, cmd: cmd)

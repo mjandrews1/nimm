@@ -750,6 +750,18 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # ZDEALLOCATE ^global — Deallocate global storage (no-op in nimm)
         discard
 
+      of CmdKind.cTstart:
+        # TSTART — begin transaction (§11.1)
+        eng.globals[].tstart()
+
+      of CmdKind.cTcommit:
+        # TCOMMIT — commit transaction (§11.2)
+        eng.globals[].tcommit()
+
+      of CmdKind.cTrollback:
+        # TROLLBACK — rollback transaction (§11.3)
+        eng.globals[].trollback()
+
       else:
         discard
 
@@ -758,7 +770,11 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       let errorMsg = getCurrentExceptionMsg()
       let errorCode = "M9999:" & errorMsg
       eng.globals[].setSpecialVar("$ECODE", errorCode)
-      
+
+      # §11.4: implicit rollback on unhandled error inside transaction
+      if eng.globals[].inTransaction():
+        eng.globals[].trollback()
+
       # Check if $ETRAP is set
       let etrap = eng.globals[].getSpecialVar("$ETRAP")
       if etrap.len > 0:
@@ -768,7 +784,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.output.add("Error in $ETRAP: " & getCurrentExceptionMsg() & "\n")
       else:
         eng.output.add("Error: " & errorMsg & "\n")
-      
+
       return "Error"
 
 proc parseLine*(code: string): Line =

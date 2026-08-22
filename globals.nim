@@ -12,6 +12,16 @@ type
   SpecialVarGetter* = proc(): string
   SpecialVarSetter* = proc(val: string)
 
+  TransactionLevel* = object
+    ## One level of transaction nesting — buffers writes until TCOMMIT.
+    writes*: Table[string, string]   # key → value (buffered SET/MERGE)
+    kills*: HashSet[string]          # keys explicitly KILLed in this level
+
+  TransactionState* = object
+    ## Transaction processing state (§11).
+    levels*: seq[TransactionLevel]   # stack of active transaction levels
+    trestart*: int                   # $TRESTART counter
+
   Globals* = object
     ## Variable storage with local/global separation and scoping
     scopes*: seq[Table[string, string]]  # Stack of local scopes (flat key -> value)
@@ -24,6 +34,7 @@ type
     nakedSubs*: seq[string]               # Last subscripts for naked references
     scopeShared*: seq[bool]               # True if scope shares parent (COW pending)
     heldLocks*: HashSet[string]           # Lock names held by this process (#278)
+    txn*: TransactionState                # Transaction processing state (§11)
 
 proc makeKey(name: string, subs: seq[string]): string =
   ## Create flat key for storage (pre-computed exact size)
@@ -290,26 +301,79 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
 
 # --- Unified get/set (auto-detect local vs global) ---
 
+proc inTransaction*(g: Globals): bool =
+  g.txn.levels.len > 0
+
 proc get*(g: Globals, name: string, subs: seq[string] = @[]): string =
-  ## Get variable value (auto-detect local vs global)
+  ## Get variable value (auto-detect local vs global).
+  ## Checks transaction overlay first for globals (§11 read-your-own-writes).
   if name.len > 0 and name[0] == '^':
+    if g.inTransaction():
+      let key = makeKey(name, subs)
+      for i in countdown(g.txn.levels.len - 1, 0):
+        if key in g.txn.levels[i].writes:
+          return g.txn.levels[i].writes[key]
+        if key in g.txn.levels[i].kills:
+          return ""
     return g.getGlobal(name, subs)
   else:
     return g.getLocal(name, subs)
 
 proc set*(g: var Globals, name: string, subs: seq[string], value: string) =
-  ## Set variable value (auto-detect local vs global)
+  ## Set variable value (auto-detect local vs global).
+  ## Buffers in transaction overlay when active (§11).
   if name.len > 0 and name[0] == '^':
-    g.setGlobal(name, subs, value)
+    if g.inTransaction():
+      let key = makeKey(name, subs)
+      g.txn.levels[^1].writes[key] = value
+      g.txn.levels[^1].kills.excl(key)
+    else:
+      g.setGlobal(name, subs, value)
   else:
     g.setLocal(name, subs, value)
 
 proc kill*(g: var Globals, name: string, subs: seq[string] = @[]) =
-  ## Kill variable (auto-detect local vs global)
+  ## Kill variable (auto-detect local vs global).
+  ## Buffers in transaction overlay when active (§11).
   if name.len > 0 and name[0] == '^':
-    g.killGlobal(name, subs)
+    if g.inTransaction():
+      let key = makeKey(name, subs)
+      g.txn.levels[^1].writes.del(key)
+      g.txn.levels[^1].kills.incl(key)
+    else:
+      g.killGlobal(name, subs)
   else:
     g.killLocal(name, subs)
+
+# --- Transaction overlay (§11) ---
+
+proc tstart*(g: var Globals) =
+  ## TSTART — push a new transaction level (§11.1).
+  g.txn.levels.add(TransactionLevel())
+
+proc tcommit*(g: var Globals) =
+  ## TCOMMIT — commit current transaction level (§11.2).
+  ## At level > 0: merge buffer into parent level.
+  ## At level > 0 after merge becomes level 0: persist to store.
+  if g.txn.levels.len == 0: return
+  let current = g.txn.levels.pop()
+  if g.txn.levels.len > 0:
+    for k, v in current.writes:
+      g.txn.levels[^1].writes[k] = v
+      g.txn.levels[^1].kills.excl(k)
+    for k in current.kills:
+      g.txn.levels[^1].kills.incl(k)
+      g.txn.levels[^1].writes.del(k)
+  else:
+    for k, v in current.writes:
+      g.memGlobals[k] = v
+    for k in current.kills:
+      g.memGlobals.del(k)
+
+proc trollback*(g: var Globals) =
+  ## TROLLBACK — discard current transaction level (§11.3).
+  if g.txn.levels.len == 0: return
+  discard g.txn.levels.pop()
 
 proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool): string =
   ## $ORDER over the in-memory global store

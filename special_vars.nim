@@ -18,6 +18,7 @@ var
   principal: string = "0"
   quit: string = "0"
   reference: string = ""
+  globalsRef: ptr Globals = nil  # For $TLEVEL/$TRESTART access
   test: string = "1"
   x: int = 0
   y: int = 0
@@ -215,8 +216,12 @@ proc advanceDevicePos*(s: string) =
       inc(x)
 
 proc getEstack(): string = return "0"
-proc getTlevel(): string = return "0"
-proc getTrestart(): string = return "0"
+proc getTlevel(): string =
+  if globalsRef != nil: return $globalsRef[].txn.levels.len
+  return "0"
+proc getTrestart(): string =
+  if globalsRef != nil: return $globalsRef[].txn.trestart
+  return "0"
 
 proc getZeof(): string =
   return zeof
@@ -247,6 +252,7 @@ proc getZversion(): string =
 
 proc registerAllSpecialVars*(g: var Globals) =
   ## Register all special variables with the globals system
+  globalsRef = addr g
   g.registerSpecialVar("$DEVICE", getDevice, setDevice)
   g.registerSpecialVar("$ECODE", getEcode, setEcode)
   g.registerSpecialVar("$ESTACK", getEstack)

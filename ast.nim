@@ -389,7 +389,8 @@ type
     cZwrite, cZkill, cOpen, cUse, cClose, cRead, cJob,
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
     cZload, cZstep, cZcontinue, cZremove,
-    cZedit, cZlink, cView, cZallocate, cZdeallocate
+    cZedit, cZlink, cView, cZallocate, cZdeallocate,
+    cTstart, cTcommit, cTrollback
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -510,3 +511,9 @@ type
       zallocRefs*: seq[Expr]
     of cZdeallocate:
       zdeallocRefs*: seq[Expr]
+    of cTstart:
+      tstartExpr*: Expr           # Optional timeout/restart expression
+    of cTcommit:
+      discard
+    of cTrollback:
+      discard
