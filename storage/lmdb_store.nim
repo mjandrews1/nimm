@@ -12,7 +12,6 @@ type
     dbi: Dbi
     path: string
     mapSize: int64
-    readTxn: ptr Txn    # Persistent read transaction (reused across reads)
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
   ## Initialize LMDB store
@@ -35,7 +34,7 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
   if rc != SUCCESS:
     raise newException(IOError, "LMDB set_mapsize failed: " & $rc)
   
-  rc = envOpen(store.env, path, NOSUBDIR, 0o664)
+  rc = envOpen(store.env, path, NOSUBDIR or NOTLS, 0o664)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB env_open failed: " & path)
   
@@ -53,43 +52,32 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
   rc = txnCommit(txn)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB txn_commit failed")
-  
-  # Open persistent read transaction
-  rc = txnBegin(store.env, nil, RDONLY, addr store.readTxn)
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB read txn_begin failed")
 
 proc close*(store: var LmdbStore) =
   ## Close LMDB store
   if store.env != nil:
-    if store.readTxn != nil:
-      abort(store.readTxn)
-      store.readTxn = nil
     dbiClose(store.env, store.dbi)
     envClose(store.env)
     store.env = nil
 
-proc renewReadTxn*(store: var LmdbStore) =
-  ## Reset the persistent read transaction (call after writes)
-  if store.readTxn != nil:
-    abort(store.readTxn)
-  var rc = txnBegin(store.env, nil, RDONLY, addr store.readTxn)
-  if rc != SUCCESS:
-    store.readTxn = nil
-
 proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
   ## Get value for global[sub1,sub2,...]
-  if store.readTxn == nil: return ""
+  ## Creates a new read transaction per operation (MDB_NOTLS mode).
   let key = encodeKey(global, subs)
+  
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return ""
   
   var mdbKey: Val
   mdbKey.mvSize = cast[uint](key.len)
   mdbKey.mvData = cast[pointer](unsafeAddr key[0])
   
   var mdbVal: Val
-  let rc = get(store.readTxn, store.dbi, addr mdbKey, addr mdbVal)
+  rc = get(readTxn, store.dbi, addr mdbKey, addr mdbVal)
   
   if rc != SUCCESS:
+    abort(readTxn)
     return ""
   
   if mdbVal.mvSize > 0:
@@ -97,6 +85,7 @@ proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
     copyMem(addr result[0], mdbVal.mvData, mdbVal.mvSize)
   else:
     result = ""
+  abort(readTxn)
 
 proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string) =
   ## Set value for global[sub1,sub2,...]
@@ -125,9 +114,6 @@ proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
-    
-    # Reset read transaction so it sees the new data
-    store.renewReadTxn()
   except:
     abort(txn)
     raise
@@ -154,9 +140,6 @@ proc delete*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
-    
-    # Reset read transaction so it sees the deletion
-    store.renewReadTxn()
   except:
     abort(txn)
     raise
@@ -192,7 +175,6 @@ proc batchPut*(store: var LmdbStore, items: seq[(string, seq[string], string)]) 
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
-    store.renewReadTxn()
   except:
     abort(txn)
     raise
@@ -219,14 +201,13 @@ proc batchDelete*(store: var LmdbStore, keys: seq[(string, seq[string])]) =
     rc = txnCommit(txn)
     if rc != SUCCESS:
       raise newException(IOError, "LMDB txn_commit failed")
-    store.renewReadTxn()
   except:
     abort(txn)
     raise
 
 proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
   ## Get next/previous key in LMDB (for $ORDER)
-  if store.readTxn == nil: return ""
+  ## Creates a new read transaction per operation (MDB_NOTLS mode).
   let prefix = encodeKey(global, subs)
   
   var parentPrefix = global
@@ -235,9 +216,14 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
     parentPrefix.add(subs[i])
   parentPrefix.add('\0')
   
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return ""
+  
   var cursor: LMDBCursor
-  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
+  rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
+    abort(readTxn)
     return ""
   
   # Position cursor at prefix
@@ -250,6 +236,7 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
+    abort(readTxn)
     return ""
   
   # Move to next/previous
@@ -260,6 +247,7 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
+    abort(readTxn)
     return ""
   
   # Decode the key from mdbKey
@@ -270,31 +258,40 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
+    abort(readTxn)
     return ""
   
   # Verify the key is at the same level (same number of subscripts)
   if decoded[1].len != subs.len:
     cursorClose(cursor)
+    abort(readTxn)
     return ""
   
   # Verify all subscripts except the last match (same parent)
   for i in 0..<subs.len - 1:
     if decoded[1][i] != subs[i]:
       cursorClose(cursor)
+      abort(readTxn)
       return ""
   
   # Return the last subscript (the next one at this level)
   cursorClose(cursor)
+  abort(readTxn)
   return decoded[1][^1]
 
 proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
   ## Get next/previous node in LMDB (for $QUERY)
-  if store.readTxn == nil: return @[]
+  ## Creates a new read transaction per operation (MDB_NOTLS mode).
   let prefix = encodeKey(global, subs)
   
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return @[]
+  
   var cursor: LMDBCursor
-  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
+  rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
+    abort(readTxn)
     return @[]
   
   # Position cursor at prefix
@@ -307,6 +304,7 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
+    abort(readTxn)
     return @[]
   
   # Move to next/previous
@@ -317,6 +315,7 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
+    abort(readTxn)
     return @[]
   
   # Decode the key from mdbKey
@@ -327,20 +326,27 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
+    abort(readTxn)
     return @[]
   
   # Return all subscripts
   cursorClose(cursor)
+  abort(readTxn)
   return decoded[1]
 
 proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[seq[string]] =
   ## List all subscripts under a given global[sub1,sub2,...]
-  if store.readTxn == nil: return @[]
+  ## Creates a new read transaction per operation (MDB_NOTLS mode).
   let prefix = encodeKey(global, subs)
   
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return @[]
+  
   var cursor: LMDBCursor
-  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
+  rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
+    abort(readTxn)
     return @[]
   
   # Position cursor at prefix
@@ -353,6 +359,7 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
   
   if rc != SUCCESS:
     cursorClose(cursor)
+    abort(readTxn)
     return @[]
   
   var result: seq[seq[string]] = @[]
@@ -378,15 +385,20 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
+  abort(readTxn)
   return result
 
 proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix
-  if store.readTxn == nil: return @[]
+  ## Creates a new read transaction per operation (MDB_NOTLS mode).
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return @[]
   
   var cursor: LMDBCursor
-  var rc = cursorOpen(store.readTxn, store.dbi, addr cursor)
+  rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
+    abort(readTxn)
     return @[]
   
   var mdbKey: Val
@@ -408,3 +420,4 @@ proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
+  abort(readTxn)
