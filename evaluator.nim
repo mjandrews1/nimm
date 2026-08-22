@@ -17,12 +17,14 @@ import data_structures
 import runtime
 import parser
 import lexer
+import inspector
 
 type
   Evaluator* = object
     ## Expression evaluator
     globals*: ptr Globals
     runtime*: ptr Runtime
+    inspector*: ptr Inspector
     mode*: string
 
 # Global storage for data structures
@@ -50,6 +52,10 @@ proc newEvaluator*(globals: var Globals, runtime: var Runtime, mode: string = "n
   result.globals = globals.addr
   result.runtime = runtime.addr
   result.mode = mode
+
+proc setInspector*(ev: var Evaluator, insp: var Inspector) =
+  ## Wire inspector to evaluator for function call tracking
+  ev.inspector = insp.addr
 
 proc eval*(ev: var Evaluator, expr: Expr): string
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string
@@ -405,6 +411,9 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
 
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   ## Call an intrinsic function
+  # Record function call for introspection
+  if ev.inspector != nil:
+    ev.inspector[].recordFunctionCall()
   case name
   of "ASCII", "A":
     if args.len < 1: return "-1"

@@ -60,10 +60,29 @@ run "Inspector records commands" 'SET X=1 W X' "1"
 printf 'ENTRY\n W $ESTACK\n D SUB\n W $ESTACK\n Q\nSUB\n W $ESTACK\n Q\n' > /tmp/test_estack.m
 run_routine "\$ESTACK tracks DO depth" /tmp/test_estack.m "DO ENTRY" "121"
 
+# ZSTATS shows runtime statistics
+run "ZSTATS shows stats" 'SET X=1 ZSTATS' "Commands executed:"
+
+# ZSTATS counts function calls
+run "ZSTATS counts function calls" 'W $L("abc") ZSTATS' "Function calls:"
+
+# ZVHISTORY shows variable access history
+run "ZVHISTORY shows history" 'SET A=1 SET B=2 ZVHISTORY' "Variable History"
+
+# ZVHISTORY shows variable values
+run "ZVHISTORY shows values" 'SET A=1 ZVHISTORY' 'A = "1"'
+
+# ZBREAK -L lists breakpoints (empty)
+run "ZBREAK -L lists breakpoints" 'ZBREAK "-L"' "No breakpoints set"
+
+# ZBREAK sets breakpoint
+printf 'ENTRY\n ZBREAK SUB\n Q\nSUB\n Q\n' > /tmp/test_zbreak.m
+run_routine "ZBREAK sets breakpoint" /tmp/test_zbreak.m "DO ENTRY" "Breakpoint set"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
 # Cleanup
-rm -f /tmp/test_zstack.m /tmp/test_estack.m
+rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m
 
 [ "$FAIL" -eq 0 ]

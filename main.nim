@@ -133,6 +133,7 @@ proc main() =
   var ev = newEvaluator(g, rt)
   var eng = newEngine(g, ev, rt)
   setDoDepthRef(eng.doDepth)
+  ev.setInspector(eng.inspector)
 
   # Detect if spawned by JOB command (child process mode)
   # Uses -p flag (preferred) or NIMM_PARENT_JOB env var (fallback)

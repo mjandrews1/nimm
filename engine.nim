@@ -123,6 +123,12 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
     # Record command execution for introspection
     eng.inspector.recordCommand()
 
+    # Check breakpoints — enter stepping mode if breakpoint hit
+    let routine = eng.runtime[].currentRoutine
+    if eng.debugger.shouldBreak(routine, 0):
+      eng.writeln("BREAK at " & routine)
+      eng.debugger.setStepMode("into")
+
     try:
       case cmd.kind
       of CmdKind.cSet:
@@ -672,12 +678,29 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.writeln("Removed: " & routineName)
 
       of CmdKind.cZbreak:
-        # ZBREAK label - Set breakpoint
-        if cmd.zbreakExpr != nil and cmd.zbreakExpr.kind == eVar:
-          let label = cmd.zbreakExpr.vname
+        # ZBREAK [label] — Set/remove/list breakpoints
+        if cmd.zbreakExpr != nil:
+          let arg = eng.evaluator[].eval(cmd.zbreakExpr)
           let routine = eng.runtime[].currentRoutine
-          if routine.len > 0:
-            eng.debugger.setBreakpoint(routine, 0)
+          if arg == "-L" or arg == "-l":
+            # List breakpoints
+            eng.debugger.listBreakpoints()
+          elif arg == "-C" or arg == "-c":
+            # Clear all breakpoints
+            eng.debugger.clearBreakpoints()
+          elif arg == "-N" or arg == "-n":
+            # Remove breakpoint at current routine
+            if routine.len > 0:
+              eng.debugger.removeBreakpoint(routine, 0)
+          elif arg.startsWith("-"):
+            eng.writeln("ZBREAK: Unknown option " & arg)
+          else:
+            # Set breakpoint at label
+            if routine.len > 0:
+              eng.debugger.setBreakpoint(routine, 0)
+        else:
+          # ZBREAK with no args — list breakpoints
+          eng.debugger.listBreakpoints()
 
       of CmdKind.cZstep:
         # ZSTEP [mode] - Single-step execution
@@ -775,6 +798,22 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         else:
           for i, frame in eng.callStack:
             eng.writeln("  " & $i & ": " & frame.routine & ":" & frame.label)
+
+      of CmdKind.cZstats:
+        # ZSTATS — Display runtime statistics for introspection
+        eng.inspector.updateStats()
+        eng.writeln(eng.inspector.formatStats())
+
+      of CmdKind.cZvhistory:
+        # ZVHISTORY — Display variable access history for introspection
+        let history = eng.inspector.getVariableHistory()
+        if history.len == 0:
+          eng.writeln("No variable accesses recorded")
+        else:
+          eng.writeln("Variable History (last " & $min(history.len, 20) & "):")
+          for i in max(0, history.len - 20)..<history.len:
+            let (name, value, ts) = history[i]
+            eng.writeln("  " & name & " = \"" & value & "\"")
 
       of CmdKind.cTstart:
         # TSTART — begin transaction (§11.1)
