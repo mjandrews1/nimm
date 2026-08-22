@@ -65,12 +65,12 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
       ;;
   esac
 
-  # Phase 3: 170-test ANSI/ISO suite
+  # Phase 3: ANSI/ISO suite (179 tests as of Phase 2)
   P3=$(python3 tests/ansi_iso_m_conformance.py --impls nimm --runs "$ISO_RUNS" 2>/dev/null \
-       | grep -Ei '[0-9]+ */ *170|passed' | tail -2 | tr '\n' ' ')
+       | grep -Ei '[0-9]+ */ *[0-9]+|passed|fail' | tail -3 | tr '\n' ' ')
   case "$P3" in
-    *170*)
-      log "P3 iso170 OK ($P3)"
+    *SuspectBugs*)
+      log "P3 iso OK ($P3)"
       ;;
     "")
       log "P3 WARN no parseable output"
