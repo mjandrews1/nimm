@@ -112,9 +112,11 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       ev.globals[].set(varName, @[], formatNumber(newVal))
       return formatNumber(newVal)
     # Special handling for $GET — needs variable name, not value.
-    # ISO §8.4.2: returns the node's value, or "0" when the node has no
-    # value (or the caller's default). Subscripts must be honored —
-    # $GET(^G(1)) tests node ^G(1), never the ^G root (#281).
+    # ISO §8.4.2: returns the node's value if defined, else the caller's
+    # default, else the empty string. A node with descendants but no own
+    # value is undefined-for-value purposes (#286; "0" is a $DATA code).
+    # Subscripts must be honored — $GET(^G(1)) tests node ^G(1), never
+    # the ^G root (#281).
     if expr.fname in ["GET", "G"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
@@ -126,7 +128,7 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       let val = ev.globals[].get(varName, subs)
       if val.len > 0: return val
       if expr.fargs.len > 1: return ev.eval(expr.fargs[1])
-      return "0"
+      return ""
     # Special handling for $DATA — needs variable name, not value
     if expr.fname in ["DATA", "D"]:
       if expr.fargs.len < 1: return ""
@@ -280,38 +282,30 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       return "0"
     let left = ev.eval(expr.left)
     let right = ev.eval(expr.right)
+    # §2.2.2: operands coerce by longest leading numeric prefix — strict
+    # parseFloat discarded whole expressions on any non-numeric operand (#284).
     case expr.op
     of bAdd:
-      try: return formatNumber(parseFloat(left) + parseFloat(right))
-      except: return "0"
+      return formatNumber(numPrefix(left) + numPrefix(right))
     of bSub:
-      try: return formatNumber(parseFloat(left) - parseFloat(right))
-      except: return "0"
+      return formatNumber(numPrefix(left) - numPrefix(right))
     of bMul:
-      try: return formatNumber(parseFloat(left) * parseFloat(right))
-      except: return "0"
+      return formatNumber(numPrefix(left) * numPrefix(right))
     of bDiv:
-      try:
-        let r = parseFloat(right)
-        if r == 0.0: return "0"
-        return formatNumber(parseFloat(left) / r)
-      except: return "0"
+      let r = numPrefix(right)
+      if r == 0.0: return "0"
+      return formatNumber(numPrefix(left) / r)
     of bIntDiv:
-      try:
-        let r = parseFloat(right)
-        if r == 0.0: return "0"
-        return formatNumber(float(int(parseFloat(left) / r)))
-      except: return "0"
+      let r = numPrefix(right)
+      if r == 0.0: return "0"
+      return formatNumber(float(int(numPrefix(left) / r)))
     of bMod:
-      try:
-        let r = parseFloat(right)
-        if r == 0.0: return "0"
-        let l = parseFloat(left)
-        return formatNumber(l - r * floor(l / r))
-      except: return "0"
+      let r = numPrefix(right)
+      if r == 0.0: return "0"
+      let l = numPrefix(left)
+      return formatNumber(l - r * floor(l / r))
     of bPow:
-      try: return formatNumber(pow(parseFloat(left), parseFloat(right)))
-      except: return "0"
+      return formatNumber(pow(numPrefix(left), numPrefix(right)))
     of bConcat:
       return left & right
     of bEql:
@@ -473,13 +467,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       # string unchanged rather than ISO-style left-justify.
       return s
     if args.len > 2:
+      # §9.7: decimals present → convert to numeric first ("zz9" → 0.0) (#285)
       let precision = parseInt(args[2])
-      try:
-        let num = parseFloat(s)
-        let formatted = formatFloat(num, ffDecimal, precision)
-        return formatted.align(width)
-      except:
-        return s.align(width)
+      let formatted = formatFloat(numPrefix(s), ffDecimal, precision)
+      return formatted.align(width)
     else:
       return s.align(width)
   of "LENGTH", "L":

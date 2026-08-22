@@ -129,6 +129,8 @@ TESTS = [
     ("ARITH_UNARY_POW",  'WRITE -2**2',                  "4",    "Arith",     "8.2",   "unary binds tighter: (-2)**2"),
     ("ARITH_MIXED",      'WRITE 20\\3*2',                "12",   "Arith",     "8.2",   "(20\\3)*2"),
     ("ARITH_UNARY_CHAIN",'WRITE -+-3',                   "3",    "Arith",     "8.2",   "stacked unary operators"),
+    ("ARITH_COERCE_NONNUM", 'WRITE 7-"xyz"',             "7",    "Arith",     "2.2.2", "non-numeric operand coerces to 0 (#284)"),
+    ("ARITH_COERCE_PREFIX", 'WRITE 10-"7abc"',           "3",    "Arith",     "2.2.2", "leading numeric prefix used (#284)"),
 
     # ── COMPARE: numeric vs string comparison rules (§8.3) ──
     ("CMP_NUMERIC_STR",  'WRITE 5>"10"',                 "0",    "Compare",   "8.3",   "both numeric: 5>10 false"),
@@ -212,6 +214,7 @@ TESTS = [
     ("JUS_WIDTH",        'WRITE "["_$JUSTIFY(42,6)_"]"', "[    42]","FnFormat","9.7",  "right-justified width"),
     ("JUS_NEG",          'WRITE "["_$JUSTIFY(-3.2,6)_"]"',"[  -3.2]","FnFormat","9.7", "negative right-justified"),
     ("JUS_DECIMALS",     'WRITE $JUSTIFY(3.146,0,2)',    "3.15", "FnFormat",  "9.7",   "rounds to N decimals"),
+    ("JUS_DEC_NONNUM",   'WRITE "["_$JUSTIFY("zz9",9,1)_"]"', "[      0.0]", "FnFormat", "9.7", "decimals arg forces numeric coercion (#285)"),
     ("REV_STRING",       'WRITE $REVERSE("ABC")',        "CBA",  "FnFormat",  "9.15",  "reverse characters"),
     ("TRANS_MAP",        'WRITE $TRANSLATE("HELLO","EL","IP")',"HIPPO","FnFormat","9.16","char mapping"),
     ("TRANS_DELETE",     'WRITE $TRANSLATE("ABC","BC","B")',  "AB","FnFormat","9.16", "unmapped old-chars deleted"),
