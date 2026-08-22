@@ -168,7 +168,9 @@ proc equiWord(a, b: string): bool {.inline.} =
       return false
   return true
 
-proc isCommandWord(p: Parser, w: string): bool =
+proc isCommandKeyword*(w: string): bool =
+  ## Standalone §7 command-word test — no parser state required. Shared by
+  ## Parser.isCommandWord and runtime.stripLabel (#283).
   if w.len == 0: return false
   let c = w[0].toLowerAscii()
   case c
@@ -196,7 +198,6 @@ proc isCommandWord(p: Parser, w: string): bool =
   of 'z':
     equiWord(w, "ZWRITE") or equiWord(w, "ZKILL") or equiWord(w, "ZBREAK") or
     equiWord(w, "ZGOTO") or equiWord(w, "ZPRINT") or equiWord(w, "ZQUIT") or
-    equiWord(w, "ZSAVE") or equiWord(w, "ZSYSTEM") or equiWord(w, "ZHALT") or
     equiWord(w, "ZMESSAGE") or equiWord(w, "ZTRAP") or equiWord(w, "ZLOAD") or
     equiWord(w, "ZSTEP") or equiWord(w, "ZCONTINUE") or equiWord(w, "ZREMOVE") or
     equiWord(w, "ZEDIT") or equiWord(w, "ZE") or equiWord(w, "ZLINK") or
@@ -204,6 +205,9 @@ proc isCommandWord(p: Parser, w: string): bool =
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   else: false
+
+proc isCommandWord(p: Parser, w: string): bool =
+  isCommandKeyword(w)
 
 ## atCommandPos — Test if Current Token Starts a Command
 ##

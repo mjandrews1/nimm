@@ -104,6 +104,38 @@ proc parseLabels(routine: var Routine) =
           let label = trimmed[0..<labelEnd].toUpperAscii()
           routine.labels[label] = i
 
+proc stripLabel*(line: string): string =
+  ## Strip a leading entry label from a stored routine line for execution
+  ## (§7.1). Stored lines keep their label verbatim so $TEXT stays exact;
+  ## feeding the label token to the command parser instead makes a labeled
+  ## block opener parse as an empty line, so the whole block never runs (#283).
+  ##
+  ## A leading token counts as a label only if it matches label syntax
+  ## (letter/%-led identifier, or unsigned integer), terminates at
+  ## whitespace or end-of-line, and is NOT itself a command keyword —
+  ## "SET X=1" keeps its command; "LOOP FOR I=1:1:3 DO" drops "LOOP".
+  ## (Labels that spell a reserved command word are unrepresentable here,
+  ## matching standard practice.)
+  var i = 0
+  while i < line.len and line[i] in {' ', '\t'}: inc i
+  if i >= line.len: return line
+  var tok = ""
+  if line[i] in {'A'..'Z', 'a'..'z', '%'}:
+    while i < line.len and line[i] in {'A'..'Z', 'a'..'z', '0'..'9', '%'}:
+      tok.add(line[i]); inc i
+  elif line[i] in {'0'..'9'}:
+    # Numeric entry label (§7.1)
+    while i < line.len and line[i] in {'0'..'9'}:
+      tok.add(line[i]); inc i
+  else:
+    return line
+  if tok.len == 0: return line
+  # A label must end at whitespace or EOL — "X(1)=..." is not one
+  if i < line.len and line[i] notin {' ', '\t'}: return line
+  if isCommandKeyword(tok): return line
+  while i < line.len and line[i] in {' ', '\t'}: inc i
+  return line[i..^1]
+
 proc stripMComment(line: string): string =
   ## Strip M-style comments from a line.
   ## In M, `;` starts a comment to end of line, but NOT inside string literals.

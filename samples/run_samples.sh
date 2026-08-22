@@ -53,7 +53,7 @@ PYEOF
   esac
 }
 
-for f in "$DIR"/strict.m "$DIR"/rsmext.m "$DIR"/nimmext.m; do
+for f in "$DIR"/strict.m "$DIR"/rsmext.m "$DIR"/nimmext.m "$DIR"/labeled.m; do
   base="$(basename "$f")"
   [ "$base" = "nimmext.m" ] && [ "$ENGINE" != "nimm" ] && continue
   echo "=== $base [$ENGINE] ==="

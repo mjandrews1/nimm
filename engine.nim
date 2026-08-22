@@ -367,7 +367,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 let gotLine = eng.runtime[].getLine(routine, label, offset)
                 if gotLine.len == 0:
                   break
-                let parsed = eng.cachedParseLine(gotLine)
+                let parsed = eng.cachedParseLine(stripLabel(gotLine))
                 if parsed != nil and parsed.cmds.len > 0:
                   let r = eng.execute(parsed, depth + 1)
                   if r == "QUIT" or eng.quitAll:
@@ -390,7 +390,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           if routine.len > 0:
             let gotLine = eng.runtime[].getLine(routine, label, 0)
             if gotLine.len > 0:
-              result = eng.execute(eng.cachedParseLine(gotLine), depth + 1)
+              result = eng.execute(eng.cachedParseLine(stripLabel(gotLine)), depth + 1)
 
       of CmdKind.cRead:
         for varExpr in cmd.readVars:
@@ -676,7 +676,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           if routine.len > 0:
             let gotLine = eng.runtime[].getLine(routine, label, 0)
             if gotLine.len > 0:
-              result = eng.execute(eng.cachedParseLine(gotLine), depth + 1)
+              result = eng.execute(eng.cachedParseLine(stripLabel(gotLine)), depth + 1)
 
       of CmdKind.cZquit:
         # ZQUIT — Exit with value (Z-version of QUIT)
