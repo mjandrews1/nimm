@@ -138,7 +138,7 @@ type
   ## info for error reporting and debugging. A type inference pass
   ## could annotate nodes with [NUM], [STR], or [ANY].
   ExprKind* = enum
-    numLit, eStr, eVar, eFunc, eSvar, eNeg, ePos, eNot, eBinary, ePattern, eIndirect
+    numLit, eStr, eVar, eFunc, eSvar, eNeg, ePos, eNot, eBinary, ePattern, eIndirect, eEntryRef
 
   ## Expr — Expression AST Node
   ##
@@ -190,6 +190,10 @@ type
       ## Indirection: @expr — expr evaluates to a variable name
       indirectExpr*: Expr
       indirectSubs*: seq[Expr]  # Optional subscripts: @(expr, sub1, sub2)
+    of eEntryRef:
+      ## Entry reference: label^routine (§7.1) — used by DO, GOTO, ZGOTO.
+      entryLabel*: string
+      entryRoutine*: string
 
   ## SetKind — SET Target Variants
   ##

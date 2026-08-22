@@ -731,6 +731,7 @@ proc parseCommand(p: var Parser): CommandNode
 proc parseSetArgs(p: var Parser): seq[SetItem]
 proc parseSetTarget(p: var Parser): SetTarget
 proc parseVarRef(p: var Parser): (string, seq[Expr])
+proc parseEntryRef(p: var Parser): Expr
 proc parseWriteArgs(p: var Parser): seq[WriteArg]
 proc parseForSpec(p: var Parser): ForSpec
 proc parseForArg(p: var Parser, varName: string): ForSpec
@@ -938,10 +939,18 @@ proc parseCommand(p: var Parser): CommandNode =
       let body = p.parseLine(true)
       cmd = Cmd(kind: cDoInline, doInlineBody: body)
     else:
-      # Label DO: DO label,label,...
-      cmd = Cmd(kind: cDo, doArgs: parseExprList(p))
+      # Label DO: DO entryref,entryref,...  (§7.2.5)
+      var args: seq[Expr] = @[]
+      while true:
+        if p.atCommandPos(): break
+        args.add p.parseEntryRef()
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      cmd = Cmd(kind: cDo, doArgs: args)
   of "GOTO", "G":
-    cmd = Cmd(kind: cGoto, gotoExpr: p.parseExpr())
+    cmd = Cmd(kind: cGoto, gotoExpr: p.parseEntryRef())
   of "BREAK", "B":
     cmd = Cmd(kind: cBreak)
   of "READ", "R":
@@ -975,7 +984,7 @@ proc parseCommand(p: var Parser): CommandNode =
       breakExpr = p.parseExpr()
     cmd = Cmd(kind: cZbreak, zbreakExpr: breakExpr)
   of "ZGOTO":
-    cmd = Cmd(kind: cZgoto, zgotoExpr: p.parseExpr())
+    cmd = Cmd(kind: cZgoto, zgotoExpr: p.parseEntryRef())
   of "ZPRINT":
     cmd = Cmd(kind: cZprint, zprintExpr: p.parseExpr())
   of "ZQUIT":
@@ -1196,6 +1205,29 @@ proc parseVarRef(p: var Parser): (string, seq[Expr]) =
     name = p.readWord()
   let subs = parseSubscripts(p)
   (name, subs)
+
+## parseEntryRef — Parse an Entry Reference (§7.1)
+##
+## Entry references appear in DO, GOTO, ZGOTO, and BREAK:
+##   label            — label in the current routine
+##   label^routine    — label in a different routine
+##   ^routine         — start of a routine (no label)
+##
+## Returns an eEntryRef when `^routine` is present, eVar otherwise.
+proc parseEntryRef(p: var Parser): Expr =
+  if p.peek() == tokCaret:
+    # ^routine form
+    discard p.advance()
+    let routine = p.readWord()
+    return Expr(kind: eEntryRef, entryLabel: "", entryRoutine: routine.toUpperAscii())
+  let label = p.readWord()
+  if p.peek() == tokCaret:
+    # label^routine form
+    discard p.advance()
+    let routine = p.readWord()
+    return Expr(kind: eEntryRef, entryLabel: label.toUpperAscii(), entryRoutine: routine.toUpperAscii())
+  # Plain label — treat as variable reference for backward compatibility
+  Expr(kind: eVar, vname: label, subs: @[])
 
 ## parseWriteArgs — Parse WRITE Arguments
 ##

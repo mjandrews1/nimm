@@ -398,6 +398,10 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       discard
     # Fallback — treat the text as a variable name
     return ev.globals[].get(varName, subs)
+  of eEntryRef:
+    # Entry references (label^routine) are only meaningful in DO/GOTO/ZGOTO
+    # command handlers — not evaluatable as expressions. Return the label.
+    return expr.entryLabel
 
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   ## Call an intrinsic function

@@ -355,26 +355,30 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
 
       of CmdKind.cDo:
         for arg in cmd.doArgs:
-          if arg.kind == eVar:
-            let label = arg.vname
-            let routine = eng.runtime[].currentRoutine
-            if routine.len > 0:
-              # Execute from label until QUIT or next label
-              pushStack()
-              eng.doDepth.inc
-              var offset = 0
-              while true:
-                let gotLine = eng.runtime[].getLine(routine, label, offset)
-                if gotLine.len == 0:
+          # §7.2.5: DO entryref — label in current routine or label^routine (#288)
+          let label = if arg.kind == eEntryRef: arg.entryLabel
+                      elif arg.kind == eVar: arg.vname
+                      else: continue
+          let routine = if arg.kind == eEntryRef and arg.entryRoutine.len > 0:
+                          arg.entryRoutine
+                        else:
+                          eng.runtime[].currentRoutine
+          if routine.len > 0 and label.len > 0:
+            pushStack()
+            eng.doDepth.inc
+            var offset = 0
+            while true:
+              let gotLine = eng.runtime[].getLine(routine, label, offset)
+              if gotLine.len == 0:
+                break
+              let parsed = eng.cachedParseLine(stripLabel(gotLine))
+              if parsed != nil and parsed.cmds.len > 0:
+                let r = eng.execute(parsed, depth + 1)
+                if r == "QUIT" or eng.quitAll:
                   break
-                let parsed = eng.cachedParseLine(stripLabel(gotLine))
-                if parsed != nil and parsed.cmds.len > 0:
-                  let r = eng.execute(parsed, depth + 1)
-                  if r == "QUIT" or eng.quitAll:
-                    break
-                offset.inc
-              eng.doDepth.dec
-              popStack()
+              offset.inc
+            eng.doDepth.dec
+            popStack()
 
       of CmdKind.cDoInline:
         # Inline DO: execute the body directly
@@ -384,10 +388,15 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.doDepth.dec
 
       of CmdKind.cGoto:
-        if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:
-          let label = cmd.gotoExpr.vname
-          let routine = eng.runtime[].currentRoutine
-          if routine.len > 0:
+        if cmd.gotoExpr != nil:
+          let label = if cmd.gotoExpr.kind == eEntryRef: cmd.gotoExpr.entryLabel
+                      elif cmd.gotoExpr.kind == eVar: cmd.gotoExpr.vname
+                      else: ""
+          let routine = if cmd.gotoExpr.kind == eEntryRef and cmd.gotoExpr.entryRoutine.len > 0:
+                          cmd.gotoExpr.entryRoutine
+                        else:
+                          eng.runtime[].currentRoutine
+          if label.len > 0 and routine.len > 0:
             # §7.2.4: GOTO transfers control to the label; execution
             # continues forward until QUIT or end of routine (#287).
             var offset = 0
@@ -680,10 +689,15 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
 
       of CmdKind.cZgoto:
         # ZGOTO label — Transfer control (Z-version of GOTO)
-        if cmd.zgotoExpr != nil and cmd.zgotoExpr.kind == eVar:
-          let label = cmd.zgotoExpr.vname
-          let routine = eng.runtime[].currentRoutine
-          if routine.len > 0:
+        if cmd.zgotoExpr != nil:
+          let label = if cmd.zgotoExpr.kind == eEntryRef: cmd.zgotoExpr.entryLabel
+                      elif cmd.zgotoExpr.kind == eVar: cmd.zgotoExpr.vname
+                      else: ""
+          let routine = if cmd.zgotoExpr.kind == eEntryRef and cmd.zgotoExpr.entryRoutine.len > 0:
+                          cmd.zgotoExpr.entryRoutine
+                        else:
+                          eng.runtime[].currentRoutine
+          if label.len > 0 and routine.len > 0:
             var offset = 0
             while true:
               let gotLine = eng.runtime[].getLine(routine, label, offset)

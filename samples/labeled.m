@@ -1,7 +1,5 @@
-LABELED ; Regression test for #283/#287: labeled block openers + GOTO walk-forward.
- ; A label sharing its line with a block opener (FOR/IF/DO) must
- ; execute the block, not silently skip it (#283). GOTO must continue
- ; forward from the target label until QUIT (#287).
+LABELED ; Regression test for #283/#287/#288: labeled block openers,
+ ; GOTO walk-forward, and cross-routine DO.
  ;
  ; Run:  nimm -r labeled.m -x 'DO LABELED'
  NEW I,SUM
@@ -17,4 +15,9 @@ LOOP FOR I=1:1:5 DO
  GOTO SKIP
  WRITE "B"
 SKIP WRITE "C",!
+ ; Cross-routine DO test (#288) — calls HELLO^LABELED below
+ D SUB
+ QUIT
+SUB ; Subroutine in the same routine
+ W "PASS-XROUTINE",!
  QUIT
