@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nim
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.2.10'
+
+      - name: Install LMDB
+        run: sudo apt-get update && sudo apt-get install -y liblmdb-dev
+
+      - name: Build nimm
+        run: nim c -d:release -o:nimm main.nim
+
+      - name: Build run_all_tests
+        run: nim c -d:release -o:run_all_tests run_all_tests.nim
+
+      - name: Run ISO suite
+        run: python3 tests/ansi_iso_m_conformance.py --impls nimm --runs 1
+
+      - name: Run unit suites
+        run: ./run_all_tests
