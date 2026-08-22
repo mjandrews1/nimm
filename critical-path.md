@@ -133,9 +133,13 @@
 - **#168:** RSM build hash discrepancy across servers — Fixed by rebuilding RSM on local machine
 - **#169:** $FIND test fails on Utility-02 — Fixed by copying correct conformance script from local machine
 
-## Policy: RSM and RFC Frozen (2026-08-19)
-- **RSM and RFC source code is frozen.** No development changes permitted.
-- Only occasional binary rebuilds to refresh on all servers.
+## Infrastructure Changes (2026-08-22)
+- **Utility-02 (Hetzner, 2.29.3.122):** DEPRECATED — no longer in use. All roles on Utility-01.
+- **RFC:** DEPRECATED — RSM is the sole reference engine.
+
+## Policy: RSM Frozen (2026-08-19, updated 2026-08-22)
+- **RSM source code is frozen.** No development changes permitted.
+- **RFC deprecated.** RSM is the sole reference engine.
 - nimm remains the active development target.
 
 ## Policy: nimm v0.1.0 Frozen (2026-08-19)

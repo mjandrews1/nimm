@@ -4,20 +4,18 @@
 Build nimm, a M/MUMPS interpreter in Nim, achieving full ANSI/ISO + RSM + nimm extension conformance.
 
 ## Important Details
-- **Servers:** Utility-01 (97.119.105.79), Utility-02 (2.29.3.122)
+- **Primary server:** Utility-01 (192.168.0.103) — overnight soaks, RSM daemon, all testing
+- **Utility-02 (Hetzner, 2.29.3.122):** DEPRECATED 2026-08-22 — no longer in use
 - **nimm:** `/Users/mark/_diary/ports/nimm-annotated/`, binary `nimm` (built via `nim c -d:release -o:nimm main.nim`)
-  - **v0.1.0** — FROZEN (tagged `v0.1.0`, 100% conformance)
-  - **v0.1.1** — Current development version
-- **RSM:** `/Users/mark/_rsm/`, binary `rsm`, V1.83.1 (17458f03cf) — **FROZEN** (no code changes; occasional rebuilds only)
-- **RFC:** `/Users/mark/_rfc/`, binary `rfc`, RFC V1.00.0 — **FROZEN** (no code changes; occasional rebuilds only)
-- **Conformance scripts:** `/Users/mark/_diary/scripts/conformance_rsm.sh`, `conformance_rfc.sh`, `conformance_nimm.sh`
+- **RSM:** `/Users/mark/_rsm/`, binary `rsm`, V1.83.1 (17458f03cf) — sole reference engine
+- **RFC:** DEPRECATED — RSM is the sole reference engine
 
 ## Current State
-- **All servers synced:** Local, Utility-01, Utility-02 all have same commit (6e90b2c), same versions, 100% conformance
-- **All issues closed:** #167, #168, #169
-- **nimm:** 100% conformance (55/55 tests)
-- **RSM:** 80% conformance (28/35 tests)
-- **RFC:** 80% conformance (29/36 tests)
+- **Utility-01:** Active, primary testing server (192.168.0.103)
+- **Utility-02:** DEPRECATED — no longer in use
+- **nimm:** ISO suite 173/173, unit suites 19/19, extended 34/34
+- **RSM:** Sole reference engine (RFC deprecated)
+- **Critical path:** #289 — Phase 0 ✓, Phase 1 ✓, Phase 2 next (transactions)
 
 ## Next Steps
 1. Continue addressing remaining open issues by tier

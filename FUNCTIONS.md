@@ -143,12 +143,12 @@
 - 10 iterations: ~20ms/call (startup dominates)
 - 10000 iterations: ~3ms/call (execution dominates)
 
-**Server comparison:**
-| Iterations | Utility-01 | Utility-02 |
-|------------|------------|------------|
-| 100 | 20.1 sec (3.9ms/call) | 28.9 sec (5.3ms/call) |
-| 1000 | 173.6 sec (3.4ms/call) | 213.8 sec (4.0ms/call) |
-| 10000 | 1,686 sec (3.3ms/call) | 1,629 sec (3.1ms/call) |
+**Server comparison (Utility-01 only — Utility-02 deprecated 2026-08-22):**
+| Iterations | Utility-01 |
+|------------|------------|
+| 100 | 20.1 sec (3.9ms/call) |
+| 1000 | 173.6 sec (3.4ms/call) |
+| 10000 | 1,686 sec (3.3ms/call) |
 
 **Reliability:**
 - 8400 randomized tests (100 runs × 84 tests): 100% pass rate
