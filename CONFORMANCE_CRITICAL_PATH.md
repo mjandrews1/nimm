@@ -29,6 +29,42 @@ RSM 153/170 (90.0%) · RFC 153/170 (90.0%) · NimM 135/170 (79.4%).
 The 17 shared RSM/RFC failures are frozen-in findings (rsm#11-15, rfc#12);
 NimM's target is 135 → 170/170 since it already passes the comparison tests.
 
+## Final Matrix — af36717 (2026-08-21)
+
+Isolation protocol: daemon up → suite → daemon down between implementations.
+Identical sources on both machines (tree `04a7b18f`). RSM/RFC failure sets are
+byte-identical across machines (`diff` clean) and identical between RSM/RFC.
+
+| Implementation | MacBook Pro (macOS x86_64) | Utility-01 (Linux x86_64) |
+|---|---|---|
+| RSM V1.83.1 | 153/170 (90.0%) · 17F/3E | 153/170 (90.0%) · 17F/3E |
+| RFC V1.00.0 | 153/170 (90.0%) · 17F/3E | 153/170 (90.0%) · 17F/3E |
+| **NimM V0.1.2** | **170/170 (100%)** | **170/170 (100%)** |
+
+Shared 17 frozen-in failures: BUG03_COLLATE_LOWER, BUG04_COLLATE_MIXED,
+BUG05_NUMEQ_FORMS, BUG06_ELSE_RUNS, BUG08_ORD_BACK_EMPTY, BUG09_PAT_ALT,
+CMP_CASE, CMP_DIGIT_LETTER, CMP_FRAC_EQ, CMP_FRAC_EQ_STR, CMP_NUM_CANON_EQ,
+CMP_PARTIAL_STR, ELSE_RUNS, ORD_BACK_EMPTY, PAT_ALTERNATION, SV_TLEVEL,
+SV_TRESTART. (The "3 errors" column entries are the suite's cross-runner
+comparisons against implementations not under test — environmental.)
+
+## Timing Matrix — 10 runs × 170 tests (2026-08-21)
+
+TOTAL = sum of per-test wall-clock averages over 10 runs (includes process
+spawn + environment attach per test; same methodology everywhere).
+Pass/fail identical at run 1 and run 10 on every leg.
+
+| Implementation | MBPR total | Utility-01 total | U1 speedup |
+|---|---|---|---|
+| RSM V1.83.1 | 2091.86 ms | 794.08 ms | 2.63× |
+| RFC V1.00.0 | 2097.40 ms | 819.42 ms | 2.56× |
+| **NimM V0.1.2** | **1906.11 ms** | **443.07 ms** | **4.30×** |
+
+NimM is the fastest implementation on both machines while being the only
+one at 100%: ~9% faster than RSM/RFC on the MacBook Pro, ~1.8× faster on
+utility-01. Raw outputs: `/tmp/timing_{mbpr,u1}_{rsm,rfc,nimm}.txt`
+(ephemeral — copy before reboot).
+
 ## NimM Fix Plan — Issues #264–#273 (35 failures)
 
 | Pri | Issue | Root cause area | Anchor |
@@ -179,3 +215,35 @@ Close #254 (tracking) last, with final three-machine matrix attached.
   behind the existing four function names only.
 - **F8.2** ($DATA tri-state) may surface latent test expectations of "1" where
   standard says 10/11 — audit test_conformance.nim before flipping.
+
+## Extended Matrix — 18 tests × 10 runs (2026-08-21 evening)
+
+New suite: `tests/mumps_extended_conformance.py`. Categories: SSV (^$JOB,
+^$LOCK, ^$GLOBAL), Std99 extras not in the 170-test suite (indirection forms,
+$QLENGTH, FOR lists, MERGE preservation, $TRANSLATE/$REVERSE, negative
+$JUSTIFY, $ECODE), RSMExt (exponent notation, numeric-first collation).
+Expected values = RSM ∩ RFC consensus (both references agree on all 18).
+Isolation protocol held on both machines: one daemon up per leg, verified
+down before the next.
+
+| Implementation | MBPR (macOS x86_64) | Utility-01 (Linux x86_64) | U1 speedup |
+|---|---|---|---|
+| RSM V1.83.1  | 18/18 · 218.0 ms | 18/18 · 78.2 ms | 2.79× |
+| RFC V1.00.0  | 18/18 · 226.6 ms | 18/18 · 80.1 ms | 2.83× |
+| **NimM**     | **12/18 · 200.0 ms** | **12/18 · 24.2 ms** | **8.26×** |
+
+NimM failure set byte-identical across machines (6):
+- SSV_JOB_SELF — ^$JOB returns 0 (unimplemented)
+- SSV_LOCK_TAKE — LOCK/^$LOCK missing → empty output
+- IND_EXPR — expression indirection @A unsupported → empty
+- MERGE_PRESERVE — CRASH RangeDefect (formatNumber via setGlobal, MERGE
+  overwrite of scalar root)
+- FN_JUSTIFY_NEG — CRASH RangeDefect ($JUSTIFY negative width)
+- EXP_NUM_PLUS — +'2E3' unevaluated
+
+The two crashes are new (not in #264–#273): #276 MERGE-overwrite
+crash, #277 $J-negative-width crash. SSV gaps: #278. Indirection:
+#279. Exponent notation: #280.
+
+Note: rfc client reads RSM_DBFILE only (shared rsm client code) — suite's
+RFCEngine now points both vars at the RFC environment.
