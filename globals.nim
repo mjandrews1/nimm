@@ -253,7 +253,7 @@ proc ssvValue*(g: Globals, name: string, subs: seq[string]): string =
   ## subset, only $DATA tri-state; mirror that as "1"/"0".
   return $g.ssvData(name, subs)
 
-proc getGlobal*(g: Globals, name: string, subs: seq[string] = @[]): string =
+proc getGlobal*(g: var Globals, name: string, subs: seq[string] = @[]): string =
   ## Get global variable value from LMDB (or in-memory store when no -db)
   if name.startsWith("^$"):
     return g.ssvValue(name, subs)
@@ -304,7 +304,7 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
 proc inTransaction*(g: Globals): bool =
   g.txn.levels.len > 0
 
-proc get*(g: Globals, name: string, subs: seq[string] = @[]): string =
+proc get*(g: var Globals, name: string, subs: seq[string] = @[]): string =
   ## Get variable value (auto-detect local vs global).
   ## Checks transaction overlay first for globals (§11 read-your-own-writes).
   ## Note: read-modify-write patterns (SET ^X=^X+1) require LOCK for
@@ -418,7 +418,7 @@ proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool):
     if mCollationCmp(keys[i], lastSub) < 0: return keys[i]
   return ""
 
-proc order*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
+proc order*(g: var Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
   ## $ORDER (auto-detect local vs global)
   if name.len > 0 and name[0] == '^':
     # For globals, use LMDB cursor (or in-memory store when no -db)
@@ -452,7 +452,7 @@ proc queryGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool):
       if tupCollationCmp(tuples[i], subs) < 0: return tuples[i]
     return @[]
 
-proc query*(g: Globals, name: string, subs: seq[string] = @[], forward: bool = true): seq[string] =
+proc query*(g: var Globals, name: string, subs: seq[string] = @[], forward: bool = true): seq[string] =
   ## $QUERY (auto-detect local vs global)
   ## Returns all subscripts of the next node (any depth)
   if name.len > 0 and name[0] == '^':
@@ -491,7 +491,7 @@ proc dataGlobalMem(g: Globals, name: string, subs: seq[string]): int =
   if hasChildren: return 10
   return 0
 
-proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
+proc data*(g: var Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA (auto-detect local vs global, tri-state per ANSI/ISO 8.5)
   if name.len > 0 and name[0] == '^':
     if name.startsWith("^$"):
@@ -508,7 +508,7 @@ proc data*(g: Globals, name: string, subs: seq[string] = @[]): int =
   else:
     return g.dataLocal(name, subs)
 
-proc listSubs*(g: Globals, name: string, subs: seq[string] = @[]): seq[seq[string]] =
+proc listSubs*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[string]] =
   ## List all subscripts under a given variable
   ## Returns a sequence of subscript sequences
   if name.len > 0 and name[0] == '^':

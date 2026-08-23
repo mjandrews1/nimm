@@ -12,6 +12,8 @@ type
     dbi: Dbi
     path: string
     mapSize: int64
+    readTxn: ptr Txn    # Cached read transaction for batch reads
+    readTxnActive: bool # True when cached read transaction is active
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
   ## Initialize LMDB store
@@ -56,28 +58,59 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
 proc close*(store: var LmdbStore) =
   ## Close LMDB store
   if store.env != nil:
+    if store.readTxnActive:
+      abort(store.readTxn)
+      store.readTxnActive = false
     dbiClose(store.env, store.dbi)
     envClose(store.env)
     store.env = nil
 
-proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
-  ## Get value for global[sub1,sub2,...]
-  ## Creates a new read transaction per operation (MDB_NOTLS mode).
-  let key = encodeKey(global, subs)
-  
+proc beginReadBatch*(store: var LmdbStore) =
+  ## Begin a read batch — cache the read transaction for multiple reads.
+  ## Call endReadBatch() when done. Nested calls are allowed (ref-counted).
+  if not store.readTxnActive:
+    var rc = txnBegin(store.env, nil, RDONLY, addr store.readTxn)
+    if rc == SUCCESS:
+      store.readTxnActive = true
+
+proc endReadBatch*(store: var LmdbStore) =
+  ## End a read batch — abort the cached read transaction.
+  if store.readTxnActive:
+    abort(store.readTxn)
+    store.readTxnActive = false
+
+proc getReadTxn(store: var LmdbStore): ptr Txn =
+  ## Get a read transaction — use cached if in batch, else create new.
+  if store.readTxnActive:
+    return store.readTxn
+  # Create a new read transaction for single reads
   var readTxn: ptr Txn
   var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
-  if rc != SUCCESS: return ""
+  if rc != SUCCESS: return nil
+  return readTxn
+
+proc abortIfNotBatch(store: var LmdbStore, txn: ptr Txn) =
+  ## Abort a read transaction only if it's not the cached batch transaction.
+  if not store.readTxnActive or txn != store.readTxn:
+    abort(txn)
+
+proc get*(store: var LmdbStore, global: string, subs: seq[string] = @[]): string =
+  ## Get value for global[sub1,sub2,...]
+  ## Uses cached read transaction if in a batch, else creates a new one.
+  let key = encodeKey(global, subs)
+  
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return ""
   
   var mdbKey: Val
   mdbKey.mvSize = cast[uint](key.len)
   mdbKey.mvData = cast[pointer](unsafeAddr key[0])
   
   var mdbVal: Val
-  rc = get(readTxn, store.dbi, addr mdbKey, addr mdbVal)
+  let rc = get(readTxn, store.dbi, addr mdbKey, addr mdbVal)
   
   if rc != SUCCESS:
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   if mdbVal.mvSize > 0:
@@ -85,7 +118,7 @@ proc get*(store: LmdbStore, global: string, subs: seq[string] = @[]): string =
     copyMem(addr result[0], mdbVal.mvData, mdbVal.mvSize)
   else:
     result = ""
-  abort(readTxn)
+  store.abortIfNotBatch(readTxn)
 
 proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string) =
   ## Set value for global[sub1,sub2,...]
@@ -205,9 +238,9 @@ proc batchDelete*(store: var LmdbStore, keys: seq[(string, seq[string])]) =
     abort(txn)
     raise
 
-proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
+proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): string =
   ## Get next/previous key in LMDB (for $ORDER)
-  ## Creates a new read transaction per operation (MDB_NOTLS mode).
+  ## Uses cached read transaction if in a batch, else creates a new one.
   let prefix = encodeKey(global, subs)
   
   var parentPrefix = global
@@ -216,14 +249,13 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
     parentPrefix.add(subs[i])
   parentPrefix.add('\0')
   
-  var readTxn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
-  if rc != SUCCESS: return ""
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return ""
   
   var cursor: LMDBCursor
-  rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   # Position cursor at prefix
@@ -236,7 +268,7 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   # Move to next/previous
@@ -247,7 +279,7 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   # Decode the key from mdbKey
@@ -258,40 +290,39 @@ proc order*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   # Verify the key is at the same level (same number of subscripts)
   if decoded[1].len != subs.len:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return ""
   
   # Verify all subscripts except the last match (same parent)
   for i in 0..<subs.len - 1:
     if decoded[1][i] != subs[i]:
       cursorClose(cursor)
-      abort(readTxn)
+      store.abortIfNotBatch(readTxn)
       return ""
   
   # Return the last subscript (the next one at this level)
   cursorClose(cursor)
-  abort(readTxn)
+  store.abortIfNotBatch(readTxn)
   return decoded[1][^1]
 
-proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
+proc query*(store: var LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
   ## Get next/previous node in LMDB (for $QUERY)
-  ## Creates a new read transaction per operation (MDB_NOTLS mode).
+  ## Uses cached read transaction if in a batch, else creates a new one.
   let prefix = encodeKey(global, subs)
   
-  var readTxn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
-  if rc != SUCCESS: return @[]
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return @[]
   
   var cursor: LMDBCursor
-  rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   # Position cursor at prefix
@@ -304,7 +335,7 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   # Move to next/previous
@@ -315,7 +346,7 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   # Decode the key from mdbKey
@@ -326,27 +357,26 @@ proc query*(store: LmdbStore, global: string, subs: seq[string] = @[], forward: 
   # Verify the key has the same global name
   if decoded[0] != global:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   # Return all subscripts
   cursorClose(cursor)
-  abort(readTxn)
+  store.abortIfNotBatch(readTxn)
   return decoded[1]
 
-proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[seq[string]] =
+proc listSubs*(store: var LmdbStore, global: string, subs: seq[string] = @[]): seq[seq[string]] =
   ## List all subscripts under a given global[sub1,sub2,...]
-  ## Creates a new read transaction per operation (MDB_NOTLS mode).
+  ## Uses cached read transaction if in a batch, else creates a new one.
   let prefix = encodeKey(global, subs)
   
-  var readTxn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
-  if rc != SUCCESS: return @[]
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return @[]
   
   var cursor: LMDBCursor
-  rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   # Position cursor at prefix
@@ -359,7 +389,7 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
   
   if rc != SUCCESS:
     cursorClose(cursor)
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   var result: seq[seq[string]] = @[]
@@ -385,20 +415,19 @@ proc listSubs*(store: LmdbStore, global: string, subs: seq[string] = @[]): seq[s
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
-  abort(readTxn)
+  store.abortIfNotBatch(readTxn)
   return result
 
-proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
+proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix
-  ## Creates a new read transaction per operation (MDB_NOTLS mode).
-  var readTxn: ptr Txn
-  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
-  if rc != SUCCESS: return @[]
+  ## Uses cached read transaction if in a batch, else creates a new one.
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return @[]
   
   var cursor: LMDBCursor
-  rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
-    abort(readTxn)
+    store.abortIfNotBatch(readTxn)
     return @[]
   
   var mdbKey: Val
@@ -420,4 +449,4 @@ proc listKeys*(store: LmdbStore, prefix: string = ""): seq[string] =
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
-  abort(readTxn)
+  store.abortIfNotBatch(readTxn)
