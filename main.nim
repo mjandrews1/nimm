@@ -8,7 +8,7 @@
 #   nimm --repl                                # Interactive REPL
 #   nimm -m strict -x 'SET X=1'               # Strict mode
 
-const Version* = "0.1.6"
+const Version* = "0.1.7"
 
 import os
 import strutils
@@ -39,6 +39,7 @@ type
     mcpPort: int
     apiKey: string
     auditLog: string
+    allowWrite: bool
     parentJobNum: int  # -p: parent M job number (set by JOB command)
 
 proc parseArgs(): CliArgs =
@@ -51,6 +52,7 @@ proc parseArgs(): CliArgs =
   result.mcpPort = 8080
   result.apiKey = ""
   result.auditLog = ""
+  result.allowWrite = false
   result.parentJobNum = 0
 
   let args = os.commandLineParams()
@@ -107,6 +109,8 @@ proc parseArgs(): CliArgs =
         if i + 1 < args.len:
           inc i
           result.auditLog = args[i]
+      of "allow-write":
+        result.allowWrite = true
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -132,6 +136,7 @@ proc parseArgs(): CliArgs =
         echo "  --mcp-port N  MCP server port (default: 8080)"
         echo "  --api-key KEY API key for MCP authentication"
         echo "  --audit-log F Audit log file for MCP server"
+        echo "  --allow-write Enable write commands (SET, KILL, LOCK, MERGE, transactions)"
         echo "  -h/--help     Show this help"
         quit(0)
       else:
@@ -265,7 +270,114 @@ proc main() =
       except:
         return %*{"error": getCurrentExceptionMsg()}
     )
-    
+
+    # Write tools (Phase 2 — require --allow-write)
+    if args.allowWrite:
+      mcp.registerTool("set_global", "Set a global variable value", %*{
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Global name (e.g. ^X)"},
+          "subscripts": {"type": "array", "items": {"type": "string"}, "description": "Subscripts"},
+          "value": {"type": "string", "description": "Value to set"}
+        },
+        "required": ["name", "value"]
+      }, proc(params: JsonNode): JsonNode =
+        let name = params["name"].getStr()
+        let value = params["value"].getStr()
+        var subs: seq[string] = @[]
+        if params.hasKey("subscripts"):
+          for s in params["subscripts"]:
+            subs.add(s.getStr())
+        try:
+          eng.globals[].set(name, subs, value)
+          return %*{"status": "ok", "name": name, "subscripts": subs, "value": value}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("kill_global", "Kill a global variable", %*{
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Global name (e.g. ^X)"},
+          "subscripts": {"type": "array", "items": {"type": "string"}, "description": "Subscripts (empty = kill all)"}
+        },
+        "required": ["name"]
+      }, proc(params: JsonNode): JsonNode =
+        let name = params["name"].getStr()
+        var subs: seq[string] = @[]
+        if params.hasKey("subscripts"):
+          for s in params["subscripts"]:
+            subs.add(s.getStr())
+        try:
+          eng.globals[].kill(name, subs)
+          return %*{"status": "ok", "name": name, "subscripts": subs}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("lock_resource", "Acquire a lock on a resource", %*{
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Resource name (e.g. ^X)"}
+        },
+        "required": ["name"]
+      }, proc(params: JsonNode): JsonNode =
+        let name = params["name"].getStr()
+        try:
+          eng.globals[].acquireLock(name)
+          return %*{"status": "ok", "name": name}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("unlock_resource", "Release a lock on a resource", %*{
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Resource name (e.g. ^X)"}
+        },
+        "required": ["name"]
+      }, proc(params: JsonNode): JsonNode =
+        let name = params["name"].getStr()
+        try:
+          eng.globals[].releaseLock(name)
+          return %*{"status": "ok", "name": name}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("begin_transaction", "Start a new transaction (TSTART)", %*{
+        "type": "object",
+        "properties": {}
+      }, proc(params: JsonNode): JsonNode =
+        try:
+          eng.globals[].tstart()
+          return %*{"status": "ok", "tlevel": eng.globals[].txn.levels.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("commit_transaction", "Commit current transaction (TCOMMIT)", %*{
+        "type": "object",
+        "properties": {}
+      }, proc(params: JsonNode): JsonNode =
+        try:
+          eng.globals[].tcommit()
+          return %*{"status": "ok", "tlevel": eng.globals[].txn.levels.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("rollback_transaction", "Rollback current transaction (TROLLBACK)", %*{
+        "type": "object",
+        "properties": {}
+      }, proc(params: JsonNode): JsonNode =
+        try:
+          eng.globals[].trollback()
+          return %*{"status": "ok", "tlevel": eng.globals[].txn.levels.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
     echo "Starting MCP server on port ", args.mcpPort
     mcp.start()
   elif args.repl:
