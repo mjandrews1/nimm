@@ -82,10 +82,25 @@ run_routine "ZBREAK sets breakpoint" /tmp/test_zbreak.m "DO ENTRY" "Breakpoint s
 # BREAK interactive debugger
 run "BREAK enters debugger" 'SET X=42 BREAK' "Debugger"
 
+# $ZJOB returns PID
+run "\$ZJOB returns PID" 'W $ZJOB' "[0-9]"
+
+# $ZPOS returns position (empty at top level)
+printf 'ENTRY\n W $ZPOS\n Q\n' > /tmp/test_zpos.m
+run_routine "\$ZPOS returns position" /tmp/test_zpos.m "DO ENTRY" "TEST_ZPOS:0"
+
+# $ZROUTINE returns routine name
+printf 'ENTRY\n W $ZROUTINE\n Q\n' > /tmp/test_zroutine.m
+run_routine "\$ZROUTINE returns routine name" /tmp/test_zroutine.m "DO ENTRY" "TEST_ZROUTINE"
+
+# $ZSOURCE returns source file
+printf 'ENTRY\n W $ZSOURCE\n Q\n' > /tmp/test_zsource.m
+run_routine "\$ZSOURCE returns source file" /tmp/test_zsource.m "DO ENTRY" "test_zsource.m"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
 # Cleanup
-rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m
+rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m /tmp/test_zpos.m /tmp/test_zroutine.m /tmp/test_zsource.m
 
 [ "$FAIL" -eq 0 ]

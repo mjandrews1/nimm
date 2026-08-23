@@ -23,6 +23,7 @@ type
     name*: string
     lines*: seq[string]
     labels*: Table[string, int]  # label -> line index
+    filePath*: string            # Source file path (#304)
 
   Runtime* = object
     routines*: Table[string, Routine]
@@ -300,7 +301,7 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
   ## Load a routine from a file
   let name = extractFilename(filepath).splitFile().name.toUpperAscii()
   
-  var routine = Routine(name: name)
+  var routine = Routine(name: name, filePath: filepath)
   
   # Read lines
   let f = open(filepath)

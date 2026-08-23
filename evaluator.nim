@@ -7,6 +7,7 @@ import math
 import random
 import os
 import times
+import posix
 import ast
 import globals
 import value
@@ -1362,5 +1363,26 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return "0"
     else:
       return ""
+  of "ZJOB":
+    # $ZJOB — Return current job (process) ID (#301)
+    return $getpid()
+  of "ZPOS":
+    # $ZPOS — Return current execution position (#302)
+    # Returns "ROUTINE:LABEL+offset" format
+    let routine = if ev.runtime != nil: ev.runtime[].currentRoutine else: ""
+    let line = if ev.runtime != nil: ev.runtime[].currentLine else: 0
+    if routine.len == 0: return ""
+    return routine & ":" & $line
+  of "ZROUTINE":
+    # $ZROUTINE — Return current routine name (#303)
+    if ev.runtime != nil: return ev.runtime[].currentRoutine
+    return ""
+  of "ZSOURCE":
+    # $ZSOURCE — Return source file path of current routine (#304)
+    if ev.runtime != nil:
+      let routine = ev.runtime[].currentRoutine
+      if routine.len > 0 and routine in ev.runtime[].routines:
+        return ev.runtime[].routines[routine].filePath
+    return ""
   else:
     return ""
