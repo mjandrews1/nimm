@@ -15,7 +15,7 @@ language bugs, not platform issues).
 ## Frozen Reference Baselines
 
 RSM and RFC are **frozen** as stable reference points. All development happens
-on NimM V0.1.7; re-test against the frozen references only.
+on NimM V0.1.8; re-test against the frozen references only.
 
 | Implementation | Source commit | macOS binary sha256 | Linux binary sha256 |
 |---|---|---|---|
@@ -39,7 +39,7 @@ byte-identical across machines (`diff` clean) and identical between RSM/RFC.
 |---|---|---|
 | RSM V1.83.1 | 153/170 (90.0%) · 17F/3E | 153/170 (90.0%) · 17F/3E |
 | RFC V1.00.0 | 153/170 (90.0%) · 17F/3E | 153/170 (90.0%) · 17F/3E |
-| **NimM V0.1.7** | **170/170 (100%)** | **170/170 (100%)** |
+| **NimM V0.1.8** | **170/170 (100%)** | **170/170 (100%)** |
 
 Shared 17 frozen-in failures: BUG03_COLLATE_LOWER, BUG04_COLLATE_MIXED,
 BUG05_NUMEQ_FORMS, BUG06_ELSE_RUNS, BUG08_ORD_BACK_EMPTY, BUG09_PAT_ALT,
@@ -58,7 +58,7 @@ Pass/fail identical at run 1 and run 10 on every leg.
 |---|---|---|---|
 | RSM V1.83.1 | 2091.86 ms | 794.08 ms | 2.63× |
 | RFC V1.00.0 | 2097.40 ms | 819.42 ms | 2.56× |
-| **NimM V0.1.7** | **1906.11 ms** | **443.07 ms** | **4.30×** |
+| **NimM V0.1.8** | **1906.11 ms** | **443.07 ms** | **4.30×** |
 
 NimM is the fastest implementation on both machines while being the only
 one at 100%: ~9% faster than RSM/RFC on the MacBook Pro, ~1.8× faster on

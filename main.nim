@@ -8,7 +8,7 @@
 #   nimm --repl                                # Interactive REPL
 #   nimm -m strict -x 'SET X=1'               # Strict mode
 
-const Version* = "0.1.7"
+const Version* = "0.1.8"
 
 import os
 import strutils
@@ -27,6 +27,7 @@ import repl
 import mcp_server
 import json
 import static_analysis
+import network
 
 type
   CliArgs = object
@@ -40,6 +41,12 @@ type
     apiKey: string
     auditLog: string
     allowWrite: bool
+    allowNetwork: bool
+    allowShell: bool
+    allowFile: bool
+    shellAllowlist: string
+    networkAllowlist: string
+    fileAllowlist: string
     parentJobNum: int  # -p: parent M job number (set by JOB command)
 
 proc parseArgs(): CliArgs =
@@ -53,6 +60,12 @@ proc parseArgs(): CliArgs =
   result.apiKey = ""
   result.auditLog = ""
   result.allowWrite = false
+  result.allowNetwork = false
+  result.allowShell = false
+  result.allowFile = false
+  result.shellAllowlist = ""
+  result.networkAllowlist = ""
+  result.fileAllowlist = ""
   result.parentJobNum = 0
 
   let args = os.commandLineParams()
@@ -111,6 +124,24 @@ proc parseArgs(): CliArgs =
           result.auditLog = args[i]
       of "allow-write":
         result.allowWrite = true
+      of "allow-network":
+        result.allowNetwork = true
+      of "allow-shell":
+        result.allowShell = true
+      of "allow-file":
+        result.allowFile = true
+      of "shell-allowlist":
+        if i + 1 < args.len:
+          inc i
+          result.shellAllowlist = args[i]
+      of "network-allowlist":
+        if i + 1 < args.len:
+          inc i
+          result.networkAllowlist = args[i]
+      of "file-allowlist":
+        if i + 1 < args.len:
+          inc i
+          result.fileAllowlist = args[i]
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -137,6 +168,12 @@ proc parseArgs(): CliArgs =
         echo "  --api-key KEY API key for MCP authentication"
         echo "  --audit-log F Audit log file for MCP server"
         echo "  --allow-write Enable write commands (SET, KILL, LOCK, MERGE, transactions)"
+        echo "  --allow-network Enable network commands (NIOPEN/NILISTEN/NIREAD/NIWRITE/NICLOSE)"
+        echo "  --allow-shell Enable shell access (ZSYSTEM)"
+        echo "  --allow-file Enable file I/O (OPEN/READ/WRITE/CLOSE)"
+        echo "  --shell-allowlist CMD Allowlist for ZSYSTEM commands (comma-separated)"
+        echo "  --network-allowlist HOST:PORT Allowlist for network connections (comma-separated)"
+        echo "  --file-allowlist PATH Allowlist for file paths (comma-separated)"
         echo "  -h/--help     Show this help"
         quit(0)
       else:
@@ -374,6 +411,187 @@ proc main() =
         try:
           eng.globals[].trollback()
           return %*{"status": "ok", "tlevel": eng.globals[].txn.levels.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+    # Network tools (Phase 3 — require --allow-network)
+    if args.allowNetwork:
+      mcp.registerTool("open_connection", "Open a network connection (NIOPEN)", %*{
+        "type": "object",
+        "properties": {
+          "protocol": {"type": "string", "description": "Protocol (tcp)"},
+          "host": {"type": "string", "description": "Host to connect to"},
+          "port": {"type": "integer", "description": "Port number"}
+        },
+        "required": ["protocol", "host", "port"]
+      }, proc(params: JsonNode): JsonNode =
+        let protocol = params["protocol"].getStr()
+        let host = params["host"].getStr()
+        let port = params["port"].getInt()
+        try:
+          let connId = eng.network.niopen(protocol, host, port)
+          return %*{"status": "ok", "connectionId": connId}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("listen_port", "Listen for connections (NILISTEN)", %*{
+        "type": "object",
+        "properties": {
+          "port": {"type": "integer", "description": "Port to listen on"}
+        },
+        "required": ["port"]
+      }, proc(params: JsonNode): JsonNode =
+        let port = params["port"].getInt()
+        try:
+          let listenerId = eng.network.nilisten(port)
+          return %*{"status": "ok", "listenerId": listenerId}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("accept_connection", "Accept a connection (NIACCEPT)", %*{
+        "type": "object",
+        "properties": {
+          "listenerId": {"type": "integer", "description": "Listener ID"}
+        },
+        "required": ["listenerId"]
+      }, proc(params: JsonNode): JsonNode =
+        let listenerId = params["listenerId"].getInt()
+        try:
+          let connId = eng.network.niaccept(listenerId)
+          return %*{"status": "ok", "connectionId": connId}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("read_connection", "Read data from connection (NIREAD)", %*{
+        "type": "object",
+        "properties": {
+          "connectionId": {"type": "integer", "description": "Connection ID"},
+          "size": {"type": "integer", "description": "Bytes to read (default 4096)"}
+        },
+        "required": ["connectionId"]
+      }, proc(params: JsonNode): JsonNode =
+        let connId = params["connectionId"].getInt()
+        let size = if params.hasKey("size"): params["size"].getInt() else: 4096
+        try:
+          let data = eng.network.niread(connId, size)
+          return %*{"status": "ok", "data": data, "bytes": data.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("write_connection", "Write data to connection (NIWRITE)", %*{
+        "type": "object",
+        "properties": {
+          "connectionId": {"type": "integer", "description": "Connection ID"},
+          "data": {"type": "string", "description": "Data to write"}
+        },
+        "required": ["connectionId", "data"]
+      }, proc(params: JsonNode): JsonNode =
+        let connId = params["connectionId"].getInt()
+        let data = params["data"].getStr()
+        try:
+          let ok = eng.network.niwrite(connId, data)
+          return %*{"status": if ok: "ok" else: "error"}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("close_connection", "Close a connection (NICLOSE)", %*{
+        "type": "object",
+        "properties": {
+          "connectionId": {"type": "integer", "description": "Connection ID"}
+        },
+        "required": ["connectionId"]
+      }, proc(params: JsonNode): JsonNode =
+        let connId = params["connectionId"].getInt()
+        try:
+          let ok = eng.network.niclose(connId)
+          return %*{"status": if ok: "ok" else: "error"}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+    # Shell tools (Phase 3 — require --allow-shell)
+    if args.allowShell:
+      mcp.registerTool("execute_shell", "Execute OS command (ZSYSTEM)", %*{
+        "type": "object",
+        "properties": {
+          "command": {"type": "string", "description": "Command to execute"}
+        },
+        "required": ["command"]
+      }, proc(params: JsonNode): JsonNode =
+        let command = params["command"].getStr()
+        # Check allowlist if configured
+        if args.shellAllowlist.len > 0:
+          let allowed = args.shellAllowlist.split(",")
+          var permitted = false
+          for a in allowed:
+            if command.startsWith(a.strip()):
+              permitted = true
+              break
+          if not permitted:
+            return %*{"error": "Command not in allowlist", "command": command}
+        try:
+          let exitCode = execShellCmd(command)
+          return %*{"status": "ok", "exitCode": exitCode}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+    # File I/O tools (Phase 3 — require --allow-file)
+    if args.allowFile:
+      mcp.registerTool("read_file", "Read a file", %*{
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "File path"}
+        },
+        "required": ["path"]
+      }, proc(params: JsonNode): JsonNode =
+        let path = params["path"].getStr()
+        # Check allowlist if configured
+        if args.fileAllowlist.len > 0:
+          let allowed = args.fileAllowlist.split(",")
+          var permitted = false
+          for a in allowed:
+            if path.startsWith(a.strip()):
+              permitted = true
+              break
+          if not permitted:
+            return %*{"error": "Path not in allowlist", "path": path}
+        try:
+          let content = readFile(path)
+          return %*{"status": "ok", "content": content, "size": content.len}
+        except:
+          return %*{"error": getCurrentExceptionMsg()}
+      )
+
+      mcp.registerTool("write_file", "Write to a file", %*{
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "File path"},
+          "content": {"type": "string", "description": "Content to write"}
+        },
+        "required": ["path", "content"]
+      }, proc(params: JsonNode): JsonNode =
+        let path = params["path"].getStr()
+        let content = params["content"].getStr()
+        # Check allowlist if configured
+        if args.fileAllowlist.len > 0:
+          let allowed = args.fileAllowlist.split(",")
+          var permitted = false
+          for a in allowed:
+            if path.startsWith(a.strip()):
+              permitted = true
+              break
+          if not permitted:
+            return %*{"error": "Path not in allowlist", "path": path}
+        try:
+          writeFile(path, content)
+          return %*{"status": "ok", "path": path, "bytes": content.len}
         except:
           return %*{"error": getCurrentExceptionMsg()}
       )
