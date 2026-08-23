@@ -33,8 +33,7 @@
 #     as possible before moving to the next atom. This is NOT backtracking.
 #   - The set of punctuation characters is implementation-defined in the
 #     standard. We use a reasonable ASCII set.
-#   - Control character detection is not implemented (returns false) —
-#     this is a pragmatic simplification for a text-processing language.
+#   - Control character detection: C matches ASCII 0-31 and 127 (§7.5.1).
 #   - Pattern atoms are stored in the AST as (count, code, orMore) triples,
 #     not as strings. This allows efficient runtime matching.
 #

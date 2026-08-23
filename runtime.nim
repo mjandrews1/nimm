@@ -488,13 +488,8 @@ proc getEtrap*(rt: Runtime): string =
 
 proc handle_error*(rt: var Runtime, code: string, message: string) =
   ## Handle an error: set state and invoke trap if set
+  ## Note: $ETRAP execution is handled by the engine's error handler
   rt.setError(code, message)
-  
-  # If $ETRAP is set, we would invoke it here
-  # For now, just log the error
-  if rt.etrap.len > 0:
-    # TODO: Execute etrap expression
-    discard
 
 proc reset*(rt: var Runtime) =
   ## Reset runtime state

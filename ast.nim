@@ -36,7 +36,8 @@
 #
 # Genera-Style Introspection Notes:
 #   - A Genera M system would present the AST as a browsable tree
-#   - Each node would have source location info (not yet implemented)
+#   - Each node would have source location info (line/col fields added,
+#     parser can populate them incrementally)
 #   - The Stefi inspector would show node type, children, and attributes
 #   - Static analysis passes would annotate the tree with type info,
 #     reachability, variable usage, etc.
@@ -162,6 +163,9 @@ type
   ## object with expandable children. For eBinary, it would show the
   ## operator, left subtree, and right subtree as a tree visualization.
   Expr* = ref object
+    ## Source location for debugging/introspection
+    line*: int       # 1-based line number (0 = unknown)
+    col*: int        # 1-based column number (0 = unknown)
     case kind*: ExprKind
     of numLit, eStr:
       sval*: string
@@ -417,6 +421,9 @@ type
   ## arguments, and for compound commands (IF, FOR), a tree of
   ## nested commands.
   Cmd* = ref object
+    ## Source location for debugging/introspection
+    line*: int       # 1-based line number (0 = unknown)
+    col*: int        # 1-based column number (0 = unknown)
     case kind*: CmdKind
     of cSet:
       setItems*: seq[SetItem]

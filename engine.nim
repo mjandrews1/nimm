@@ -15,7 +15,6 @@ import parser
 import special_vars
 import debugger
 import inspector
-import debugger
 import jobs
 import value
 
@@ -43,6 +42,9 @@ type
     currentChannel: int  # Current channel number (0 = principal)
     jobTable*: JobTable  # Job table for JOB command
 
+# Global engine reference for debugger evalProc closure
+var globalEngine: Engine = nil
+
 proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Runtime): Engine =
   new(result)
   result.globals = globals.addr
@@ -57,6 +59,9 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.quitAll = false
   result.doDepth = 0
   result.jobTable = newJobTable()
+  
+  # Set global reference for debugger evalProc closure
+  globalEngine = result
   
   # Initialize channel array
   for i in 0..63:
@@ -582,10 +587,27 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cBreak:
         # BREAK — Enter interactive debugger
         eng.writeln("BREAK")
-        # Note: Full debugger integration requires refactoring the evalProc
-        # closure capture. For now, enter step mode.
-        eng.debugger.setStepMode("into")
-        eng.writeln("Stepping enabled. Use ZCONTINUE to resume.")
+        # Use global engine reference for debugger evalProc closure
+        if globalEngine != nil:
+          let evalProc = proc(cmd: string): string =
+            try:
+              # Try as variable expression first (for debugger print command)
+              if cmd.len > 0 and cmd[0] in {'A'..'Z', 'a'..'z', '^', '$'}:
+                # Use evaluator to get variable value
+                let varExpr = Expr(kind: eVar, vname: cmd.toUpperAscii(), subs: @[])
+                return globalEngine.evaluator[].eval(varExpr)
+              # Try as full command
+              let parsed = parseLine(cmd)
+              if parsed != nil and parsed.cmds.len > 0:
+                return globalEngine.execute(parsed, depth + 1)
+            except:
+              discard
+            return ""
+          eng.debugger.debugPromptLoop(evalProc)
+        else:
+          # Fallback: enter step mode
+          eng.debugger.setStepMode("into")
+          eng.writeln("Stepping enabled. Use ZCONTINUE to resume.")
 
       of CmdKind.cXecute:
         if cmd.xecExpr != nil:

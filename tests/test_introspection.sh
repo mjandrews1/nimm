@@ -43,8 +43,8 @@ run_routine "ZSTACK shows call stack" /tmp/test_zstack.m "DO ENTRY" "Call Stack"
 # ZSTACK shows routine:label
 run_routine "ZSTACK shows routine:label" /tmp/test_zstack.m "DO ENTRY" "TEST_ZSTACK:ENTRY"
 
-# BREAK enables stepping
-run "BREAK enables stepping" 'BREAK' "Stepping enabled"
+# BREAK enters interactive debugger
+run "BREAK enters debugger" 'BREAK' "Debugger"
 
 # ZSTEP sets step mode
 run "ZSTEP sets step mode" 'ZSTEP' "Step mode: into"
@@ -78,6 +78,9 @@ run "ZBREAK -L lists breakpoints" 'ZBREAK "-L"' "No breakpoints set"
 # ZBREAK sets breakpoint
 printf 'ENTRY\n ZBREAK SUB\n Q\nSUB\n Q\n' > /tmp/test_zbreak.m
 run_routine "ZBREAK sets breakpoint" /tmp/test_zbreak.m "DO ENTRY" "Breakpoint set"
+
+# BREAK interactive debugger
+run "BREAK enters debugger" 'SET X=42 BREAK' "Debugger"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
