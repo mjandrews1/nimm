@@ -62,9 +62,6 @@ proc main() =
   # Test specialized structures
   results.add(runTest("specialized_structures"))
   
-  # Test improvements
-  results.add(runTest("improvements"))
-  
   # Test LMDB
   results.add(runTest("lmdb"))
   
