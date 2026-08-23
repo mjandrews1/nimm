@@ -297,9 +297,10 @@ proc releaseAllLocks*(g: var Globals) =
 
 proc lockHeld*(g: var Globals, name: string): bool =
   ## $DATA(^$LOCK(name)) — check if lock is held. Reads LMDB directly.
+  let key = if name.startsWith("^"): name[1..^1] else: name
   if g.dbPath.len > 0:
-    return g.globals.get("^%LOCK", lockGlobalKey(name)).len > 0
-  return name in g.heldLocks
+    return g.globals.get("^%LOCK", lockGlobalKey(key)).len > 0
+  return key in g.heldLocks
 
 proc ssvData*(g: var Globals, name: string, subs: seq[string]): int =
   ## $DATA over Structured System Variables (ISO §8.6).
