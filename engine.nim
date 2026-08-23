@@ -820,28 +820,25 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             except:
               discard
           else:
-            # Read-only
+            # Read-only — labeled output (#310)
             try:
               let code = parseInt(arg)
-              var result = ""
               case code
-              of 0: result = $eng.doDepth
-              of 1: result = $eng.globals[].txn.levels.len
-              of 2: result = "0"  # heldLocks count — simplified
-              of 3: result = $eng.inspector.variableHistory.len
-              of 4: result = $eng.inspector.stats.commandsExecuted
-              of 5: result = $eng.inspector.stats.functionCalls
-              of 6: result = $eng.inspector.stats.variableAccesses
-              of 7: result = $eng.runtime[].currentRoutine
+              of 0: eng.writeln("doDepth: " & $eng.doDepth)
+              of 1: eng.writeln("tlevel: " & $eng.globals[].txn.levels.len)
+              of 2: eng.writeln("locks: 0")
+              of 3: eng.writeln("varHistory: " & $eng.inspector.variableHistory.len)
+              of 4: eng.writeln("commands: " & $eng.inspector.stats.commandsExecuted)
+              of 5: eng.writeln("funcCalls: " & $eng.inspector.stats.functionCalls)
+              of 6: eng.writeln("varAccesses: " & $eng.inspector.stats.variableAccesses)
+              of 7: eng.writeln("routine: " & eng.runtime[].currentRoutine)
               else: discard
-              if result.len > 0:
-                eng.writeln(result)
             except:
-              # String arg — RSM-compatible
+              # String arg — RSM-compatible, labeled
               let s = arg.toUpperAscii
               case s
-              of "BLKSIZE": eng.writeln("4096")
-              of "DBFILE": eng.writeln(eng.globals[].dbPath)
+              of "BLKSIZE": eng.writeln("blksize: 4096")
+              of "DBFILE": eng.writeln("dbfile: " & eng.globals[].dbPath)
               else: discard
 
       of CmdKind.cZallocate:
