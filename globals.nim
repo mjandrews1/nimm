@@ -307,6 +307,8 @@ proc inTransaction*(g: Globals): bool =
 proc get*(g: Globals, name: string, subs: seq[string] = @[]): string =
   ## Get variable value (auto-detect local vs global).
   ## Checks transaction overlay first for globals (§11 read-your-own-writes).
+  ## Note: read-modify-write patterns (SET ^X=^X+1) require LOCK for
+  ## atomicity when multiple processes access the same global (#300).
   if name.len > 0 and name[0] == '^':
     if g.inTransaction():
       let key = makeKey(name, subs)

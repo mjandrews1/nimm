@@ -164,13 +164,29 @@ proc formatNumber*(v: float): string =
     return $int64(v)
   var buf = newStringOfCap(24)
   buf.addFloat v
-  if '.' in buf:
-    while buf.len > 0 and buf[^1] == '0':
-      buf.setLen(buf.len - 1)
-    if buf.len > 0 and buf[^1] == '.':
-      buf.setLen(buf.len - 1)
-    if buf.len == 0:
-      return "0"
+  # Only strip trailing zeros from the mantissa, not the exponent
+  let ePos = buf.find('e')
+  if ePos >= 0:
+    # Has exponent — strip zeros from mantissa only
+    var mantissa = buf[0..<ePos]
+    let exponent = buf[ePos..^1]
+    if '.' in mantissa:
+      while mantissa.len > 0 and mantissa[^1] == '0':
+        mantissa.setLen(mantissa.len - 1)
+      if mantissa.len > 0 and mantissa[^1] == '.':
+        mantissa.setLen(mantissa.len - 1)
+      if mantissa.len == 0:
+        return "0"
+    buf = mantissa & exponent
+  else:
+    # No exponent — strip zeros as before
+    if '.' in buf:
+      while buf.len > 0 and buf[^1] == '0':
+        buf.setLen(buf.len - 1)
+      if buf.len > 0 and buf[^1] == '.':
+        buf.setLen(buf.len - 1)
+      if buf.len == 0:
+        return "0"
   if buf.endsWith(".0"):
     buf.setLen(buf.len - 2)
   # §5.2 canonical form drops the redundant integer zero: 0.5 → ".5",

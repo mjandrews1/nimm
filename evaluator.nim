@@ -57,11 +57,20 @@ proc setInspector*(ev: var Evaluator, insp: var Inspector) =
   ## Wire inspector to evaluator for function call tracking
   ev.inspector = insp.addr
 
+# Recursion depth tracking for stack overflow prevention
+var evalDepth: int = 0
+const MaxEvalDepth = 500
+
 proc eval*(ev: var Evaluator, expr: Expr): string
 proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string
 
 proc eval*(ev: var Evaluator, expr: Expr): string =
   ## Evaluate an expression and return string result
+  inc evalDepth
+  if evalDepth > MaxEvalDepth:
+    dec evalDepth
+    return "0"
+  defer: dec evalDepth
   case expr.kind
   of numLit:
     # Normalize number to canonical M form
