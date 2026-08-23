@@ -75,8 +75,8 @@ proc getLocal*(g: Globals, name: string, subs: seq[string] = @[]): string =
   ## Get local variable value (searches all scopes from inner to outer)
   let key = makeKey(name, subs)
   for i in countdown(g.scopes.len - 1, 0):
-    if key in g.scopes[i]:
-      return g.scopes[i][key]
+    result = g.scopes[i].getOrDefault(key, "")
+    if result.len > 0: return
   return ""
 
 proc getLocalDirect*(g: Globals, name: string): string =
