@@ -5,6 +5,7 @@ import tables
 import strutils
 import algorithm
 import sets
+import posix
 import storage/lmdb_store
 import storage/key_encoding
 
@@ -217,41 +218,7 @@ proc orderLocal*(g: Globals, name: string, subs: seq[string] = @[], forward: boo
 # --- LOCK table (#278) ---
 
 proc getSpecialVar*(g: Globals, name: string): string
-
-proc acquireLock*(g: var Globals, name: string) =
-  ## LOCK +name — record the resource as held by this process.
-  g.heldLocks.incl(name)
-
-proc releaseLock*(g: var Globals, name: string) =
-  ## LOCK -name — release the resource.
-  g.heldLocks.excl(name)
-
-proc releaseAllLocks*(g: var Globals) =
-  ## Bare LOCK — release all resources held by this process.
-  g.heldLocks.clear()
-
-proc lockHeld*(g: Globals, name: string): bool =
-  ## $DATA(^$LOCK(name)) support.
-  name in g.heldLocks
-
-proc ssvData*(g: Globals, name: string, subs: seq[string]): int =
-  ## $DATA over Structured System Variables (ISO §8.6).
-  ## Minimal single-process subset matching RSM/RFC consensus (#278):
-  ##   ^$JOB($JOB) → 1; ^$LOCK("x") → 1 while held, else 0.
-  case name
-  of "^$JOB":
-    if subs.len == 1 and subs[0] == g.getSpecialVar("$JOB"): return 1
-    return 0
-  of "^$LOCK":
-    if subs.len == 1 and subs[0] in g.heldLocks: return 1
-    return 0
-  else:
-    return 0
-
-proc ssvValue*(g: Globals, name: string, subs: seq[string]): string =
-  ## Value read of an SSV node — refs expose no values for the supported
-  ## subset, only $DATA tri-state; mirror that as "1"/"0".
-  return $g.ssvData(name, subs)
+proc ssvValue*(g: var Globals, name: string, subs: seq[string]): string
 
 proc getGlobal*(g: var Globals, name: string, subs: seq[string] = @[]): string =
   ## Get global variable value from LMDB (or in-memory store when no -db)
@@ -298,6 +265,56 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
         g.memGlobals.del(k)
     return
   g.globals.delete(name, subs)
+
+# --- Cross-process LOCK via LMDB globals (#307) ---
+
+proc lockGlobalKey(name: string): seq[string] =
+  ## Subscript path for lock storage: ^%LOCK(name)
+  ## Uses ^%LOCK (not ^$LOCK) to avoid SSV interception in getGlobal.
+  return @[name]
+
+proc acquireLock*(g: var Globals, name: string) =
+  ## LOCK +name — acquire lock. Stores ^%LOCK(name)=PID in LMDB.
+  ## Strips leading ^ from name for consistent key format.
+  let key = if name.startsWith("^"): name[1..^1] else: name
+  g.heldLocks.incl(key)
+  if g.dbPath.len > 0:
+    g.setGlobal("^%LOCK", lockGlobalKey(key), $getpid())
+
+proc releaseLock*(g: var Globals, name: string) =
+  ## LOCK -name — release lock.
+  let key = if name.startsWith("^"): name[1..^1] else: name
+  g.heldLocks.excl(key)
+  if g.dbPath.len > 0:
+    g.killGlobal("^%LOCK", lockGlobalKey(key))
+
+proc releaseAllLocks*(g: var Globals) =
+  ## Bare LOCK — release all locks held by this process.
+  for name in g.heldLocks:
+    if g.dbPath.len > 0:
+      g.killGlobal("^%LOCK", lockGlobalKey(name))
+  g.heldLocks.clear()
+
+proc lockHeld*(g: var Globals, name: string): bool =
+  ## $DATA(^$LOCK(name)) — check if lock is held. Reads LMDB directly.
+  if g.dbPath.len > 0:
+    return g.globals.get("^%LOCK", lockGlobalKey(name)).len > 0
+  return name in g.heldLocks
+
+proc ssvData*(g: var Globals, name: string, subs: seq[string]): int =
+  ## $DATA over Structured System Variables (ISO §8.6).
+  case name
+  of "^$JOB":
+    if subs.len == 1 and subs[0] == g.getSpecialVar("$JOB"): return 1
+    return 0
+  of "^$LOCK":
+    if subs.len == 1 and g.lockHeld(subs[0]): return 1
+    return 0
+  else:
+    return 0
+
+proc ssvValue*(g: var Globals, name: string, subs: seq[string]): string =
+  return $g.ssvData(name, subs)
 
 # --- Unified get/set (auto-detect local vs global) ---
 

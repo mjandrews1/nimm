@@ -10,6 +10,7 @@ type
   LmdbStore* = object
     env: ptr Env
     dbi: Dbi
+    lockDbi: Dbi        # Lock table DBI for cross-process LOCK (#307)
     path: string
     mapSize: int64
     readTxn: ptr Txn    # Cached read transaction for batch reads
@@ -51,6 +52,9 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
     abort(txn)
     raise newException(IOError, "LMDB dbi_open failed")
   
+  # Lock table uses main DBI with encoded key format
+  store.lockDbi = store.dbi
+  
   rc = txnCommit(txn)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB txn_commit failed")
@@ -62,8 +66,156 @@ proc close*(store: var LmdbStore) =
       abort(store.readTxn)
       store.readTxnActive = false
     dbiClose(store.env, store.dbi)
+    dbiClose(store.env, store.lockDbi)
     envClose(store.env)
     store.env = nil
+
+# --- Cross-process LOCK operations (#307) ---
+
+proc lockKey(name: string): string =
+  ## Lock table key — uses a null-byte prefix that cannot collide with
+  ## global keys (which always start with '^').
+  return "\x00LOCK:" & name
+
+proc acquireLock*(store: var LmdbStore, name: string, pid: int): bool =
+  ## Acquire a lock on resource name. Returns true if acquired, false if held by other.
+  ## Writes PID to lock table. If already held by another PID, returns false.
+  let key = lockKey(name)
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS: return false
+  
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](key.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+  
+  # Check if already held
+  var mdbVal: Val
+  rc = get(txn, store.lockDbi, addr mdbKey, addr mdbVal)
+  if rc == SUCCESS:
+    # Lock exists — check if held by this PID
+    let holder = newString(mdbVal.mvSize)
+    copyMem(addr holder[0], mdbVal.mvData, mdbVal.mvSize)
+    if holder != $pid:
+      abort(txn)
+      return false
+    # Already held by this PID — reacquire (idempotent)
+    abort(txn)
+    return true
+  
+  # Not held — acquire
+  let pidStr = $pid
+  var newVal: Val
+  newVal.mvSize = cast[uint](pidStr.len)
+  newVal.mvData = cast[pointer](unsafeAddr pidStr[0])
+  
+  rc = put(txn, store.lockDbi, addr mdbKey, addr newVal, 0)
+  if rc != SUCCESS:
+    abort(txn)
+    return false
+  
+  rc = txnCommit(txn)
+  return rc == SUCCESS
+
+proc releaseLock*(store: var LmdbStore, name: string, pid: int): bool =
+  ## Release a lock on resource name. Returns true if released.
+  let key = lockKey(name)
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS: return false
+  
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](key.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+  
+  # Check if held by this PID
+  var mdbVal: Val
+  rc = get(txn, store.lockDbi, addr mdbKey, addr mdbVal)
+  if rc != SUCCESS:
+    abort(txn)
+    return false  # Not held
+  
+  let holder = newString(mdbVal.mvSize)
+  copyMem(addr holder[0], mdbVal.mvData, mdbVal.mvSize)
+  if holder != $pid:
+    abort(txn)
+    return false  # Held by other PID
+  
+  # Release
+  rc = del(txn, store.lockDbi, addr mdbKey, nil)
+  if rc != SUCCESS:
+    abort(txn)
+    return false
+  
+  rc = txnCommit(txn)
+  return rc == SUCCESS
+
+proc releaseAllLocks*(store: var LmdbStore, pid: int): int =
+  ## Release all locks held by this PID. Returns count of released locks.
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS: return 0
+  
+  var cursor: LMDBCursor
+  rc = cursorOpen(txn, store.lockDbi, addr cursor)
+  if rc != SUCCESS:
+    abort(txn)
+    return 0
+  
+  var mdbKey: Val
+  var mdbVal: Val
+  var released = 0
+  var toDelete: seq[string] = @[]
+  
+  # Collect all locks held by this PID
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, FIRST)
+  while rc == SUCCESS:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    # Only process lock keys
+    if key.startsWith("\x00LOCK\x00"):
+      let holder = newString(mdbVal.mvSize)
+      copyMem(addr holder[0], mdbVal.mvData, mdbVal.mvSize)
+      if holder == $pid:
+        toDelete.add(key)
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  
+  cursorClose(cursor)
+  
+  # Delete collected locks
+  for key in toDelete:
+    var delKey: Val
+    delKey.mvSize = cast[uint](key.len)
+    delKey.mvData = cast[pointer](unsafeAddr key[0])
+    rc = del(txn, store.lockDbi, addr delKey, nil)
+    if rc == SUCCESS:
+      inc released
+  
+  rc = txnCommit(txn)
+  if rc != SUCCESS: return 0
+  return released
+
+proc lockHeld*(store: var LmdbStore, name: string, pid: int): bool =
+  ## Check if a lock is held by this PID.
+  let key = lockKey(name)
+  var readTxn: ptr Txn
+  var rc = txnBegin(store.env, nil, RDONLY, addr readTxn)
+  if rc != SUCCESS: return false
+  
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](key.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+  
+  var mdbVal: Val
+  rc = get(readTxn, store.lockDbi, addr mdbKey, addr mdbVal)
+  if rc != SUCCESS:
+    abort(readTxn)
+    return false
+  
+  let holder = newString(mdbVal.mvSize)
+  copyMem(addr holder[0], mdbVal.mvData, mdbVal.mvSize)
+  abort(readTxn)
+  return holder == $pid
 
 proc beginReadBatch*(store: var LmdbStore) =
   ## Begin a read batch — cache the read transaction for multiple reads.
