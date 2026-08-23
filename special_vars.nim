@@ -251,7 +251,7 @@ proc setZtrap(val: string) =
   ztrap = val
 
 proc getZversion(): string =
-  return "nimm 0.1.4"
+  return "nimm 0.1.5"
 
 proc registerAllSpecialVars*(g: var Globals) =
   ## Register all special variables with the globals system
