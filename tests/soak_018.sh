@@ -12,7 +12,7 @@ export RSM_BIN="$HOME/rsm/rsm"
 
 START_EPOCH=$(date +%s)
 LOG="$HOME/nimm/soak_018_${START_EPOCH}.log"
-MCP_PORT=19999
+MCP_PORT=$((19000 + RANDOM % 1000))
 MCP_KEY="soak_$(date +%s)"
 MCP_PID=""
 FAILS=0
@@ -33,12 +33,12 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
   log "--- cycle $CYCLE begin ---"
 
   # P1: Unit suites
-  P1=$(./run_all_tests 2>&1 | tail -1)
+  P1=$(./run_all_tests 2>&1)
   if echo "$P1" | grep -q "Failed: 0"; then
-    log "P1 unit-suites OK ($P1)"
+    log "P1 unit-suites OK"
   else
     FAILS=$((FAILS + 1))
-    log "P1 FAIL: $P1"
+    log "P1 FAIL: $(echo "$P1" | grep -E 'Failed|Total' | tail -1)"
   fi
 
   # P2: Extended conformance
