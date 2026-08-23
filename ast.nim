@@ -398,7 +398,9 @@ type
     cZedit, cZlink, cView, cZallocate, cZdeallocate,
     cTstart, cTcommit, cTrollback,
     cZstack,
-    cZstats, cZvhistory
+    cZstats, cZvhistory,
+    cZanalyze,
+    cNiOpen, cNiListen, cNiAccept, cNiRead, cNiWrite, cNiClose
 
   ## Cmd — Command AST Node (without postconditional)
   ##
@@ -534,3 +536,21 @@ type
       discard
     of cZvhistory:
       discard
+    of cZanalyze:
+      zanalyzeExpr*: Expr
+    of cNiOpen:
+      niOpenProtocol*: Expr
+      niOpenHost*: Expr
+      niOpenPort*: Expr
+    of cNiListen:
+      niListenPort*: Expr
+    of cNiAccept:
+      niAcceptListener*: Expr
+    of cNiRead:
+      niReadConn*: Expr
+      niReadSize*: Expr
+    of cNiWrite:
+      niWriteConn*: Expr
+      niWriteData*: Expr
+    of cNiClose:
+      niCloseConn*: Expr

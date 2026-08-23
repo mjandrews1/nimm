@@ -17,6 +17,8 @@ import debugger
 import inspector
 import jobs
 import value
+import static_analysis
+import network
 
 type
   DeviceHandle = ref object
@@ -41,6 +43,7 @@ type
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
     currentChannel: int  # Current channel number (0 = principal)
     jobTable*: JobTable  # Job table for JOB command
+    network*: NetworkManager  # Network connections (#329)
 
 # Global engine reference for debugger evalProc closure
 var globalEngine: Engine = nil
@@ -59,6 +62,7 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.quitAll = false
   result.doDepth = 0
   result.jobTable = newJobTable()
+  result.network = newNetworkManager()
   
   # Set global reference for debugger evalProc closure
   globalEngine = result
@@ -889,6 +893,61 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cTrollback:
         # TROLLBACK — rollback transaction (§11.3)
         eng.globals[].trollback()
+
+      of CmdKind.cZanalyze:
+        # ZANALYZE — Static analysis of current routine (#330)
+        let routine = eng.runtime[].currentRoutine
+        if routine.len > 0 and routine in eng.runtime[].routines:
+          # Strip labels before analysis — static_analysis expects command lines
+          var lines: seq[string] = @[]
+          for line in eng.runtime[].routines[routine].lines:
+            lines.add(stripLabel(line))
+          let report = analyzeRoutine(lines.join("\n"))
+          eng.writeln(formatReport(report))
+        else:
+          eng.writeln("No routine loaded")
+
+      of CmdKind.cNiOpen:
+        # NIOPEN protocol:host:port — Open network connection (#329)
+        let protocol = eng.evaluator[].eval(cmd.niOpenProtocol)
+        let host = eng.evaluator[].eval(cmd.niOpenHost)
+        let port = parseInt(eng.evaluator[].eval(cmd.niOpenPort))
+        let connId = eng.network.niopen(protocol, host, port)
+        eng.writeln($connId)
+
+      of CmdKind.cNiListen:
+        # NILISTEN port — Listen for connections (#329)
+        let port = parseInt(eng.evaluator[].eval(cmd.niListenPort))
+        let listenerId = eng.network.nilisten(port)
+        eng.writeln($listenerId)
+
+      of CmdKind.cNiAccept:
+        # NIACCEPT listenerId — Accept connection (#329)
+        let listenerId = parseInt(eng.evaluator[].eval(cmd.niAcceptListener))
+        let connId = eng.network.niaccept(listenerId)
+        eng.writeln($connId)
+
+      of CmdKind.cNiRead:
+        # NIREAD connId[:size] — Read data from connection (#329)
+        let connId = parseInt(eng.evaluator[].eval(cmd.niReadConn))
+        let size = parseInt(eng.evaluator[].eval(cmd.niReadSize))
+        let data = eng.network.niread(connId, size)
+        eng.write(data)
+
+      of CmdKind.cNiWrite:
+        # NIWRITE connId:data — Write data to connection (#329)
+        let connId = parseInt(eng.evaluator[].eval(cmd.niWriteConn))
+        let data = eng.evaluator[].eval(cmd.niWriteData)
+        let ok = eng.network.niwrite(connId, data)
+        if not ok:
+          eng.writeln("NIWRITE failed")
+
+      of CmdKind.cNiClose:
+        # NICLOSE connId — Close connection (#329)
+        let connId = parseInt(eng.evaluator[].eval(cmd.niCloseConn))
+        let ok = eng.network.niclose(connId)
+        if not ok:
+          eng.writeln("NICLOSE failed")
 
       else:
         discard

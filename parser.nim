@@ -181,7 +181,10 @@ proc isCommandKeyword*(w: string): bool =
   of 'f': equiWord(w, "FOR") or equiWord(w, "F")
   of 'q': equiWord(w, "QUIT") or equiWord(w, "Q")
   of 'k': equiWord(w, "KILL") or equiWord(w, "K")
-  of 'n': equiWord(w, "NEW") or equiWord(w, "N")
+  of 'n':
+    equiWord(w, "NEW") or equiWord(w, "N") or
+    equiWord(w, "NIOPEN") or equiWord(w, "NILISTEN") or equiWord(w, "NIACCEPT") or
+    equiWord(w, "NIREAD") or equiWord(w, "NIWRITE") or equiWord(w, "NICLOSE")
   of 'h': equiWord(w, "HANG") or equiWord(w, "H") or equiWord(w, "HALT")
   of 'l': equiWord(w, "LOCK") or equiWord(w, "L")
   of 'm': equiWord(w, "MERGE") or equiWord(w, "M")
@@ -204,7 +207,7 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZEDIT") or equiWord(w, "ZE") or equiWord(w, "ZLINK") or
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK") or
-    equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY")
+    equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   of 't':
     equiWord(w, "TSTART") or equiWord(w, "T") or
@@ -1113,6 +1116,42 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cTcommit)
   of "TROLLBACK", "TRO":
     cmd = Cmd(kind: cTrollback)
+  of "ZANALYZE":
+    var zanalyzeExpr: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      zanalyzeExpr = p.parseExpr()
+    cmd = Cmd(kind: cZanalyze, zanalyzeExpr: zanalyzeExpr)
+  of "NIOPEN":
+    let protocol = p.parseExpr()
+    var host = Expr(kind: eStr, sval: "")
+    var port = Expr(kind: numLit, sval: "0", cachedFloat: 0.0, hasCachedFloat: true)
+    if p.peek() == tokColon:
+      discard p.advance()
+      host = p.parseExpr()
+    if p.peek() == tokColon:
+      discard p.advance()
+      port = p.parseExpr()
+    cmd = Cmd(kind: cNiOpen, niOpenProtocol: protocol, niOpenHost: host, niOpenPort: port)
+  of "NILISTEN":
+    cmd = Cmd(kind: cNiListen, niListenPort: p.parseExpr())
+  of "NIACCEPT":
+    cmd = Cmd(kind: cNiAccept, niAcceptListener: p.parseExpr())
+  of "NIREAD":
+    let connExpr = p.parseExpr()
+    var sizeExpr = Expr(kind: numLit, sval: "4096", cachedFloat: 4096.0, hasCachedFloat: true)
+    if p.peek() == tokColon:
+      discard p.advance()
+      sizeExpr = p.parseExpr()
+    cmd = Cmd(kind: cNiRead, niReadConn: connExpr, niReadSize: sizeExpr)
+  of "NIWRITE":
+    let connExpr = p.parseExpr()
+    var dataExpr = Expr(kind: eStr, sval: "")
+    if p.peek() == tokColon:
+      discard p.advance()
+      dataExpr = p.parseExpr()
+    cmd = Cmd(kind: cNiWrite, niWriteConn: connExpr, niWriteData: dataExpr)
+  of "NICLOSE":
+    cmd = Cmd(kind: cNiClose, niCloseConn: p.parseExpr())
   else:
     cmd = Cmd(kind: cBreak)
   CommandNode(postcond: postcond, cmd: cmd, line: p.cur.line, col: p.cur.col)
