@@ -800,9 +800,49 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             discard
 
       of CmdKind.cView:
-        # VIEW expr — View/modify system parameters
-        # Implemented as no-op (VIEW is implementation-defined)
-        discard
+        # VIEW expr — View/modify system parameters (#308)
+        # Read-only: VIEW 0..7 returns introspection values
+        # Read-write: VIEW 10:val sets runtime flags
+        if cmd.viewExpr != nil:
+          let arg = eng.evaluator[].eval(cmd.viewExpr)
+          # Check for expr:expr form (read-write)
+          let colonPos = arg.find(':')
+          if colonPos >= 0:
+            let codeStr = arg[0..<colonPos]
+            let valStr = arg[colonPos+1..^1]
+            try:
+              let code = parseInt(codeStr)
+              let val = parseInt(valStr)
+              case code
+              of 10: eng.runtime[].tracingEnabled = (val != 0)
+              of 11: eng.debugger.debugPrompt = (val != 0)
+              else: discard
+            except:
+              discard
+          else:
+            # Read-only
+            try:
+              let code = parseInt(arg)
+              var result = ""
+              case code
+              of 0: result = $eng.doDepth
+              of 1: result = $eng.globals[].txn.levels.len
+              of 2: result = "0"  # heldLocks count — simplified
+              of 3: result = $eng.inspector.variableHistory.len
+              of 4: result = $eng.inspector.stats.commandsExecuted
+              of 5: result = $eng.inspector.stats.functionCalls
+              of 6: result = $eng.inspector.stats.variableAccesses
+              of 7: result = $eng.runtime[].currentRoutine
+              else: discard
+              if result.len > 0:
+                eng.writeln(result)
+            except:
+              # String arg — RSM-compatible
+              let s = arg.toUpperAscii
+              case s
+              of "BLKSIZE": eng.writeln("4096")
+              of "DBFILE": eng.writeln(eng.globals[].dbPath)
+              else: discard
 
       of CmdKind.cZallocate:
         # ZALLOCATE ^global — Pre-allocate global storage (no-op in nimm)
