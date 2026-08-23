@@ -196,7 +196,7 @@ proc main() =
     # Start MCP JSON-RPC server (#331)
     var mcp = newMCPServer(port = args.mcpPort, apiKey = args.apiKey)
     if args.auditLog.len > 0:
-      setAuditFile(args.auditLog)
+      mcp.setAuditFile(args.auditLog)
     
     # Register read-only tools
     mcp.registerTool("execute_m_code", "Execute M/MUMPS code and return output", %*{
