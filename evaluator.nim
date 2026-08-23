@@ -525,6 +525,21 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     let start = if args.len > 2: parseInt(args[2]) else: 1
     let stop = if args.len > 3: parseInt(args[3]) else: start
     if d.len == 0: return s
+    if start <= 0 or stop < start: return ""
+    # Fast path: single piece extraction via find (#323)
+    if start == stop:
+      var pieceStart = 0
+      var pieceNum = 1
+      while pieceNum < start and pieceStart < s.len:
+        let pos = s.find(d, pieceStart)
+        if pos < 0: return ""
+        pieceStart = pos + d.len
+        inc pieceNum
+      if pieceStart >= s.len and start > pieceNum: return ""
+      let pieceEnd = s.find(d, pieceStart)
+      if pieceEnd < 0: return s[pieceStart..^1]
+      return s[pieceStart..<pieceEnd]
+    # Multi-piece: split and join
     var pieces: seq[string] = @[]
     var current = ""
     for ch in s:

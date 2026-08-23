@@ -70,10 +70,11 @@ const blockSep* = "\x01"
 #
 # ==============================================================================
 
-import std/[options, strutils]
+import std/[options, strutils, math]
 
 import ast
 import lexer
+import value
 
 ## Parser — The Parser State
 ##
@@ -332,7 +333,29 @@ proc parseExpr(p: var Parser): Expr =
       let op = tokToBinop(p.peek()).get()
       discard p.advance()
       let right = parsePrefix(p)
-      left = Expr(kind: eBinary, op: op, left: left, right: right)
+      # Constant folding: if both operands are numeric literals, fold at parse time (#322)
+      if left.kind == numLit and left.hasCachedFloat and right.kind == numLit and right.hasCachedFloat:
+        var folded: float
+        case op
+        of bAdd: folded = left.cachedFloat + right.cachedFloat
+        of bSub: folded = left.cachedFloat - right.cachedFloat
+        of bMul: folded = left.cachedFloat * right.cachedFloat
+        of bDiv:
+          if right.cachedFloat != 0.0: folded = left.cachedFloat / right.cachedFloat
+          else: folded = 0.0
+        of bIntDiv:
+          if right.cachedFloat != 0.0: folded = float(int(left.cachedFloat / right.cachedFloat))
+          else: folded = 0.0
+        of bMod:
+          if right.cachedFloat != 0.0: folded = left.cachedFloat - right.cachedFloat * floor(left.cachedFloat / right.cachedFloat)
+          else: folded = 0.0
+        of bPow: folded = pow(left.cachedFloat, right.cachedFloat)
+        else:
+          left = Expr(kind: eBinary, op: op, left: left, right: right)
+          continue
+        left = Expr(kind: numLit, sval: formatNumber(folded), cachedFloat: folded, hasCachedFloat: true)
+      else:
+        left = Expr(kind: eBinary, op: op, left: left, right: right)
     elif p.peek() == tokQuestion:
       # Pattern match: expr ? pattern
       discard p.advance()
@@ -1092,7 +1115,7 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cTrollback)
   else:
     cmd = Cmd(kind: cBreak)
-  CommandNode(postcond: postcond, cmd: cmd)
+  CommandNode(postcond: postcond, cmd: cmd, line: p.cur.line, col: p.cur.col)
 
 ## parseSetArgs — Parse SET Arguments
 ##

@@ -336,6 +336,8 @@ type
   CommandNode* = ref object
     postcond*: Expr
     cmd*: Cmd
+    line*: int       # Source line number (1-based) (#326)
+    col*: int        # Source column number (1-based) (#326)
 
   ## Line — A Sequence of Commands
   ##

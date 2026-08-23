@@ -125,6 +125,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
     let cmd = cmdNode.cmd
     if cmd == nil: continue
 
+    # Update debugger position for source-level stepping (#326)
+    eng.debugger.currentLine = cmdNode.line
+    eng.debugger.currentCol = cmdNode.col
+
     # Record command execution for introspection
     eng.inspector.recordCommand()
 

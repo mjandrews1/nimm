@@ -13,6 +13,8 @@ type
     stepping*: bool         # Currently stepping
     debugPrompt*: bool      # Show debug prompt
     lastCommand*: string    # Last debug command
+    currentLine*: int       # Current source line (#326)
+    currentCol*: int        # Current source column (#326)
 
 proc newDebugger*(): Debugger =
   new(result)
@@ -117,6 +119,7 @@ proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
       echo "  list, l      - List breakpoints"
       echo "  stack, k     - Show call stack"
       echo "  vars, v      - List local variables"
+      echo "  source, src  - Show current source position"
       echo "  quit, q      - Quit debugger"
     of "continue", "c":
       dbg.continueExecution()
@@ -137,6 +140,11 @@ proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
     of "vars", "v":
       # List local variables — requires engine reference
       echo "Variables: (use ZWRITE for detailed view)"
+    of "source", "src":
+      if dbg.currentLine > 0:
+        echo "Line ", dbg.currentLine, ", Col ", dbg.currentCol
+      else:
+        echo "No source position available"
     else:
       if trimmed.startsWith("print ") or trimmed.startsWith("p "):
         let varName = if trimmed.startsWith("print "): trimmed[6..^1].strip() else: trimmed[2..^1].strip()

@@ -122,6 +122,8 @@ type
     kind*: TokKind
     text*: string
     start*: int
+    line*: int       # Line number (1-based) (#326)
+    col*: int        # Column number (1-based) (#326)
 
   ## Lexer — The Lexical Analyzer State
   ##
@@ -138,10 +140,12 @@ type
   Lexer* = object
     src*: string
     pos*: int
+    line*: int       # Current line number (1-based) (#326)
+    col*: int        # Current column number (1-based) (#326)
 
 ## newLexer — Create a New Lexer
 proc newLexer*(src: string): Lexer =
-  Lexer(src: src, pos: 0)
+  Lexer(src: src, pos: 0, line: 1, col: 1)
 
 ## peekAt — Look Ahead Without Consuming
 ##
@@ -206,11 +210,18 @@ proc isNameChar(c: char): bool =
 ##   [LEX] pos=13 → tokWord text="WRITE"
 proc nextToken*(lex: var Lexer): Token =
   while lex.peekAt(0) in {' ', '\t', '\r', '\n'}:
+    if lex.peekAt(0) == '\n':
+      inc lex.line
+      lex.col = 1
+    else:
+      inc lex.col
     inc lex.pos
   let start = lex.pos
+  let startLine = lex.line
+  let startCol = lex.col
   let c = lex.peekAt(0)
   if c == '\0':
-    return Token(kind: tokEof, start: start)
+    return Token(kind: tokEof, start: start, line: startLine, col: startCol)
 
   # String literal
   # ANSI/ISO Section 3.4: String literals are delimited by double-quotes.
@@ -239,7 +250,7 @@ proc nextToken*(lex: var Lexer): Token =
         inc sLen
         inc lex.pos
     s.setLen(sLen)
-    return Token(kind: tokStr, text: s, start: start)
+    return Token(kind: tokStr, text: s, start: start, line: startLine, col: startCol)
 
   # Number (integer, decimal, or scientific notation)
   # ANSI/ISO Section 3.3: Numeric literals are digits optionally followed
@@ -288,7 +299,7 @@ proc nextToken*(lex: var Lexer): Token =
           inc nLen
           inc lex.pos
     n.setLen(nLen)
-    return Token(kind: tokNumber, text: n, start: start)
+    return Token(kind: tokNumber, text: n, start: start, line: startLine, col: startCol)
 
   # Name / word (letters, %, digits after first)
   # ANSI/ISO Section 3.2: Names start with a letter or % and continue
@@ -303,7 +314,7 @@ proc nextToken*(lex: var Lexer): Token =
       inc wLen
       inc lex.pos
     w.setLen(wLen)
-    return Token(kind: tokWord, text: w, start: start)
+    return Token(kind: tokWord, text: w, start: start, line: startLine, col: startCol)
 
   # Operators and delimiters
   # Each case handles a single character or a multi-character sequence.
@@ -409,7 +420,7 @@ proc nextToken*(lex: var Lexer): Token =
   else:
     # Unknown character — treat as a word (graceful degradation)
     inc lex.pos
-    return Token(kind: tokWord, text: $c, start: start)
+    return Token(kind: tokWord, text: $c, start: start, line: startLine, col: startCol)
   Token(kind: kind, start: start)
 
 ## tokToBinop — Map Token Kind to Binary Operator

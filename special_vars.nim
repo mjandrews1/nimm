@@ -139,8 +139,15 @@ proc getReference(): string =
 proc setReference(val: string) =
   reference = val
 
+var storageCache: string = ""
+var storageCacheTime: int64 = 0
+
 proc getStorage(): string =
   # $STORAGE returns available memory in bytes
+  # Cache for 60 seconds to avoid repeated subprocess/file reads (#327)
+  let now = getTime().toUnix()
+  if storageCache.len > 0 and now - storageCacheTime < 60:
+    return storageCache
   try:
     when defined(linux):
       let meminfo = readFile("/proc/meminfo")
@@ -149,14 +156,20 @@ proc getStorage(): string =
           let parts = line.split()
           if parts.len >= 2:
             let kb = parseInt(parts[1])
-            return $(kb * 1024)
+            storageCache = $(kb * 1024)
+            storageCacheTime = now
+            return storageCache
     elif defined(macosx):
       let (output, _) = execCmdEx("sysctl -n hw.memsize")
       let bytes = parseInt(output.strip())
-      return $bytes
+      storageCache = $bytes
+      storageCacheTime = now
+      return storageCache
   except:
     discard
-  return "1000000000"  # Fallback: 1GB
+  if storageCache.len == 0:
+    storageCache = "1000000000"  # Fallback: 1GB
+  return storageCache
 
 var stackDepth: int = 0
 
