@@ -20,6 +20,9 @@ import parser
 import lexer
 import inspector
 
+# Shared empty seq — avoids @[] allocation on every bare variable access (#313)
+const emptySubs: seq[string] = @[]
+
 type
   Evaluator* = object
     ## Expression evaluator
@@ -90,7 +93,7 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
         if ev.globals[].nakedGlobal.len == 0: return ""
         return ev.globals[].get(ev.globals[].nakedGlobal, ev.globals[].nakedSubs)
       if expr.vname.startsWith("^"):
-        return ev.globals[].get(expr.vname, @[])
+        return ev.globals[].get(expr.vname, emptySubs)
       return ev.globals[].getLocalDirect(expr.vname)
     var subs: seq[string] = @[]
     for sub in expr.subs:
@@ -125,7 +128,7 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       try: num = parseFloat(current)
       except: discard
       let newVal = num + increment
-      ev.globals[].set(varName, @[], formatNumber(newVal))
+      ev.globals[].set(varName, emptySubs, formatNumber(newVal))
       return formatNumber(newVal)
     # Special handling for $GET — needs variable name, not value.
     # ISO §8.4.2: returns the node's value if defined, else the caller's
