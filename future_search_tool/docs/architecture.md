@@ -134,3 +134,104 @@ SET ^CACHE("hypertension")=results
 | MCP search tools | Low | Expose search via MCP |
 | $NI_SEARCH function | Low | Expose search via M code |
 | Result formatter | Low | Format search results for display |
+
+## Relationship Caching with NiMap
+
+LMDB for persistence, NiMap for speed:
+
+```
+; Persistent storage (LMDB)
+^LINK("MESH", "D000001", "PUBMED", "12345678") = "mesh_term"
+
+; In-memory cache (NiMap) — loaded on startup
+^NIMAP("link:MESH:D000001") = "PUBMED:12345678,CATLINE:1234567"
+```
+
+**Pattern:**
+1. On import: write to LMDB (^LINK) AND NiMap cache
+2. On search: look up NiMap first (fast), fall back to LMDB
+3. On startup: load all ^LINK entries into NiMap
+
+**Why NiMap fits:**
+- Relationships are read-heavy, write-light (perfect for caching)
+- NiMap is in-memory → O(1) lookups
+- LMDB provides persistence and cross-process access
+- NiMap provides speed for search operations
+
+## Performance Scaling Analysis
+
+### Data Sizes (NLM)
+
+| Dataset | Records | Size | Relationships |
+|---|---|---|---|
+| MeSH Descriptors | ~30K | 313 MB | ~100K links |
+| MeSH Qualifiers | ~80 | 291 KB | ~500 links |
+| MeSH Supplements | ~250K | 786 MB | ~500K links |
+| CatLine | ~20M | 5.1 GB | ~20M links |
+| SerLine | ~300K | 626 MB | ~300K links |
+| PubMed | ~36M | 1.4 GB (compressed) | ~100M links |
+| **Total** | **~56M** | **~8 GB** | **~120M links** |
+
+### Component Scaling
+
+| Component | Current | At Scale (56M records) | Bottleneck |
+|---|---|---|---|
+| **NiMap cache** | ~10 MB | ~500 MB | Memory — acceptable |
+| **BM25 index** | ~1 MB | ~50 GB | Disk — needs LMDB storage |
+| **HNSW index** | ~10 MB | ~2 GB | Memory — acceptable |
+| **LMDB lookups** | O(log n) | O(log n) | No degradation |
+| **Search latency** | ~1ms | ~100ms | BM25 iteration |
+
+### Scaling Strategies
+
+**1. BM25 Index in LMDB (not in-memory)**
+- Current: Table[term, Table[docId, freq]] in memory
+- At scale: Store in LMDB with compound keys
+- Key: `^BM25(term, docType, docId)` = frequency
+- Lookup: O(log n) per term via LMDB B-tree
+
+**2. NiMap Cache with LRU Eviction**
+- Current: Load all relationships on startup
+- At scale: LRU cache with configurable size
+- Evict least-used entries when memory limit hit
+- Fall back to LMDB for evicted entries
+
+**3. HNSW Index Partitioning**
+- Current: Single index for all vectors
+- At scale: Partition by record type (MESH, PUBMED, etc.)
+- Search each partition, merge results
+- Reduces memory per partition
+
+**4. Incremental Indexing**
+- Current: Rebuild index on import
+- At scale: Update index incrementally on import
+- Use TSTART/TCOMMIT for atomic index updates
+- Avoid full rebuilds
+
+**5. Result Caching**
+- Current: No caching
+- At scale: Cache frequent queries in NiMap
+- TTL-based invalidation
+- LRU eviction when cache full
+
+### Performance Projections
+
+| Operation | Current (small) | At Scale (56M) | With optimizations |
+|---|---|---|---|
+| Import 1M records | ~10s | ~10s | ~10s (incremental) |
+| BM25 search | ~1ms | ~100ms | ~10ms (LMDB index) |
+| HNSW search | ~1ms | ~10ms | ~5ms (partitioned) |
+| Link traversal | ~0.1ms | ~1ms | ~0.5ms (NiMap cache) |
+| Full reindex | ~1min | ~10min | ~1min (incremental)
+
+### Memory Budget
+
+| Component | Small (1M) | Medium (10M) | Large (56M) |
+|---|---|---|---|
+| NiMap cache | 10 MB | 100 MB | 500 MB |
+| BM25 in-memory | 1 MB | 10 MB | 50 GB (use LMDB) |
+| HNSW index | 10 MB | 100 MB | 2 GB |
+| LMDB overhead | 50 MB | 500 MB | 5 GB |
+| **Total** | **71 MB** | **710 MB** | **~57 GB** |
+
+**Recommendation:** For >10M records, move BM25 index to LMDB. For >50M records, partition HNSW index by record type.
