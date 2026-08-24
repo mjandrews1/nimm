@@ -4,6 +4,7 @@
 import ast
 import bytecode
 import strutils
+import value
 
 proc compileExpr*(bc: Bytecode, expr: Expr) =
   ## Compile an expression to bytecode (pushes result onto stack)
@@ -247,3 +248,108 @@ proc compileLine*(line: Line): Bytecode =
   for cmdNode in line.cmds:
     if cmdNode != nil and cmdNode.cmd != nil:
       result.compileCommand(cmdNode.cmd)
+
+# --- Optimization passes (#343) ---
+
+proc foldConstants*(bc: var Bytecode) =
+  ## Fold constant expressions: PUSH_CONST a, PUSH_CONST b, OP → PUSH_CONST result
+  var i = 0
+  while i < bc.instructions.len - 2:
+    let a = bc.instructions[i]
+    let op = bc.instructions[i + 1]
+    let b = bc.instructions[i + 2]
+    if a.opcode == opPushConst and b.opcode == opPushConst:
+      let aval = bc.constants[a.argInt]
+      let bval = bc.constants[b.argInt]
+      var folded: string = ""
+      case op.opcode
+      of opAdd:
+        folded = $(numPrefix(aval) + numPrefix(bval))
+      of opSub:
+        folded = $(numPrefix(aval) - numPrefix(bval))
+      of opMul:
+        folded = $(numPrefix(aval) * numPrefix(bval))
+      of opDiv:
+        let r = numPrefix(bval)
+        if r != 0.0: folded = $(numPrefix(aval) / r)
+      of opCmpEql:
+        folded = if numPrefix(aval) == numPrefix(bval): "1" else: "0"
+      of opCmpNeq:
+        folded = if numPrefix(aval) != numPrefix(bval): "1" else: "0"
+      of opCmpLt:
+        folded = if numPrefix(aval) < numPrefix(bval): "1" else: "0"
+      of opCmpGt:
+        folded = if numPrefix(aval) > numPrefix(bval): "1" else: "0"
+      of opConcat:
+        folded = aval & bval
+      else:
+        inc i
+        continue
+      if folded.len > 0:
+        let idx = bc.addConst(folded)
+        bc.instructions[i] = Instruction(opcode: opPushConst, argInt: idx)
+        bc.instructions.delete(i + 2)
+        bc.instructions.delete(i + 1)
+        continue
+    inc i
+
+proc eliminateDeadCode*(bc: var Bytecode) =
+  ## Remove unreachable instructions after JUMP and QUIT
+  if bc.instructions.len == 0: return
+  var reachable = newSeq[bool](bc.instructions.len)
+  var queue = @[0]
+  while queue.len > 0:
+    let idx = queue.pop()
+    if idx < 0 or idx >= bc.instructions.len: continue
+    if reachable[idx]: continue
+    reachable[idx] = true
+    let instr = bc.instructions[idx]
+    case instr.opcode
+    of opJump:
+      queue.add(instr.argInt)
+    of opJumpIfFalse, opJumpIfTrue:
+      queue.add(instr.argInt)
+      queue.add(idx + 1)
+    of opQuit, opReturn:
+      discard
+    else:
+      queue.add(idx + 1)
+  var newInstrs: seq[Instruction] = @[]
+  for i, instr in bc.instructions:
+    if reachable[i]:
+      newInstrs.add(instr)
+  bc.instructions = newInstrs
+
+proc peephole*(bc: var Bytecode) =
+  ## Remove redundant instruction pairs
+  var changed = true
+  while changed:
+    changed = false
+    var i = 0
+    while i < bc.instructions.len - 1:
+      let a = bc.instructions[i]
+      let b = bc.instructions[i + 1]
+      # PUSH_CONST + POP → remove both
+      if a.opcode == opPushConst and b.opcode == opPop:
+        bc.instructions.delete(i)
+        bc.instructions.delete(i)
+        changed = true
+        continue
+      # DUP + POP → remove both
+      if a.opcode == opDup and b.opcode == opPop:
+        bc.instructions.delete(i)
+        bc.instructions.delete(i)
+        changed = true
+        continue
+      # JUMP to next instruction → remove
+      if a.opcode == opJump and a.argInt == i + 1:
+        bc.instructions.delete(i)
+        changed = true
+        continue
+      inc i
+
+proc optimize*(bc: var Bytecode) =
+  ## Run all optimization passes
+  bc.foldConstants()
+  bc.eliminateDeadCode()
+  bc.peephole()

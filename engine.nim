@@ -408,7 +408,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                   let stripped = stripLabel(lineStr)
                   let parsed = eng.cachedParseLine(stripped)
                   if parsed != nil:
-                    rtRoutine.bytecodeCache.add(compileLine(parsed))
+                    var bc = compileLine(parsed)
+                    bc.optimize()
+                    rtRoutine.bytecodeCache.add(bc)
                   else:
                     rtRoutine.bytecodeCache.add(nil)
                 rtRoutine.bytecodeReady = true

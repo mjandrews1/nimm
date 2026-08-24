@@ -142,10 +142,45 @@ proc testDisassemble() =
   bc.addInstr(opAdd)
   bc.addInstr(opWrite, argInt = 1)
   let dis = bc.disassemble()
-  # Verify disassembly contains expected instructions
-  let hasPush = dis.len > 0  # basic sanity check
+  let hasPush = dis.len > 0
   assert(hasPush)
   echo "  ✓ Disassembler"
+
+proc testConstantFolding() =
+  echo "Testing constant folding..."
+  var bc = newBytecode("W 1+2")
+  bc.addPushConst("1")
+  bc.addPushConst("2")
+  bc.addInstr(opAdd)
+  bc.addInstr(opWrite, argInt = 1)
+  assert bc.instructions.len == 4
+  bc.foldConstants()
+  assert bc.instructions.len == 2, "Expected 2 instructions after folding, got " & $bc.instructions.len
+  assert bc.instructions[0].opcode == opPushConst
+  assert bc.constants[bc.instructions[0].argInt] == "3.0"
+  echo "  ✓ Constant folding"
+
+proc testDeadCodeElimination() =
+  echo "Testing dead code elimination..."
+  var bc = newBytecode("QUIT W 1")
+  bc.addInstr(opQuit)
+  bc.addPushConst("1")
+  bc.addInstr(opWrite, argInt = 1)
+  assert bc.instructions.len == 3
+  bc.eliminateDeadCode()
+  assert bc.instructions.len == 1, "Expected 1 instruction after elimination, got " & $bc.instructions.len
+  assert bc.instructions[0].opcode == opQuit
+  echo "  ✓ Dead code elimination"
+
+proc testPeephole() =
+  echo "Testing peephole optimizations..."
+  var bc = newBytecode("SET X=1 POP")
+  bc.addPushConst("1")
+  bc.addInstr(opPop)
+  assert bc.instructions.len == 2
+  bc.peephole()
+  assert bc.instructions.len == 0, "Expected 0 instructions after peephole, got " & $bc.instructions.len
+  echo "  ✓ Peephole optimizations"
 
 proc main() =
   echo "=== Bytecode VM Tests ==="
@@ -158,6 +193,9 @@ proc main() =
   testVMVariables()
   testVMTransactions()
   testDisassemble()
+  testConstantFolding()
+  testDeadCodeElimination()
+  testPeephole()
   echo ""
   echo "All bytecode tests passed!"
 
