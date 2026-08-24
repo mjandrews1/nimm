@@ -47,6 +47,23 @@
 | NOAA | ncdc.noaa.gov | CSV, JSON | Varies | Public domain |
 | Yahoo Finance | finance.yahoo.com | CSV | Varies | Fair use |
 
+## US Federal Government (focused subset)
+| Agency | Data | URL | Format | License |
+|---|---|---|---|---|
+| HHS/CDC | Health statistics, disease data, drug labels | data.gov, cdc.gov | CSV, JSON | Public domain |
+| NIH/PubMed | Biomedical literature, clinical trials | pubmed.gov, clinicaltrials.gov | XML, JSON | Public domain |
+| Census | Demographics, housing, economic surveys | census.gov | CSV, JSON | Public domain |
+| BLS | Employment, wages, inflation | bls.gov | CSV, JSON | Public domain |
+| FRED | Economic time series | fred.stlouisfed.org | CSV, JSON | Public domain |
+| Library of Congress | Bibliographic records, authority files | loc.gov | MARC, JSON | Public domain |
+| NASA | Technical reports, datasets | nasa.gov | Various | Public domain |
+
+**Notes:**
+- All US Federal Government data is public domain (no licensing restrictions)
+- data.gov is the central portal but has thousands of datasets — focus on the subset above
+- API rate limits may apply for some services
+- Some datasets are very large (Census, BLS) — consider incremental loading
+
 ## Notes
 - All sources listed are free and publicly accessible
 - Sizes are approximate
