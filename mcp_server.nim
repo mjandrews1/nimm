@@ -1,13 +1,14 @@
 # mcp_server.nim — MCP JSON-RPC server for nimm
 # Implements Model Context Protocol server with auth and audit logging
-# Uses synchronous HTTP server for cross-platform compatibility
+# Uses asynchttpserver with asyncCheck+poll for cross-platform compat
 
+import asynchttpserver
+import asyncdispatch
 import json
 import strutils
 import tables
 import times
 import os
-import net
 
 type
   AuditEntry = object
@@ -27,6 +28,7 @@ type
     toolSchemas*: Table[string, JsonNode]
     auditLog*: seq[AuditEntry]
     auditFile*: string
+    httpServer*: AsyncHttpServer
 
 proc newMCPServer*(port: int = 8080, apiKey: string = ""): MCPServer =
   new(result)
@@ -37,6 +39,7 @@ proc newMCPServer*(port: int = 8080, apiKey: string = ""): MCPServer =
   result.toolSchemas = initTable[string, JsonNode]()
   result.auditLog = @[]
   result.auditFile = ""
+  result.httpServer = newAsyncHttpServer()
 
 proc setAuditFile*(server: var MCPServer, path: string) =
   server.auditFile = path
@@ -63,16 +66,26 @@ proc registerTool*(server: var MCPServer, name: string, description: string, sch
   server.toolDescriptions[name] = description
   server.toolSchemas[name] = schema
 
-proc checkAuth(server: MCPServer, headers: string): bool =
+proc checkAuth(server: MCPServer, req: Request): bool =
   if server.apiKey.len == 0: return true
-  if "X-API-Key: " & server.apiKey in headers: return true
-  if "Authorization: Bearer " & server.apiKey in headers: return true
+  let authHeader = req.headers.getOrDefault("Authorization")
+  if authHeader.startsWith("Bearer "):
+    return authHeader[7..^1] == server.apiKey
+  let apiKeyHeader = req.headers.getOrDefault("X-API-Key")
+  if apiKeyHeader.len > 0:
+    return apiKeyHeader == server.apiKey
   return false
 
-proc handleRequest(server: MCPServer, clientIp: string, headers: string, body: string): string =
-  if not server.checkAuth(headers):
+proc handleRequest*(server: MCPServer, req: Request): Future[void] {.async.} =
+  let clientIp = req.hostname
+  let body = req.body
+  var response: JsonNode
+
+  if not server.checkAuth(req):
+    response = %*{"jsonrpc": "2.0", "error": {"code": -32000, "message": "Unauthorized"}}
     server.logAudit(clientIp, "auth", "", "", "401")
-    return $ %*{"jsonrpc": "2.0", "error": {"code": -32000, "message": "Unauthorized"}}
+    await req.respond(Http401, $response, newHttpHeaders([("Content-Type", "application/json")]))
+    return
 
   try:
     let request = parseJson(body)
@@ -83,35 +96,37 @@ proc handleRequest(server: MCPServer, clientIp: string, headers: string, body: s
 
       case httpMethod
       of "initialize":
+        response = %*{"jsonrpc": "2.0", "id": id, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "nimm-mcp", "version": "0.1.6"}}}
         server.logAudit(clientIp, "initialize", "", "", "OK")
-        return $ %*{"jsonrpc": "2.0", "id": id, "result": {"protocolVersion": "2024-11-05", "capabilities": {"tools": {}}, "serverInfo": {"name": "nimm-mcp", "version": "0.1.8"}}}
       of "tools/list":
         var tools: seq[JsonNode] = @[]
         for name, _ in server.tools:
           let desc = if name in server.toolDescriptions: server.toolDescriptions[name] else: "Tool: " & name
           let schema = if name in server.toolSchemas: server.toolSchemas[name] else: %*{"type": "object", "properties": {}}
           tools.add(%*{"name": name, "description": desc, "inputSchema": schema})
+        response = %*{"jsonrpc": "2.0", "id": id, "result": {"tools": tools}}
         server.logAudit(clientIp, "tools/list", "", "", "OK")
-        return $ %*{"jsonrpc": "2.0", "id": id, "result": {"tools": tools}}
       of "tools/call":
         let toolName = params["name"].getStr()
         let toolParams = if params.hasKey("arguments"): params["arguments"] else: newJObject()
         if toolName in server.tools:
           let result = server.tools[toolName](toolParams)
+          response = %*{"jsonrpc": "2.0", "id": id, "result": {"content": [{"type": "text", "text": $result}]}}
           server.logAudit(clientIp, "tools/call", toolName, $toolParams, "OK")
-          return $ %*{"jsonrpc": "2.0", "id": id, "result": {"content": [{"type": "text", "text": $result}]}}
         else:
+          response = %*{"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found: " & toolName}}
           server.logAudit(clientIp, "tools/call", toolName, $toolParams, "Error")
-          return $ %*{"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found: " & toolName}}
       else:
+        response = %*{"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found: " & httpMethod}}
         server.logAudit(clientIp, httpMethod, "", "", "Error")
-        return $ %*{"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found: " & httpMethod}}
     else:
+      response = %*{"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid request"}}
       server.logAudit(clientIp, "invalid", "", "", "Error")
-      return $ %*{"jsonrpc": "2.0", "error": {"code": -32600, "message": "Invalid request"}}
   except:
+    response = %*{"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}}
     server.logAudit(clientIp, "parse_error", "", "", "Error")
-    return $ %*{"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}}
+
+  await req.respond(Http200, $response, newHttpHeaders([("Content-Type", "application/json")]))
 
 proc start*(server: MCPServer) =
   echo "MCP server starting on port ", server.port
@@ -122,56 +137,11 @@ proc start*(server: MCPServer) =
   if server.auditFile.len > 0:
     echo "Audit log: ", server.auditFile
 
-  var sock = newSocket()
-  sock.setSockOpt(OptReuseAddr, true)
-  sock.bindAddr(Port(server.port))
-  sock.listen()
+  proc handler(req: Request) {.async.} =
+    {.cast(gcsafe).}:
+      await server.handleRequest(req)
+
+  # Use asyncCheck + poll instead of waitFor for cross-platform compat
+  asyncCheck server.httpServer.serve(Port(server.port), handler)
   echo "Listening on port ", server.port, "..."
-
-  while true:
-    var client: Socket
-    sock.accept(client)
-    try:
-      # Read HTTP request — single recv with large buffer
-      var data = ""
-      var headerEnd = -1
-      var contentLength = 0
-
-      # Read full request (MCP requests are small, <8KB)
-      var chunk = newString(16384)
-      let bytesRead = client.recv(chunk, 16384)
-      if bytesRead <= 0:
-        client.close()
-        continue
-      data = chunk[0..<bytesRead]
-
-      # Find end of headers
-      headerEnd = data.find("\r\n\r\n")
-      if headerEnd < 0:
-        client.close()
-        continue
-
-      # Extract Content-Length
-      let headerPart = data[0..<headerEnd]
-      for line in headerPart.split("\r\n"):
-        if line.startsWith("Content-Length:"):
-          contentLength = parseInt(line[15..^1].strip())
-
-      # Get body from initial read
-      let bodyStart = headerEnd + 4
-      var body = data[bodyStart..<data.len]
-
-      # Read remaining body if needed
-      while body.len < contentLength:
-        var more = newString(4096)
-        let moreBytes = client.recv(more, 4096)
-        if moreBytes <= 0: break
-        body.add(more[0..<moreBytes])
-
-      let response = server.handleRequest("client", headerPart, body)
-      let httpResponse = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " & $response.len & "\r\nConnection: close\r\n\r\n" & response
-      client.send(httpResponse)
-    except:
-      discard
-    finally:
-      client.close()
+  runForever()
