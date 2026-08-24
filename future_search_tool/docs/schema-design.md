@@ -56,6 +56,25 @@
   "PUBMED", "12345678", "CATLINE", "1234567" = "journal"
 ```
 
+### Upsert Semantics
+
+Each record type has a unique identifier. On import:
+- If the record exists (same ID), update all fields in place
+- If the record is new, insert it
+- Links are deduplicated (same from→to = same relationship)
+
+| Record Type | Unique ID | Upsert Key |
+|---|---|---|
+| MeSH Descriptor | DescriptorUI | ^MESH(descUI) |
+| MeSH Qualifier | QualifierUI | ^QUAL(qualUI) |
+| MeSH Supplement | SCR_ID | ^SUPPLEMENT(scrID) |
+| CatLine | NLMID | ^CATLINE(nlmID) |
+| SerLine | NLMID | ^SERLINE(nlmID) |
+| PubMed Citation | PMID | ^PUBMED(pmid) |
+| Link | from+to pair | ^LINK(fromType,fromId,toType,toId) |
+
+**Implementation:** M's natural upsert — `SET ^MESH("D000001","name")="Hypertension"` overwrites if exists, creates if not. No special logic needed.
+
 ### Query Patterns
 
 | Query | Path | Example |
