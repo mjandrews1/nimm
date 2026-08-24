@@ -78,7 +78,19 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
   case expr.kind
   of numLit:
     # Normalize number to canonical M form
+    # For large integers (>2^53), preserve original string to avoid
+    # float64 precision loss (#338)
     if expr.hasCachedFloat:
+      if abs(expr.cachedFloat) >= 9007199254740992.0 and expr.sval.len > 0:
+        # Check if original string is a pure integer (no decimal, no exponent)
+        let s = expr.sval
+        var isPureInt = true
+        for ch in s:
+          if ch notin {'0'..'9', '-', '+'}:
+            isPureInt = false
+            break
+        if isPureInt:
+          return s
       return formatNumber(expr.cachedFloat)
     try:
       let v = parseFloat(expr.sval)
