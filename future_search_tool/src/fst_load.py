@@ -355,6 +355,29 @@ def main():
     run_mcode(db, f'SET ^FST("status")="loaded"')
     run_mcode(db, f'SET ^FST("records")="{total}"')
 
+    # Build index file for search (workaround for $ORDER bug #355)
+    import json
+    index = {}
+    if "mesh" not in args.skip:
+        mesh_dir = os.path.join(data_dir, "mesh-staging", "xml")
+        if os.path.exists(mesh_dir):
+            desc_path = os.path.join(mesh_dir, "desc2026.xml")
+            if os.path.exists(desc_path):
+                tree = ET.parse(desc_path)
+                root = tree.getroot()
+                mesh_index = {}
+                for record in root.findall(".//DescriptorRecord"):
+                    desc_ui = record.findtext("DescriptorUI", "")
+                    desc_name = record.findtext("DescriptorName/String", "")
+                    if desc_ui and desc_name:
+                        mesh_index[desc_ui] = desc_name
+                index["MESH"] = mesh_index
+    
+    index_file = db + ".index.json"
+    with open(index_file, "w") as f:
+        json.dump(index, f)
+    print(f"Index written to {index_file}")
+
     print()
     print(f"Total records loaded: {total}")
     print("Done!")

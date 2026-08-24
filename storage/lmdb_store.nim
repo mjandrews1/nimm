@@ -471,7 +471,7 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     store.abortIfNotBatch(readTxn)
     return ""
   
-  # Position cursor at prefix
+  # Position cursor at prefix using SET_RANGE
   var mdbKey: Val
   mdbKey.mvSize = cast[uint](prefix.len)
   mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
@@ -480,9 +480,17 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
   rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
   
   if rc != SUCCESS:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return ""
+    # SET_RANGE failed — no key >= prefix exists. Try PREV for the last key before prefix.
+    if not forward:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+      if rc != SUCCESS:
+        cursorClose(cursor)
+        store.abortIfNotBatch(readTxn)
+        return ""
+    else:
+      cursorClose(cursor)
+      store.abortIfNotBatch(readTxn)
+      return ""
   
   # Move to next/previous
   if forward:
