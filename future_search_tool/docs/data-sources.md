@@ -69,3 +69,48 @@
 - Sizes are approximate
 - Licenses may vary by dataset within a source
 - API rate limits may apply
+
+## Supplementary/Complementary Sources
+
+These sources enhance the NLM data by adding cross-references, identifiers, and related domain data.
+
+### Citation & Author Linking
+| Source | URL | Enhances | License |
+|---|---|---|---|
+| Crossref | api.crossref.org | PubMed (DOI linking, citation counts) | CC0 |
+| OpenCitations | opencitations.net | PubMed (citation graph) | CC0 |
+| Semantic Scholar | api.semanticscholar.org | PubMed (abstracts, citations) | ODC-By |
+| ORCID | orcid.org | PubMed/CatLine (author disambiguation) | CC0 |
+| ROR | ror.org | PubMed/CatLine (institution identifiers) | CC0 |
+
+### Clinical & Drug Data
+| Source | URL | Enhances | License |
+|---|---|---|---|
+| ClinicalTrials.gov | clinicaltrials.gov | PubMed (trial→paper links) | Public domain |
+| DrugBank | drugbank.com | MeSH (drug→disease links) | CC BY-NC 4.0 |
+| RxNorm | nlm.nih.gov/research/umls/rxnorm | MeSH (drug name normalization) | Public domain |
+
+### Terminology & Classification
+| Source | URL | Enhances | License |
+|---|---|---|---|
+| ICD-10 | who.int/classifications | MeSH (disease classification cross-ref) | Public domain |
+| SNOMED CT | snomed.org | MeSH (clinical terminology) | SNOMED license |
+| LOINC | loinc.org | MeSH (lab observation codes) | CC BY 4.0 |
+| Gene Ontology | geneontology.org | PubMed (gene/protein annotations) | CC BY 4.0 |
+
+### Entity Linking
+| Source | URL | Enhances | License |
+|---|---|---|---|
+| Wikidata | wikidata.org | All (entity cross-references) | CC0 |
+| VIAF | viaf.org | CatLine/SerLine (authority control) | ODC-By |
+
+### Why These Matter
+
+| Enhancement | Without | With |
+|---|---|---|
+| Author search | Name strings only | ORCID disambiguation |
+| Citation graph | None | Crossref + OpenCitations links |
+| Drug-disease links | MeSH terms only | DrugBank + MeSH cross-ref |
+| Trial-paper links | None | ClinicalTrials.gov + PubMed |
+| Disease classification | MeSH only | MeSH + ICD-10 + SNOMED CT |
+| Institution search | Text matching | ROR identifiers |
