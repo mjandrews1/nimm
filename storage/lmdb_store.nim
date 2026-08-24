@@ -14,7 +14,9 @@ type
     path: string
     mapSize: int64
     readTxn: ptr Txn    # Cached read transaction for batch reads
-    readTxnActive: bool # True when cached read transaction is active
+    readTxnActive*: bool # True when cached read transaction is active
+    writeTxn: ptr Txn   # Cached write transaction for batch writes
+    writeTxnActive*: bool # True when cached write transaction is active
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
   ## Initialize LMDB store
@@ -37,7 +39,12 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
   if rc != SUCCESS:
     raise newException(IOError, "LMDB set_mapsize failed: " & $rc)
   
-  rc = envOpen(store.env, path, NOSUBDIR or NOTLS, 0o664)
+  # Open LMDB environment — accept both file and directory paths
+  # Python lmdb creates directories by default; NimM previously used NOSUBDIR
+  var flags: cuint = NOTLS
+  if not dirExists(path):
+    flags = flags or NOSUBDIR
+  rc = envOpen(store.env, path, flags, 0o664)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB env_open failed: " & path)
   
@@ -302,6 +309,60 @@ proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string
   except:
     abort(txn)
     raise
+
+# --- Batch write operations ---
+
+proc beginWriteBatch*(store: var LmdbStore) =
+  ## Begin a batch write transaction. All subsequent putBatch calls will use this transaction.
+  ## Must be followed by endWriteBatch to commit.
+  if store.writeTxnActive:
+    raise newException(IOError, "LMDB write batch already active")
+  
+  var rc = txnBegin(store.env, nil, 0, addr store.writeTxn)
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB beginWriteBatch txn_begin failed")
+  store.writeTxnActive = true
+
+proc putBatch*(store: var LmdbStore, global: string, subs: seq[string], value: string) =
+  ## Put a key-value pair within a batch write transaction.
+  ## Must be called between beginWriteBatch and endWriteBatch.
+  if not store.writeTxnActive:
+    raise newException(IOError, "LMDB putBatch: no active write batch")
+  
+  let key = encodeKey(global, subs)
+  
+  var mdbKey: Val
+  mdbKey.mvSize = cast[uint](key.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr key[0])
+  
+  var mdbVal: Val
+  mdbVal.mvSize = cast[uint](value.len)
+  if value.len > 0:
+    mdbVal.mvData = cast[pointer](unsafeAddr value[0])
+  
+  let rc = put(store.writeTxn, store.dbi, addr mdbKey, addr mdbVal, 0)
+  if rc != SUCCESS:
+    echo "DEBUG putBatch failed: key=", key.len, " val=", value.len, " rc=", rc
+    echo "DEBUG key bytes: ", cast[seq[byte]](key)
+    abort(store.writeTxn)
+    store.writeTxnActive = false
+    raise newException(IOError, "LMDB putBatch put failed: " & $rc)
+
+proc endWriteBatch*(store: var LmdbStore) =
+  ## Commit the batch write transaction.
+  if not store.writeTxnActive:
+    raise newException(IOError, "LMDB endWriteBatch: no active write batch")
+  
+  let rc = txnCommit(store.writeTxn)
+  store.writeTxnActive = false
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB endWriteBatch txn_commit failed")
+
+proc abortWriteBatch*(store: var LmdbStore) =
+  ## Abort the batch write transaction without committing.
+  if store.writeTxnActive:
+    abort(store.writeTxn)
+    store.writeTxnActive = false
 
 proc delete*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
   ## Delete global[sub1,sub2,...]
