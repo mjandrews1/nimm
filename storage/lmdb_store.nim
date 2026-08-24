@@ -492,6 +492,22 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       store.abortIfNotBatch(readTxn)
       return ""
   
+  # After SET_RANGE, cursor is at first key >= prefix.
+  # Check if this key is already the answer (for forward $ORDER).
+  # If prefix == current key (exact match), we need NEXT to get the NEXT subscript.
+  # If prefix < current key, the current key IS the answer.
+  let currentKeyAfterSet = newString(mdbKey.mvSize)
+  copyMem(addr currentKeyAfterSet[0], mdbKey.mvData, mdbKey.mvSize)
+  let isExactMatch = (currentKeyAfterSet == prefix)
+  
+  if not isExactMatch and forward:
+    # Current key is past the prefix — it's the answer for forward $ORDER
+    let decodedNow = decodeKey(currentKeyAfterSet)
+    if decodedNow[0] == global and decodedNow[1].len == subs.len:
+      cursorClose(cursor)
+      store.abortIfNotBatch(readTxn)
+      return decodedNow[1][^1]
+  
   # Move to next/previous
   if forward:
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
