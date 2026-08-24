@@ -6,6 +6,7 @@ import strutils
 import tables
 import ast
 import parser
+import bytecode
 
 type
   Mode* = enum
@@ -24,6 +25,8 @@ type
     lines*: seq[string]
     labels*: Table[string, int]  # label -> line index
     filePath*: string            # Source file path (#304)
+    bytecodeCache*: seq[Bytecode] # Compiled bytecode per line (nil = not compiled) (#342)
+    bytecodeReady*: bool          # True when all lines compiled (#342)
 
   Runtime* = object
     routines*: Table[string, Routine]

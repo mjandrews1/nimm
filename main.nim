@@ -47,6 +47,7 @@ type
     shellAllowlist: string
     networkAllowlist: string
     fileAllowlist: string
+    useBytecode: bool
     parentJobNum: int  # -p: parent M job number (set by JOB command)
 
 proc parseArgs(): CliArgs =
@@ -66,6 +67,7 @@ proc parseArgs(): CliArgs =
   result.shellAllowlist = ""
   result.networkAllowlist = ""
   result.fileAllowlist = ""
+  result.useBytecode = false
   result.parentJobNum = 0
 
   let args = os.commandLineParams()
@@ -142,6 +144,8 @@ proc parseArgs(): CliArgs =
         if i + 1 < args.len:
           inc i
           result.fileAllowlist = args[i]
+      of "bytecode":
+        result.useBytecode = true
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -174,6 +178,7 @@ proc parseArgs(): CliArgs =
         echo "  --shell-allowlist CMD Allowlist for ZSYSTEM commands (comma-separated)"
         echo "  --network-allowlist HOST:PORT Allowlist for network connections (comma-separated)"
         echo "  --file-allowlist PATH Allowlist for file paths (comma-separated)"
+        echo "  --bytecode   Enable bytecode VM for compiled routines"
         echo "  -h/--help     Show this help"
         quit(0)
       else:
@@ -208,6 +213,7 @@ proc main() =
   var rt = newRuntime(mode)
   var ev = newEvaluator(g, rt)
   var eng = newEngine(g, ev, rt)
+  eng.useBytecode = args.useBytecode
   setDoDepthRef(eng.doDepth)
   ev.setInspector(eng.inspector)
 

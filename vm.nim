@@ -12,11 +12,11 @@ type
     ## Virtual machine state
     stack*: seq[string]          # Value stack
     output*: string              # Output buffer
-    globalsRef*: ref Globals     # Global variable storage
+    globalsRef*: ptr Globals     # Global variable storage
     pc*: int                     # Program counter
     halted*: bool                # Execution halted
 
-proc newVM*(g: ref Globals): VM =
+proc newVM*(g: ptr Globals): VM =
   new(result)
   result.stack = @[]
   result.output = ""

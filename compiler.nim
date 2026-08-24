@@ -153,8 +153,45 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
         bc.compileCommand(childCmd.cmd)
 
   of cFor:
-    # FOR var=start:step:end — simplified
-    bc.addInstr(opNop)  # placeholder
+    # FOR var=start:step:end — compile to bytecode
+    if cmd.forSpec.varName.len > 0 and cmd.forSpec.initE != nil:
+      # Initialize loop variable
+      bc.compileExpr(cmd.forSpec.initE)
+      bc.addInstr(opSetVar, arg1 = cmd.forSpec.varName)
+
+      # Loop start: check limit
+      let loopStart = bc.instructions.len
+      if cmd.forSpec.hasLimit and cmd.forSpec.limitE != nil:
+        bc.addInstr(opPushVar, arg1 = cmd.forSpec.varName)
+        bc.compileExpr(cmd.forSpec.limitE)
+        bc.addInstr(opCmpGt)
+        let exitJump = bc.instructions.len
+        bc.addInstr(opJumpIfTrue, argInt = 0)  # placeholder
+
+        # Compile body
+        if cmd.forBody != nil:
+          for childCmd in cmd.forBody.cmds:
+            bc.compileCommand(childCmd.cmd)
+
+        # Increment variable
+        bc.addInstr(opPushVar, arg1 = cmd.forSpec.varName)
+        if cmd.forSpec.stepE != nil:
+          bc.compileExpr(cmd.forSpec.stepE)
+        else:
+          bc.addPushConst("1")
+        bc.addInstr(opAdd)
+        bc.addInstr(opSetVar, arg1 = cmd.forSpec.varName)
+
+        # Jump back to loop start
+        bc.addInstr(opJump, argInt = loopStart)
+
+        # Patch exit jump
+        bc.instructions[exitJump].argInt = bc.instructions.len
+      else:
+        # Infinite FOR — just compile body (will need QUIT to exit)
+        if cmd.forBody != nil:
+          for childCmd in cmd.forBody.cmds:
+            bc.compileCommand(childCmd.cmd)
 
   of cQuit:
     bc.addInstr(opQuit)

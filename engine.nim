@@ -19,6 +19,8 @@ import jobs
 import value
 import static_analysis
 import network
+import vm
+import compiler
 
 type
   DeviceHandle = ref object
@@ -44,6 +46,8 @@ type
     currentChannel: int  # Current channel number (0 = principal)
     jobTable*: JobTable  # Job table for JOB command
     network*: NetworkManager  # Network connections (#329)
+    vm*: VM              # Bytecode VM instance (#342)
+    useBytecode*: bool   # Enable bytecode execution (#342)
 
 # Global engine reference for debugger evalProc closure
 var globalEngine: Engine = nil
@@ -63,6 +67,8 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.doDepth = 0
   result.jobTable = newJobTable()
   result.network = newNetworkManager()
+  result.vm = newVM(globals.addr)
+  result.useBytecode = false
   
   # Set global reference for debugger evalProc closure
   globalEngine = result
@@ -393,6 +399,21 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                         else:
                           eng.runtime[].currentRoutine
           if routine.len > 0 and label.len > 0:
+            # Compile routine to bytecode on first DO (#342)
+            if eng.useBytecode and routine in eng.runtime[].routines:
+              var rtRoutine = eng.runtime[].routines[routine]
+              if not rtRoutine.bytecodeReady:
+                rtRoutine.bytecodeCache = @[]
+                for i, lineStr in rtRoutine.lines:
+                  let stripped = stripLabel(lineStr)
+                  let parsed = eng.cachedParseLine(stripped)
+                  if parsed != nil:
+                    rtRoutine.bytecodeCache.add(compileLine(parsed))
+                  else:
+                    rtRoutine.bytecodeCache.add(nil)
+                rtRoutine.bytecodeReady = true
+                eng.runtime[].routines[routine] = rtRoutine
+
             # Push call stack frame for introspection
             let frame = StackFrame(routine: routine, label: label, line: 0, variables: initTable[string, string]())
             eng.callStack.add(frame)
@@ -403,6 +424,22 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               let gotLine = eng.runtime[].getLine(routine, label, offset)
               if gotLine.len == 0:
                 break
+
+              # Try bytecode execution first (#342)
+              if eng.useBytecode and routine in eng.runtime[].routines:
+                let rtRoutine = eng.runtime[].routines[routine]
+                if rtRoutine.bytecodeReady and offset < rtRoutine.bytecodeCache.len:
+                  let bc = rtRoutine.bytecodeCache[offset]
+                  if bc != nil:
+                    let vmOutput = eng.vm.execute(bc)
+                    if vmOutput.len > 0:
+                      eng.output.add(vmOutput)
+                    if eng.vm.halted:
+                      break
+                    offset.inc
+                    continue
+
+              # Fallback to AST interpreter
               let parsed = eng.cachedParseLine(stripLabel(gotLine))
               if parsed != nil and parsed.cmds.len > 0:
                 let r = eng.execute(parsed, depth + 1)
