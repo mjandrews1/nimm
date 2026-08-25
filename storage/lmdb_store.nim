@@ -3,7 +3,10 @@
 
 import lmdb
 import os
+import posix
 import strutils
+import tables
+import algorithm
 import key_encoding
 
 type
@@ -690,6 +693,95 @@ proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
     if prefix.len > 0 and not key.startsWith(prefix):
       break
     result.add(decodeKey(key)[0])
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  
+  cursorClose(cursor)
+  store.abortIfNotBatch(readTxn)
+
+# --- Integrity verification (#366) ---
+
+type VerifyReport* = object
+  totalKeys*: int
+  malformed*: seq[string]                                # up to 10 raw-key samples
+  globalCounts*: seq[tuple[name: string, count: int]]    # sorted by name
+
+proc verifyScan*(store: var LmdbStore): VerifyReport =
+  ## Scan every key in the database. Valid global keys start with '^'.
+  ## Anything else is reported as malformed (sample capped at 10).
+  var counts = initCountTable[string]()
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return result
+  
+  var cursor: LMDBCursor
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    store.abortIfNotBatch(readTxn)
+    return result
+  
+  var mdbKey: Val
+  var mdbVal: Val
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, FIRST)
+  
+  while rc == SUCCESS:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    inc result.totalKeys
+    if key.len == 0 or key[0] != '^':
+      if result.malformed.len < 10:
+        result.malformed.add(key)
+    else:
+      # top-level global = segment before first NUL
+      let nul = key.find('\x00')
+      let gname = if nul > 1: key[1 ..< nul] else: key[1 ..^ 1]
+      counts.inc(gname)
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  
+  cursorClose(cursor)
+  store.abortIfNotBatch(readTxn)
+  
+  result.globalCounts = @[]
+  for name, cnt in counts:
+    result.globalCounts.add((name, cnt))
+  result.globalCounts.sort(proc (a, b: auto): int = cmp(a.name, b.name))
+
+proc staleLocks*(store: var LmdbStore): seq[tuple[name: string, pid: int]] =
+  ## Find ^%LOCK entries whose holder PID no longer exists.
+  ## Liveness probe: kill(pid, 0); ESRCH means process is gone.
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return @[]
+  
+  var cursor: LMDBCursor
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    store.abortIfNotBatch(readTxn)
+    return @[]
+  
+  let prefix = encodeKey("^%LOCK", @[])
+  var mdbKey: Val
+  var mdbVal: Val
+  mdbKey.mvSize = cast[uint](prefix.len)
+  mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+  
+  while rc == SUCCESS:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    if not key.startsWith(prefix):
+      break
+    let val = newString(mdbVal.mvSize)
+    if mdbVal.mvSize > 0:
+      copyMem(addr val[0], mdbVal.mvData, mdbVal.mvSize)
+    # decode lock name from key: "^%LOCK\x00<name>\x00"
+    let namePart = key[prefix.len ..^ 1].strip(chars = {'\x00'})
+    var pid = -1
+    try:
+      pid = parseInt(val)
+    except ValueError:
+      discard
+    # Liveness probe: kill(pid, 0); ESRCH means process is gone.
+    # Unparseable PIDs (pid < 0) are treated as stale.
+    if pid < 0 or (kill(pid.cint, 0) == -1 and osLastError().int32 == ESRCH):
+      result.add((namePart, pid))
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)

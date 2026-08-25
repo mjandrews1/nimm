@@ -9,6 +9,7 @@ import streams
 import posix
 import ast
 import globals
+import storage/lmdb_store
 import evaluator
 import runtime
 import parser
@@ -1093,6 +1094,42 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.globals[].set("^ZLOADXML", @[], $count)
           except:
             eng.writeln("ZLOADXML error: " & getCurrentExceptionMsg())
+
+      of CmdKind.cZverify:
+        # ZVERIFY [mode] — LMDB integrity check ("check") and repair ("repair")
+        let mode = eng.evaluator[].eval(cmd.zverifyMode).toLowerAscii
+        if eng.globals[].dbPath.len == 0:
+          eng.writeln("ZVERIFY status=skip reason=in-memory")
+        else:
+          try:
+            let rep = eng.globals[].globals.verifyScan()
+            let stale = eng.globals[].globals.staleLocks()
+            
+            eng.writeln("ZVERIFY total=" & $rep.totalKeys)
+            for (gname, cnt) in rep.globalCounts:
+              eng.writeln("ZVERIFY global " & gname & "=" & $cnt)
+            eng.writeln("ZVERIFY malformed=" & $rep.malformed.len)
+            for sample in rep.malformed:
+              eng.writeln("ZVERIFY malformed-key " & sample.replace("\x00", "\\0"))
+            eng.writeln("ZVERIFY stale=" & $stale.len)
+            for (lname, lpid) in stale:
+              eng.writeln("ZVERIFY stale-lock " & lname & " pid=" & $lpid)
+            
+            var repaired = 0
+            if mode == "repair" and stale.len > 0:
+              for (lname, lpid) in stale:
+                eng.globals[].killGlobal("^%LOCK", @[lname])
+                inc repaired
+              eng.writeln("ZVERIFY repaired=" & $repaired)
+            
+            let issues = rep.malformed.len + (if mode == "repair": 0 else: stale.len)
+            eng.writeln("ZVERIFY status=" & (if issues == 0: "ok" else: "issues"))
+            
+            eng.globals[].set("^ZVERIFY", @["total"], $rep.totalKeys)
+            eng.globals[].set("^ZVERIFY", @["malformed"], $rep.malformed.len)
+            eng.globals[].set("^ZVERIFY", @["staleLocks"], $stale.len)
+          except:
+            eng.writeln("ZVERIFY error: " & getCurrentExceptionMsg())
 
       of CmdKind.cZanalyze:
         # ZANALYZE — Static analysis of current routine (#330)

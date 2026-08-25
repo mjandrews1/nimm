@@ -208,7 +208,7 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK") or
     equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE") or
-    equiWord(w, "ZLOADXML")
+    equiWord(w, "ZLOADXML") or equiWord(w, "ZVERIFY")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   of 't':
     equiWord(w, "TSTART") or equiWord(w, "T") or
@@ -1065,6 +1065,12 @@ proc parseCommand(p: var Parser): CommandNode =
       discard p.advance()  # consume ,
       formatExpr = p.parseExpr()
     cmd = Cmd(kind: cZloadxml, zloadxmlFile: fileExpr, zloadxmlGlobal: globalExpr, zloadxmlFormat: formatExpr)
+  of "ZVERIFY":
+    # ZVERIFY [mode] — mode is "check" (default) or "repair"
+    var modeExpr = Expr(kind: eStr, sval: "check")
+    if isExprStart(p) and not p.atCommandPos():
+      modeExpr = p.parseExpr()
+    cmd = Cmd(kind: cZverify, zverifyMode: modeExpr)
   of "VIEW", "V":
     var viewExpr: Expr = nil
     if isExprStart(p) and not p.atCommandPos():

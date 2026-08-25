@@ -11,6 +11,7 @@ declare -a SUITES=(
     "tests/test_order_lmdb.sh"
     "tests/test_zloadxml.sh"
     "tests/test_zloadxml_catline.sh"
+    "tests/test_zverify.sh"
 )
 
 PASS=0
