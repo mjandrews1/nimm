@@ -1,0 +1,17 @@
+# golden_queries.tsv — retrieval evaluation ground truth (#367)
+# Format: class<TAB>query<TAB>expected_ui<TAB>expected_name
+# class=exact  : query matches descriptor name verbatim (BM25 baseline target)
+# class=vocab  : vocabulary mismatch — lay/alt phrasing; dense-retrieval candidate
+# Build evals on this set: P@K, R@K, MRR, nDCG vs BM25-only baseline.
+exact	Hypertension	D006973	Hypertension
+exact	Neoplasms	D009369	Neoplasms
+exact	Heart Failure	D006333	Heart Failure
+exact	Diabetes Mellitus	D003920	Diabetes Mellitus
+exact	Myocardial Infarction	D009203	Myocardial Infarction
+exact	Calcimycin	D000001	Calcimycin
+exact	Temefos	D000002	Temefos
+exact	Abattoirs	D000003	Abattoirs
+vocab	heart attack	D009203	Myocardial Infarction
+vocab	high blood pressure	D006973	Hypertension
+vocab	cancer	D009369	Neoplasms
+vocab	sugar disease	D003920	Diabetes Mellitus
