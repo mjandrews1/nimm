@@ -238,6 +238,13 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
   of cTrollback:
     bc.addInstr(opTrollback)
 
+  of cZloadxml:
+    # ZLOADXML file, global, format — compile args as expressions
+    bc.compileExpr(cmd.zloadxmlFile)
+    bc.compileExpr(cmd.zloadxmlGlobal)
+    bc.compileExpr(cmd.zloadxmlFormat)
+    bc.addInstr(opZloadxml)
+
   else:
     bc.addInstr(opNop)
 

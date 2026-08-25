@@ -39,6 +39,102 @@ proc peek*(vm: VM): string =
 proc writeOut*(vm: VM, s: string) =
   vm.output.add(s)
 
+proc extractBetween(s: string, startTag: string, endTag: string): string =
+  let startIdx = s.find(startTag)
+  if startIdx < 0: return ""
+  let closeIdx = s.find(">", startIdx)
+  if closeIdx < 0: return ""
+  let contentStart = closeIdx + 1
+  let endIdx = s.find(endTag, contentStart)
+  if endIdx < 0: return ""
+  return s[contentStart ..< endIdx].strip()
+
+proc extractAll(s: string, startTag: string, endTag: string): seq[string] =
+  result = @[]
+  var pos = 0
+  while pos < s.len:
+    let startIdx = s.find(startTag, pos)
+    if startIdx < 0: break
+    let closeIdx = s.find(">", startIdx)
+    if closeIdx < 0: break
+    let contentStart = closeIdx + 1
+    let endIdx = s.find(endTag, contentStart)
+    if endIdx < 0: break
+    result.add(s[contentStart ..< endIdx].strip())
+    pos = endIdx + endTag.len
+
+proc loadXmlData*(vm: VM, filePath: string, globalName: string, format: string): int =
+  var f = open(filePath, fmRead)
+  if f == nil:
+    raise newException(IOError, "Cannot open: " & filePath)
+  defer: f.close()
+  
+  var count = 0
+  var buffer = ""
+  var batchCount = 0
+  const BATCH_SIZE = 1000
+  
+  vm.globalsRef[].beginWriteBatch()
+  
+  case format.toLowerAscii
+  of "mesh-descriptor", "mesh":
+    for line in f.lines:
+      buffer.add(line)
+      buffer.add("\n")
+      
+      if "</DescriptorRecord>" in buffer:
+        let ui = extractBetween(buffer, "<DescriptorUI>", "</DescriptorUI>")
+        let name = extractBetween(buffer, "<String>", "</String>")
+        let scope = extractBetween(buffer, "<ScopeNote>", "</ScopeNote>")
+        
+        if ui.len > 0 and name.len > 0:
+          vm.globalsRef[].set(globalName, @[ui, "name"], name)
+          if scope.len > 0:
+            vm.globalsRef[].set(globalName, @[ui, "scopeNote"], scope)
+          
+          let trees = extractAll(buffer, "<TreeNumber>", "</TreeNumber>")
+          for tree in trees:
+            vm.globalsRef[].set(globalName, @[ui, "treeNumber", tree], "1")
+          
+          let quals = extractAll(buffer, "<QualifierUI>", "</QualifierUI>")
+          for qual in quals:
+            vm.globalsRef[].set(globalName, @[ui, "qualifier", qual], "1")
+          
+          count += 1
+          inc batchCount
+          if batchCount >= BATCH_SIZE:
+            vm.globalsRef[].endWriteBatch()
+            vm.globalsRef[].beginWriteBatch()
+            batchCount = 0
+        
+        buffer = ""
+  
+  of "mesh-qualifier", "qualifier":
+    for line in f.lines:
+      buffer.add(line)
+      buffer.add("\n")
+      
+      if "</QualifierRecord>" in buffer:
+        let ui = extractBetween(buffer, "<QualifierUI>", "</QualifierUI>")
+        let name = extractBetween(buffer, "<String>", "</String>")
+        let abbrev = extractBetween(buffer, "<Abbreviation>", "</Abbreviation>")
+        
+        if ui.len > 0 and name.len > 0:
+          vm.globalsRef[].set(globalName, @[ui, "name"], name)
+          if abbrev.len > 0:
+            vm.globalsRef[].set(globalName, @[ui, "abbreviation"], abbrev)
+          count += 1
+        
+        buffer = ""
+  
+  else:
+    raise newException(ValueError, "Unknown XML format: " & format)
+  
+  if vm.globalsRef[].writeTxnActive:
+    vm.globalsRef[].endWriteBatch()
+  
+  return count
+
 proc execute*(vm: VM, bc: Bytecode): string =
   ## Execute bytecode and return output
   vm.output = ""
@@ -357,6 +453,18 @@ proc execute*(vm: VM, bc: Bytecode): string =
       # Dynamic code — fall back to AST interpreter
       # For now, just push empty result
       vm.push("")
+
+    of opZloadxml:
+      # ZLOADXML file, global, format
+      let format = vm.pop()
+      let globalName = vm.pop()
+      let filePath = vm.pop()
+      try:
+        let count = vm.loadXmlData(filePath, globalName, format)
+        vm.globalsRef[].set("^ZLOADXML", @[], $count)
+        vm.push($count)
+      except:
+        vm.push("0")
 
     of opNop:
       discard

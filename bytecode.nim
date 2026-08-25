@@ -66,6 +66,7 @@ type
     opTcommit       # Commit transaction
     opTrollback     # Rollback transaction
     opXecute        # Fall back to AST for dynamic code
+    opZloadxml      # ZLOADXML file, global, format
     opNop           # No operation
 
   Instruction* = object
