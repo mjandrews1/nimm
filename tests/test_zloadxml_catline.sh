@@ -1,11 +1,11 @@
 #!/bin/bash
 # test_zloadxml_catline.sh — Test ZLOADXML with CatLine data
-# Usage: ./tests/test_zloadxml_catline.sh [db_path] [data_dir]
+# Usage: ./tests/test_zloadxml_catline.sh [data_dir]
 
 set -e
 
-DB="${1:-/tmp/test_catline_$$.lmdb}"
-DATA_DIR="${2:-/Users/mark/_diary-data}"
+DATA_DIR="${1:-/Users/mark/_diary-data}"
+DB="/tmp/test_catline_$$.lmdb"
 NIMM="./nimm"
 
 echo "=== ZLOADXML CatLine Test Suite ==="

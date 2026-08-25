@@ -46,10 +46,10 @@ proc main() =
   var results: seq[TestResult] = @[]
   
   # Test basic expressions
-  results.add(runMCode("WRITE 1+2", "3.0"))
-  results.add(runMCode("WRITE 2*3", "6.0"))
-  results.add(runMCode("WRITE 10#3", "1.0"))
-  results.add(runMCode("WRITE 2**3", "8.0"))
+  results.add(runMCode("WRITE 1+2", "3"))
+  results.add(runMCode("WRITE 2*3", "6"))
+  results.add(runMCode("WRITE 10#3", "1"))
+  results.add(runMCode("WRITE 2**3", "8"))
   
   # Test string operations
   results.add(runMCode("WRITE \"hello\"_\"world\"", "helloworld"))
@@ -60,7 +60,7 @@ proc main() =
   
   # Test variables
   results.add(runMCode("SET X=42 WRITE X", "42"))
-  results.add(runMCode("SET X=10 SET Y=20 WRITE X+Y", "30.0"))
+  results.add(runMCode("SET X=10 SET Y=20 WRITE X+Y", "30"))
   results.add(runMCode("SET X=\"hello\" WRITE X", "hello"))
   
   # Test subscripts
@@ -79,7 +79,7 @@ proc main() =
   results.add(runMCode("SET X=0 IF X=1 WRITE \"yes\"", ""))
   
   # Test FOR loop
-  results.add(runMCode("FOR I=1:1:3 WRITE I", "1.02.03.0"))
+  results.add(runMCode("FOR I=1:1:3 WRITE I", "123"))
   
   # Test KILL
   results.add(runMCode("SET X=42 KILL X WRITE $DATA(X)", "0"))
