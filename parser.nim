@@ -207,7 +207,8 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZEDIT") or equiWord(w, "ZE") or equiWord(w, "ZLINK") or
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK") or
-    equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE")
+    equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE") or
+    equiWord(w, "ZLOADXML")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   of 't':
     equiWord(w, "TSTART") or equiWord(w, "T") or
@@ -1050,6 +1051,20 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       linkExpr = p.parseExpr()
     cmd = Cmd(kind: cZlink, zlinkExpr: linkExpr)
+  of "ZLOADXML":
+    # ZLOADXML file, global, format
+    var fileExpr = Expr(kind: eStr, sval: "")
+    var globalExpr = Expr(kind: eStr, sval: "")
+    var formatExpr = Expr(kind: eStr, sval: "")
+    if isExprStart(p) and not p.atCommandPos():
+      fileExpr = p.parseExpr()
+    if p.peek() == tokComma:
+      discard p.advance()  # consume ,
+      globalExpr = p.parseExpr()
+    if p.peek() == tokComma:
+      discard p.advance()  # consume ,
+      formatExpr = p.parseExpr()
+    cmd = Cmd(kind: cZloadxml, zloadxmlFile: fileExpr, zloadxmlGlobal: globalExpr, zloadxmlFormat: formatExpr)
   of "VIEW", "V":
     var viewExpr: Expr = nil
     if isExprStart(p) and not p.atCommandPos():

@@ -400,6 +400,7 @@ type
     cZstack,
     cZstats, cZvhistory,
     cZanalyze,
+    cZloadxml,
     cNiOpen, cNiListen, cNiAccept, cNiRead, cNiWrite, cNiClose
 
   ## Cmd — Command AST Node (without postconditional)
@@ -538,6 +539,10 @@ type
       discard
     of cZanalyze:
       zanalyzeExpr*: Expr
+    of cZloadxml:
+      zloadxmlFile*: Expr
+      zloadxmlGlobal*: Expr
+      zloadxmlFormat*: Expr
     of cNiOpen:
       niOpenProtocol*: Expr
       niOpenHost*: Expr

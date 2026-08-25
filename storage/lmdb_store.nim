@@ -279,8 +279,15 @@ proc get*(store: var LmdbStore, global: string, subs: seq[string] = @[]): string
     result = ""
   store.abortIfNotBatch(readTxn)
 
+proc putBatch*(store: var LmdbStore, global: string, subs: seq[string], value: string)
+
 proc put*(store: var LmdbStore, global: string, subs: seq[string], value: string) =
   ## Set value for global[sub1,sub2,...]
+  ## Uses batch transaction if active, otherwise creates a new transaction.
+  if store.writeTxnActive:
+    store.putBatch(global, subs, value)
+    return
+  
   let key = encodeKey(global, subs)
   
   var txn: ptr Txn

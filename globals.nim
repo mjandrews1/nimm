@@ -266,6 +266,24 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
     return
   g.globals.delete(name, subs)
 
+# --- Batch write operations ---
+
+proc beginWriteBatch*(g: var Globals) =
+  ## Begin a batch write transaction
+  if g.dbPath.len > 0:
+    g.globals.beginWriteBatch()
+
+proc endWriteBatch*(g: var Globals) =
+  ## Commit the batch write transaction
+  if g.dbPath.len > 0:
+    g.globals.endWriteBatch()
+
+proc writeTxnActive*(g: Globals): bool =
+  ## Check if a batch write transaction is active
+  if g.dbPath.len > 0:
+    return g.globals.writeTxnActive
+  return false
+
 # --- Cross-process LOCK via LMDB globals (#307) ---
 
 proc lockGlobalKey(name: string): seq[string] =
