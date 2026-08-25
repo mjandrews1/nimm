@@ -213,6 +213,44 @@ proc loadXmlData*(eng: var Engine, filePath: string, globalName: string, format:
         
         buffer = ""
   
+  of "catline", "marc":
+    # Stream MARC XML (CatLine, SerLine)
+    for line in f.lines:
+      inc lineNum
+      buffer.add(line)
+      buffer.add("\n")
+      
+      if "</marc:record>" in buffer or "</record>" in buffer:
+        # Extract NLM ID from controlfield 001
+        var nlmId = extractBetween(buffer, "<marc:controlfield tag=\"001\">", "</marc:controlfield>")
+        if nlmId.len == 0:
+          nlmId = extractBetween(buffer, "<controlfield tag=\"001\">", "</controlfield>")
+        
+        if nlmId.len > 0:
+          # Extract title from datafield 245
+          let titleBlock = extractBetween(buffer, "<marc:datafield tag=\"245\"", "</marc:datafield>")
+          if titleBlock.len == 0:
+            discard
+          let title = extractBetween(titleBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
+          if title.len > 0:
+            eng.globals[].set(globalName, @[nlmId, "title"], title)
+          
+          # Extract ISSN from datafield 022
+          let issnBlock = extractBetween(buffer, "<marc:datafield tag=\"022\"", "</marc:datafield>")
+          if issnBlock.len > 0:
+            let issn = extractBetween(issnBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
+            if issn.len > 0:
+              eng.globals[].set(globalName, @[nlmId, "issn"], issn)
+          
+          count += 1
+          inc batchCount
+          if batchCount >= BATCH_SIZE:
+            eng.globals[].endWriteBatch()
+            eng.globals[].beginWriteBatch()
+            batchCount = 0
+        
+        buffer = ""
+  
   else:
     raise newException(ValueError, "Unknown XML format: " & format)
   
