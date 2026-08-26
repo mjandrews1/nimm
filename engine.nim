@@ -10,6 +10,7 @@ import posix
 import ast
 import globals
 import storage/lmdb_store
+import xmlload
 import evaluator
 import runtime
 import parser
@@ -115,151 +116,6 @@ proc lockRefName(ev: var Evaluator, e: Expr): string =
   else:
     return ev.eval(e)
 
-proc extractBetween(s: string, startTag: string, endTag: string): string =
-  ## Extract text between two tags (handles attributes in start tag)
-  let startIdx = s.find(startTag)
-  if startIdx < 0: return ""
-  let closeIdx = s.find(">", startIdx)
-  if closeIdx < 0: return ""
-  let contentStart = closeIdx + 1
-  let endIdx = s.find(endTag, contentStart)
-  if endIdx < 0: return ""
-  return s[contentStart ..< endIdx].strip()
-
-proc extractAll(s: string, startTag: string, endTag: string): seq[string] =
-  ## Extract all occurrences of text between two tags
-  result = @[]
-  var pos = 0
-  while pos < s.len:
-    let startIdx = s.find(startTag, pos)
-    if startIdx < 0: break
-    let closeIdx = s.find(">", startIdx)
-    if closeIdx < 0: break
-    let contentStart = closeIdx + 1
-    let endIdx = s.find(endTag, contentStart)
-    if endIdx < 0: break
-    result.add(s[contentStart ..< endIdx].strip())
-    pos = endIdx + endTag.len
-
-proc loadXmlData*(eng: var Engine, filePath: string, globalName: string, format: string): int =
-  ## Load XML data into globals — streaming approach for large files
-  var f = open(filePath, fmRead)
-  if f == nil:
-    raise newException(IOError, "Cannot open: " & filePath)
-  defer: f.close()
-  
-  var count = 0
-  var buffer = ""
-  var lineNum = 0
-  var batchCount = 0
-  const BATCH_SIZE = 1000
-  
-  eng.globals[].beginWriteBatch()
-  
-  case format.toLowerAscii
-  of "mesh-descriptor", "mesh":
-    # Stream MeSH descriptors — buffer until </DescriptorRecord>
-    for line in f.lines:
-      inc lineNum
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</DescriptorRecord>" in buffer:
-        # Process the buffered record
-        let ui = extractBetween(buffer, "<DescriptorUI>", "</DescriptorUI>")
-        let name = extractBetween(buffer, "<String>", "</String>")
-        let scope = extractBetween(buffer, "<ScopeNote>", "</ScopeNote>")
-        
-        if ui.len > 0 and name.len > 0:
-          eng.globals[].set(globalName, @[ui, "name"], name)
-          if scope.len > 0:
-            eng.globals[].set(globalName, @[ui, "scopeNote"], scope)
-          
-          let trees = extractAll(buffer, "<TreeNumber>", "</TreeNumber>")
-          for tree in trees:
-            eng.globals[].set(globalName, @[ui, "treeNumber", tree], "1")
-          
-          let quals = extractAll(buffer, "<QualifierUI>", "</QualifierUI>")
-          for qual in quals:
-            eng.globals[].set(globalName, @[ui, "qualifier", qual], "1")
-          
-          count += 1
-          inc batchCount
-          if batchCount >= BATCH_SIZE:
-            eng.globals[].endWriteBatch()
-            eng.globals[].beginWriteBatch()
-            batchCount = 0
-          if count mod 500 == 0:
-            echo "  Loaded ", count, " descriptors (line ", lineNum, ")"
-        
-        buffer = ""
-  
-  of "mesh-qualifier", "qualifier":
-    # Stream MeSH qualifiers
-    for line in f.lines:
-      inc lineNum
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</QualifierRecord>" in buffer:
-        let ui = extractBetween(buffer, "<QualifierUI>", "</QualifierUI>")
-        let name = extractBetween(buffer, "<String>", "</String>")
-        let abbrev = extractBetween(buffer, "<Abbreviation>", "</Abbreviation>")
-        
-        if ui.len > 0 and name.len > 0:
-          eng.globals[].set(globalName, @[ui, "name"], name)
-          if abbrev.len > 0:
-            eng.globals[].set(globalName, @[ui, "abbreviation"], abbrev)
-          count += 1
-        
-        buffer = ""
-  
-  of "catline", "marc":
-    # Stream MARC XML (CatLine, SerLine)
-    for line in f.lines:
-      inc lineNum
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</marc:record>" in buffer or "</record>" in buffer:
-        # Extract NLM ID from controlfield 001
-        var nlmId = extractBetween(buffer, "<marc:controlfield tag=\"001\">", "</marc:controlfield>")
-        if nlmId.len == 0:
-          nlmId = extractBetween(buffer, "<controlfield tag=\"001\">", "</controlfield>")
-        
-        if nlmId.len > 0:
-          # Extract title from datafield 245
-          let titleBlock = extractBetween(buffer, "<marc:datafield tag=\"245\"", "</marc:datafield>")
-          if titleBlock.len == 0:
-            discard
-          let title = extractBetween(titleBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
-          if title.len > 0:
-            eng.globals[].set(globalName, @[nlmId, "title"], title)
-          
-          # Extract ISSN from datafield 022
-          let issnBlock = extractBetween(buffer, "<marc:datafield tag=\"022\"", "</marc:datafield>")
-          if issnBlock.len > 0:
-            let issn = extractBetween(issnBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
-            if issn.len > 0:
-              eng.globals[].set(globalName, @[nlmId, "issn"], issn)
-          
-          count += 1
-          inc batchCount
-          if batchCount >= BATCH_SIZE:
-            eng.globals[].endWriteBatch()
-            eng.globals[].beginWriteBatch()
-            batchCount = 0
-        
-        buffer = ""
-  
-  else:
-    raise newException(ValueError, "Unknown XML format: " & format)
-  
-  if eng.globals[].writeTxnActive:
-    eng.globals[].endWriteBatch()
-  
-  echo "  Total: ", count, " records (", lineNum, " lines)"
-  return count
 
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   ## Execute a line of M code (Line is already ref object)
@@ -1090,7 +946,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.writeln("ZLOADXML: file and global required")
         else:
           try:
-            let count = eng.loadXmlData(filePath, globalName, format)
+            let count = xmlload.loadXmlData(eng.globals[], filePath, globalName, format)
             eng.globals[].set("^ZLOADXML", @[], $count)
           except:
             eng.writeln("ZLOADXML error: " & getCurrentExceptionMsg())

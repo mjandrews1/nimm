@@ -6,6 +6,7 @@ import math
 import bytecode
 import globals
 import value
+import xmlload
 
 type
   VM* = ref object
@@ -39,134 +40,6 @@ proc peek*(vm: VM): string =
 proc writeOut*(vm: VM, s: string) =
   vm.output.add(s)
 
-proc extractBetween(s: string, startTag: string, endTag: string): string =
-  let startIdx = s.find(startTag)
-  if startIdx < 0: return ""
-  let closeIdx = s.find(">", startIdx)
-  if closeIdx < 0: return ""
-  let contentStart = closeIdx + 1
-  let endIdx = s.find(endTag, contentStart)
-  if endIdx < 0: return ""
-  return s[contentStart ..< endIdx].strip()
-
-proc extractAll(s: string, startTag: string, endTag: string): seq[string] =
-  result = @[]
-  var pos = 0
-  while pos < s.len:
-    let startIdx = s.find(startTag, pos)
-    if startIdx < 0: break
-    let closeIdx = s.find(">", startIdx)
-    if closeIdx < 0: break
-    let contentStart = closeIdx + 1
-    let endIdx = s.find(endTag, contentStart)
-    if endIdx < 0: break
-    result.add(s[contentStart ..< endIdx].strip())
-    pos = endIdx + endTag.len
-
-proc loadXmlData*(vm: VM, filePath: string, globalName: string, format: string): int =
-  var f = open(filePath, fmRead)
-  if f == nil:
-    raise newException(IOError, "Cannot open: " & filePath)
-  defer: f.close()
-  
-  var count = 0
-  var buffer = ""
-  var batchCount = 0
-  const BATCH_SIZE = 1000
-  
-  vm.globalsRef[].beginWriteBatch()
-  
-  case format.toLowerAscii
-  of "mesh-descriptor", "mesh":
-    for line in f.lines:
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</DescriptorRecord>" in buffer:
-        let ui = extractBetween(buffer, "<DescriptorUI>", "</DescriptorUI>")
-        let name = extractBetween(buffer, "<String>", "</String>")
-        let scope = extractBetween(buffer, "<ScopeNote>", "</ScopeNote>")
-        
-        if ui.len > 0 and name.len > 0:
-          vm.globalsRef[].set(globalName, @[ui, "name"], name)
-          if scope.len > 0:
-            vm.globalsRef[].set(globalName, @[ui, "scopeNote"], scope)
-          
-          let trees = extractAll(buffer, "<TreeNumber>", "</TreeNumber>")
-          for tree in trees:
-            vm.globalsRef[].set(globalName, @[ui, "treeNumber", tree], "1")
-          
-          let quals = extractAll(buffer, "<QualifierUI>", "</QualifierUI>")
-          for qual in quals:
-            vm.globalsRef[].set(globalName, @[ui, "qualifier", qual], "1")
-          
-          count += 1
-          inc batchCount
-          if batchCount >= BATCH_SIZE:
-            vm.globalsRef[].endWriteBatch()
-            vm.globalsRef[].beginWriteBatch()
-            batchCount = 0
-        
-        buffer = ""
-  
-  of "mesh-qualifier", "qualifier":
-    for line in f.lines:
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</QualifierRecord>" in buffer:
-        let ui = extractBetween(buffer, "<QualifierUI>", "</QualifierUI>")
-        let name = extractBetween(buffer, "<String>", "</String>")
-        let abbrev = extractBetween(buffer, "<Abbreviation>", "</Abbreviation>")
-        
-        if ui.len > 0 and name.len > 0:
-          vm.globalsRef[].set(globalName, @[ui, "name"], name)
-          if abbrev.len > 0:
-            vm.globalsRef[].set(globalName, @[ui, "abbreviation"], abbrev)
-          count += 1
-        
-        buffer = ""
-  
-  of "catline", "marc":
-    # Stream MARC XML (CatLine, SerLine)
-    for line in f.lines:
-      buffer.add(line)
-      buffer.add("\n")
-      
-      if "</marc:record>" in buffer or "</record>" in buffer:
-        var nlmId = extractBetween(buffer, "<marc:controlfield tag=\"001\">", "</marc:controlfield>")
-        if nlmId.len == 0:
-          nlmId = extractBetween(buffer, "<controlfield tag=\"001\">", "</controlfield>")
-        
-        if nlmId.len > 0:
-          let titleBlock = extractBetween(buffer, "<marc:datafield tag=\"245\"", "</marc:datafield>")
-          if titleBlock.len > 0:
-            let title = extractBetween(titleBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
-            if title.len > 0:
-              vm.globalsRef[].set(globalName, @[nlmId, "title"], title)
-          
-          let issnBlock = extractBetween(buffer, "<marc:datafield tag=\"022\"", "</marc:datafield>")
-          if issnBlock.len > 0:
-            let issn = extractBetween(issnBlock, "<marc:subfield code=\"a\">", "</marc:subfield>")
-            if issn.len > 0:
-              vm.globalsRef[].set(globalName, @[nlmId, "issn"], issn)
-          
-          count += 1
-          inc batchCount
-          if batchCount >= BATCH_SIZE:
-            vm.globalsRef[].endWriteBatch()
-            vm.globalsRef[].beginWriteBatch()
-            batchCount = 0
-        
-        buffer = ""
-  
-  else:
-    raise newException(ValueError, "Unknown XML format: " & format)
-  
-  if vm.globalsRef[].writeTxnActive:
-    vm.globalsRef[].endWriteBatch()
-  
-  return count
 
 proc execute*(vm: VM, bc: Bytecode): string =
   ## Execute bytecode and return output
@@ -493,7 +366,7 @@ proc execute*(vm: VM, bc: Bytecode): string =
       let globalName = vm.pop()
       let filePath = vm.pop()
       try:
-        let count = vm.loadXmlData(filePath, globalName, format)
+        let count = xmlload.loadXmlData(vm.globalsRef[], filePath, globalName, format)
         vm.globalsRef[].set("^ZLOADXML", @[], $count)
         vm.push($count)
       except:

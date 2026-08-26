@@ -1,0 +1,264 @@
+# xmlload.nim — Shared XML loading for ZLOADXML
+# Single implementation used by both AST engine and bytecode VM.
+# Formats: mesh, qualifier (mesh-qualifier), catline (marc), pubmed
+# Supports plain and .gz inputs (gunzip via pipe; no new library deps).
+
+import strutils
+import streams
+import os
+import osproc
+import globals
+
+const BATCH_SIZE = 1000
+
+proc extractBetween*(s: string, startTag: string, endTag: string): string =
+  ## Text between startTag's closing '>' and endTag (attribute-tolerant)
+  let startIdx = s.find(startTag)
+  if startIdx < 0: return ""
+  let closeIdx = s.find(">", startIdx)
+  if closeIdx < 0: return ""
+  let contentStart = closeIdx + 1
+  let endIdx = s.find(endTag, contentStart)
+  if endIdx < 0: return ""
+  return s[contentStart ..< endIdx].strip()
+
+proc extractAll*(s: string, startTag: string, endTag: string): seq[string] =
+  result = @[]
+  var pos = 0
+  while pos < s.len:
+    let startIdx = s.find(startTag, pos)
+    if startIdx < 0: break
+    let closeIdx = s.find(">", startIdx)
+    if closeIdx < 0: break
+    let contentStart = closeIdx + 1
+    let endIdx = s.find(endTag, contentStart)
+    if endIdx < 0: break
+    result.add(s[contentStart ..< endIdx].strip())
+    pos = endIdx + endTag.len
+
+proc findBlock*(s: string, marker: string, endA: string, endB: string): string =
+  ## Substring from first occurrence of `marker` to whichever of endA/endB
+  ## comes next (exclusive). Empty when either bound is missing.
+  let i = s.find(marker)
+  if i < 0: return ""
+  let jA = if endA.len > 0: s.find(endA, i) else: -1
+  let jB = if endB.len > 0: s.find(endB, i) else: -1
+  var j = -1
+  if jA >= 0 and (jB < 0 or jA < jB): j = jA
+  elif jB >= 0: j = jB
+  if j < 0: return ""
+  return s[i ..< j]
+
+proc tagAttr*(s: string, tagStart: string, attr: string): string =
+  ## Attribute value inside first tag matching tagStart, e.g. UI="D001"
+  let i = s.find(tagStart)
+  if i < 0: return ""
+  let close = s.find(">", i)
+  if close < 0: return ""
+  let tag = s[i .. close]
+  let key = attr & "=\""
+  let j = tag.find(key)
+  if j < 0: return ""
+  let rest = tag[j + key.len ..^ 1]
+  let e = rest.find('"')
+  if e < 0: return ""
+  return rest[0 ..< e]
+
+type LineSource = object
+  file: File
+  gzProc: Process   # non-nil when reading .gz via gunzip pipe
+  stream: Stream
+
+proc openSource(path: string): LineSource =
+  result.gzProc = nil
+  if path.endsWith(".gz"):
+    result.gzProc = startProcess("gunzip", args = ["-c", path],
+                                options = {poStdErrToStdOut, poUsePath})
+    result.stream = result.gzProc.outputStream
+  else:
+    if not open(result.file, path, fmRead):
+      raise newException(IOError, "Cannot open: " & path)
+    result.stream = newFileStream(result.file)
+
+proc closeSource(src: var LineSource) =
+  if src.gzProc != nil:
+    discard src.gzProc.waitForExit()
+    src.gzProc.close()
+  src.stream.close()
+
+iterator sourceLines(src: var LineSource): string =
+  var line = ""
+  # Blocking readLine(var): false only at true EOF — reliable for
+  # both FileStreams and process pipes (unlike atEnd()).
+  while src.stream.readLine(line):
+    yield line
+
+proc subfieldsOf(blockText: string, code: string): seq[string] =
+  ## All subfield values with given code, namespace-tolerant (marc: or bare)
+  let openers = ["code=\"" & code & "\">"]
+  result = @[]
+  for opener in openers:
+    var pos = 0
+    while true:
+      let st = blockText.find(opener, pos)
+      if st < 0: break
+      let cs = st + opener.len
+      let enA = blockText.find("</subfield>", cs)
+      let enB = blockText.find("</marc:subfield>", cs)
+      var en = -1
+      if enA >= 0 and (enB < 0 or enA < enB): en = enA
+      elif enB >= 0: en = enB
+      if en < 0: break
+      let v = blockText[cs ..< en].strip()
+      if v.len > 0: result.add(v)
+      pos = en
+
+proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
+                  format: string): int =
+  ## Stream-parse an NLM XML file into globals. Returns record count.
+  var src = openSource(filePath)
+  defer: closeSource(src)
+
+  var count = 0
+  var batchCount = 0
+  var buffer = ""
+  g.beginWriteBatch()
+
+  template flushBatch() {.dirty.} =
+    inc batchCount
+    if batchCount >= BATCH_SIZE:
+      g.endWriteBatch()
+      g.beginWriteBatch()
+      batchCount = 0
+
+  case format.toLowerAscii
+
+  of "mesh-descriptor", "mesh":
+    for line in src.sourceLines:
+      buffer.add(line); buffer.add("\n")
+      if "</DescriptorRecord>" in buffer:
+        let ui = extractBetween(buffer, "<DescriptorUI>", "</DescriptorUI>")
+        let name = extractBetween(buffer, "<String>", "</String>")
+        let scope = extractBetween(buffer, "<ScopeNote>", "</ScopeNote>")
+        if ui.len > 0 and name.len > 0:
+          g.set(globalName, @[ui, "name"], name)
+          if scope.len > 0:
+            g.set(globalName, @[ui, "scopeNote"], scope)
+          for tree in extractAll(buffer, "<TreeNumber>", "</TreeNumber>"):
+            g.set(globalName, @[ui, "treeNumber", tree], "1")
+          for qual in extractAll(buffer, "<QualifierUI>", "</QualifierUI>"):
+            g.set(globalName, @[ui, "qualifier", qual], "1")
+          inc count; flushBatch()
+        buffer = ""
+
+  of "mesh-qualifier", "qualifier":
+    for line in src.sourceLines:
+      buffer.add(line); buffer.add("\n")
+      if "</QualifierRecord>" in buffer:
+        let ui = extractBetween(buffer, "<QualifierUI>", "</QualifierUI>")
+        let name = extractBetween(buffer, "<String>", "</String>")
+        let abbrev = extractBetween(buffer, "<Abbreviation>", "</Abbreviation>")
+        if ui.len > 0 and name.len > 0:
+          g.set(globalName, @[ui, "name"], name)
+          if abbrev.len > 0:
+            g.set(globalName, @[ui, "abbreviation"], abbrev)
+          inc count; flushBatch()
+        buffer = ""
+
+  of "catline", "marc":
+    for line in src.sourceLines:
+      buffer.add(line); buffer.add("\n")
+      if "</record>" in buffer or "</marc:record>" in buffer:
+        var nlmId = extractBetween(buffer,
+          "<controlfield tag=\"001\">", "</controlfield>")
+        if nlmId.len == 0:
+          nlmId = extractBetween(buffer,
+            "<marc:controlfield tag=\"001\">", "</marc:controlfield>")
+        if nlmId.len > 0:
+          # Title: concatenate 245$a then $b pieces, space-separated
+          var t245 = ""
+          var dfPos = 0
+          while true:
+            let blk = findBlock(buffer[dfPos..^1], "tag=\"245\"",
+                                "</datafield>", "</marc:datafield>")
+            if blk.len == 0: break
+            for piece in subfieldsOf(blk, "a") & subfieldsOf(blk, "b"):
+              if t245.len > 0: t245.add(" ")
+              t245.add(piece)
+            break  # first 245 only
+          if t245.len > 0:
+            g.set(globalName, @[nlmId, "title"], t245)
+          # ISSN from 022$a
+          let issnBlk = findBlock(buffer, "tag=\"022\"",
+                                  "</datafield>", "</marc:datafield>")
+          if issnBlk.len > 0:
+            let vals = subfieldsOf(issnBlk, "a")
+            if vals.len > 0:
+              g.set(globalName, @[nlmId, "issn"], vals[0])
+          inc count; flushBatch()
+        buffer = ""
+
+  of "pubmed", "pubmed-baseline":
+    for line in src.sourceLines:
+      buffer.add(line); buffer.add("\n")
+      if "</PubmedArticle>" in buffer:
+        let pmid = extractBetween(buffer, "<PMID>", "</PMID>")
+        if pmid.len > 0:
+          let title = extractBetween(buffer, "<ArticleTitle>", "</ArticleTitle>")
+          let jblk = findBlock(buffer, "<Journal>", "</Journal>", "")
+          let journal = extractBetween(jblk, "<Title>", "</Title>")
+          let abstract = extractBetween(buffer, "<AbstractText>", "</AbstractText>")
+          if title.len > 0:
+            g.set(globalName, @[pmid, "title"], title)
+          if journal.len > 0:
+            g.set(globalName, @[pmid, "journal"], journal)
+          if abstract.len > 0:
+            g.set(globalName, @[pmid, "abstract"], abstract)
+          # Authors: up to 10 as "Last ForeName", ';'-joined
+          var authors = ""
+          var apos = 0
+          var taken = 0
+          var moreAuthors = false
+          while true:
+            let aStart = buffer.find("<Author>", apos)
+            if aStart < 0: break
+            let aEnd = buffer.find("</Author>", aStart)
+            if aEnd < 0: break
+            let ablk = buffer[aStart ..< aEnd]
+            let last = extractBetween(ablk, "<LastName>", "</LastName>")
+            let fore = extractBetween(ablk, "<ForeName>", "</ForeName>")
+            if last.len > 0:
+              if taken < 10:
+                if authors.len > 0: authors.add(";")
+                if fore.len > 0: authors.add(last & " " & fore)
+                else: authors.add(last)
+              else:
+                moreAuthors = true
+              inc taken
+            apos = aEnd
+          if moreAuthors:
+            authors.add(";et al.")
+          if authors.len > 0:
+            g.set(globalName, @[pmid, "authors"], authors)
+          # MeSH headings -> field + ^LINK per FST schema
+          var hpos = 0
+          while true:
+            let hStart = buffer.find("<MeshHeading>", hpos)
+            if hStart < 0: break
+            let hEnd = buffer.find("</MeshHeading>", hStart)
+            if hEnd < 0: break
+            let hblk = buffer[hStart ..< hEnd]
+            let dui = tagAttr(hblk, "<DescriptorName", "UI")
+            if dui.len > 0:
+              g.set(globalName, @[pmid, "meshUI", dui], "1")
+              g.set("^LINK", @["PUBMED", pmid, "MESH", dui], "mesh_term")
+            hpos = hEnd
+          inc count; flushBatch()
+        buffer = ""
+
+  else:
+    raise newException(ValueError, "Unknown XML format: " & format)
+
+  if g.writeTxnActive():
+    g.endWriteBatch()
+  return count
