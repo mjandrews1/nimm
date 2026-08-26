@@ -20,11 +20,11 @@ cat > "$FIX" <<'XML'
 <PubmedArticleSet>
 <PubmedArticle>
 <MedlineCitation>
-<PMID>11111111</PMID>
+<PMID Version="1">11111111</PMID>
 <Article>
 <Journal><Title>Journal of Testing</Title></Journal>
 <ArticleTitle>Treatment of hypertension in testing environments</ArticleTitle>
-<Abstract><AbstractText>This study evaluates antihypertensive therapy.</AbstractText></Abstract>
+<Abstract><AbstractText Label="BACKGROUND">Prior work is sparse.</AbstractText><AbstractText Label="METHODS">This study evaluates antihypertensive therapy.</AbstractText></Abstract>
 <AuthorList><Author><LastName>Smith</LastName><ForeName>John</ForeName></Author><Author><LastName>Jones</LastName><ForeName>Alice</ForeName></Author></AuthorList>
 </Article>
 <MeshHeadingList>
@@ -56,8 +56,8 @@ if [ "$R" = "2" ]; then echo "  PASS: 2 articles"; else echo "  FAIL: got '$R'";
 
 # Test 2: title/journal/abstract/authors stored
 echo "Test 2: Fields stored"
-R=$($NIMM -d "$DB" -x 'W $G(^PUBMED("11111111","title")),"|",$G(^PUBMED("11111111","journal")),"|",$E($G(^PUBMED("11111111","abstract")),1,20),"|",$G(^PUBMED("11111111","authors"))')
-EXP="Treatment of hypertension in testing environments|Journal of Testing|This study evaluates|Smith John;Jones Alice"
+R=$($NIMM -d "$DB" -x 'W $G(^PUBMED("11111111","title")),"|",$G(^PUBMED("11111111","journal")),"|",$G(^PUBMED("11111111","abstract")),"|",$G(^PUBMED("11111111","authors"))')
+EXP="Treatment of hypertension in testing environments|Journal of Testing|Prior work is sparse.|Smith John;Jones Alice"
 if [ "$R" = "$EXP" ]; then echo "  PASS: all fields correct"; else echo "  FAIL:"; echo "    got: $R"; echo "    exp: $EXP"; exit 1; fi
 
 # Test 3: MeSH UIs + ^LINK entries

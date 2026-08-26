@@ -49,6 +49,22 @@ proc findBlock*(s: string, marker: string, endA: string, endB: string): string =
   if j < 0: return ""
   return s[i ..< j]
 
+proc elemText*(s: string, name: string): string =
+  ## Content of first <name [attrs]>...</name>, attribute-tolerant.
+  ## Matches '<PMID Version="1">30970</PMID>' as well as bare '<PMID>x</PMID>'.
+  let open = "<" & name
+  let i = s.find(open)
+  if i < 0: return ""
+  # must not be a longer tag sharing this prefix (e.g. <Title vs <TitleX)
+  let afterOpen = s[i + open.len]
+  let gt = s.find(">", i)
+  if gt < 0 or afterOpen in ['-', ':'] : return ""
+  let cs = gt + 1
+  let close = "</" & name & ">"
+  let en = s.find(close, cs)
+  if en < 0: return ""
+  return s[cs ..< en].strip()
+
 proc tagAttr*(s: string, tagStart: string, attr: string): string =
   ## Attribute value inside first tag matching tagStart, e.g. UI="D001"
   let i = s.find(tagStart)
@@ -202,12 +218,12 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
     for line in src.sourceLines:
       buffer.add(line); buffer.add("\n")
       if "</PubmedArticle>" in buffer:
-        let pmid = extractBetween(buffer, "<PMID>", "</PMID>")
+        let pmid = elemText(buffer, "PMID")
         if pmid.len > 0:
-          let title = extractBetween(buffer, "<ArticleTitle>", "</ArticleTitle>")
+          let title = elemText(buffer, "ArticleTitle")
           let jblk = findBlock(buffer, "<Journal>", "</Journal>", "")
           let journal = extractBetween(jblk, "<Title>", "</Title>")
-          let abstract = extractBetween(buffer, "<AbstractText>", "</AbstractText>")
+          let abstract = elemText(buffer, "AbstractText")
           if title.len > 0:
             g.set(globalName, @[pmid, "title"], title)
           if journal.len > 0:
