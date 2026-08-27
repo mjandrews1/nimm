@@ -596,6 +596,11 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     copyMem(addr k[0], mdbKey.mvData, mdbKey.mvSize)
     decodeKey(k)
   
+  # Candidate level: $ORDER returns a subscript at the LAST argument position.
+  # $ORDER(^X) and $ORDER(^X("")) both return level-0 subscripts; $ORDER(^X(a,b))
+  # returns level-1 subscripts. So candLevel = LEVEL-1, except LEVEL==0 → 0.
+  let candLevel = if LEVEL == 0: 0 else: LEVEL - 1
+
   var examine = true   # true → inspect current cursor key first
   while true:
     if not examine:
@@ -607,54 +612,52 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     
     var (gname, ksubs) = decodeCur()
     
-    # left this global (or fell short of parent path) → done
-    if gname != global or ksubs.len < LEVEL:
-      cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
-    # Parent path check: verify parent subscripts (0..LEVEL-2) match.
-    # At LEVEL=1 there are no parent subscripts to check.
-    var parentOk = true
-    for i in 0..<(LEVEL - 1):
-      if ksubs[i] != subs[i]: parentOk = false; break
-    if not parentOk:
+    # left this global → done
+    if gname != global:
       cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
     
-    if ksubs.len == LEVEL:
-      # At the target depth: candidate subscript is ksubs[LEVEL-1]
-      # (ksubs[^1]). Compare with startSub.
-      if LEVEL > 0:
-        let candidate = ksubs[LEVEL - 1]
-        if startSub.len == 0 and not forward:
-          # Backward from empty: the first valid candidate walking backward is
-          # the last subscript by M-collation. Nothing is < "", so the normal
-          # comparison would never match — return the candidate directly.
-          cursorClose(cursor); store.abortIfNotBatch(readTxn)
-          return candidate
-        let c = mCollationCmp(candidate, startSub)
-        if (forward and c > 0) or ((not forward) and c < 0):
-          cursorClose(cursor); store.abortIfNotBatch(readTxn)
-          return candidate
-      # Either exact match or wrong direction — skip
-      continue
+    # Key too shallow to carry a candidate subscript:
+    #   LEVEL==0 → this is the root node (ksubs.len==0); skip it.
+    #   LEVEL>=1 → we've left the parent subtree; done.
+    if ksubs.len <= candLevel:
+      if LEVEL == 0:
+        continue
+      else:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
     
-    # deeper than target: derive subscript at target level
-    let derived = ksubs[LEVEL]
+    # Verify parent path matches (only meaningful for LEVEL >= 2)
+    if LEVEL >= 2:
+      var parentOk = true
+      for i in 0..<(LEVEL - 1):
+        if ksubs[i] != subs[i]: parentOk = false; break
+      if not parentOk:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    
+    let candidate = ksubs[candLevel]
     if startSub.len == 0 and not forward:
+      # Backward from empty: the first valid candidate walking backward is the
+      # last subscript by M-collation. Nothing is < "", so the normal comparison
+      # would never match — return the candidate directly.
       cursorClose(cursor); store.abortIfNotBatch(readTxn)
-      return derived
-    let c = mCollationCmp(derived, startSub)
+      return candidate
+    let c = mCollationCmp(candidate, startSub)
     if (forward and c > 0) or ((not forward) and c < 0):
       cursorClose(cursor); store.abortIfNotBatch(readTxn)
-      return derived
-    # derived <= startSub: skip its whole subtree
+      return candidate
+    
+    # candidate <= startSub (or exact match): skip the whole subtree of this
+    # candidate — all keys sharing prefix ksubs[0..candLevel] are contiguous.
     while true:
       if forward: rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
       else:       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
       if rc != SUCCESS:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
       (gname, ksubs) = decodeCur()
-      if gname != global or ksubs.len < LEVEL + 1:
+      if gname != global:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+      if ksubs.len <= candLevel:
         break
-      if ksubs[LEVEL] != derived:
+      if ksubs[candLevel] != candidate:
         break
     # subtree skipped: CURRENT key is fresh candidate — re-examine
     examine = true
