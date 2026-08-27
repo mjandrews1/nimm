@@ -111,6 +111,40 @@ OUT=$($NIMM -d /tmp/keyenc_test5.lmdb -r /tmp/keyenc5.m -x 'DO ^KEYENC5' 2>&1)
 # Nested numeric: 1:2, 1:10, 2:1 (numeric by value)
 check "Nested numeric subscripts" "1:2,1:10,2:1," "$OUT"
 
+# Test 6: Negative numbers sort before zero, more-negative first
+cat > /tmp/keyenc6.m << 'EOF'
+KEYENC6 ;
+SET ^Z(-5)="a"
+SET ^Z(-100)="b"
+SET ^Z(-1)="c"
+SET ^Z(0)="d"
+SET ^Z(5)="e"
+SET R=""
+SET K=""
+FOR  SET K=$ORDER(^Z(K)) QUIT:K=""  SET R=R_K_","
+WRITE R
+QUIT
+EOF
+OUT=$($NIMM -d /tmp/keyenc_test6.lmdb -r /tmp/keyenc6.m -x 'DO ^KEYENC6' 2>&1)
+# M-collation: more negative sorts first
+check "Negative number order" "-100,-5,-1,0,5," "$OUT"
+
+# Test 7: Negative numbers backward
+cat > /tmp/keyenc7.m << 'EOF'
+KEYENC7 ;
+SET ^W(-5)="a"
+SET ^W(-100)="b"
+SET ^W(0)="d"
+SET ^W(5)="e"
+SET R=""
+SET K=""
+FOR  SET K=$ORDER(^W(K),-1) QUIT:K=""  SET R=R_K_","
+WRITE R
+QUIT
+EOF
+OUT=$($NIMM -d /tmp/keyenc_test7.lmdb -r /tmp/keyenc7.m -x 'DO ^KEYENC7' 2>&1)
+check "Negative number backward order" "5,0,-5,-100," "$OUT"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

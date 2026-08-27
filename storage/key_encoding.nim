@@ -47,8 +47,11 @@ proc isNumeric*(s: string): bool =
 
 proc encodeNumeric*(num: float64): string =
   ## Encode a number as order-preserving bytes
-  ## Format: sign_byte + 18-digit zero-padded absolute value
+  ## Format: sign_byte + 18-digit zero-padded field
   ## Sign: \x00=negative, \x01=zero, \x02=positive
+  ## The 18-digit field is the scaled magnitude for non-negatives, and its
+  ## 9's-complement for negatives, so byte order == numeric order across
+  ## the whole range (more-negative sorts before less-negative).
   var signByte: byte
   var absVal: float64
   
@@ -64,7 +67,9 @@ proc encodeNumeric*(num: float64): string =
   
   # Convert to integer by scaling (handles up to 6 decimal places)
   let scaled = int64(absVal * 1_000_000_000_000.0)
-  let digits = $scaled
+  let field = if signByte == 0x00: 999_999_999_999_999_999'i64 - scaled
+              else: scaled
+  let digits = $field
   var padded = ""
   for j in 0..<(18 - digits.len):
     padded.add('0')
@@ -142,7 +147,12 @@ proc decodeKey*(key: string): (string, seq[string]) =
         
         # Parse the number
         try:
-          let absVal = parseInt(digits)
+          let field = parseInt(digits)
+          var absVal: int64
+          if signByte == '\x00':  # negative — field is 9's-complement
+            absVal = 999_999_999_999_999_999'i64 - field
+          else:
+            absVal = field
           var num: float64
           if signByte == '\x00':  # negative
             num = -absVal.float64 / 1_000_000_000_000.0
