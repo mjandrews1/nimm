@@ -145,6 +145,39 @@ EOF
 OUT=$($NIMM -d /tmp/keyenc_test7.lmdb -r /tmp/keyenc7.m -x 'DO ^KEYENC7' 2>&1)
 check "Negative number backward order" "5,0,-5,-100," "$OUT"
 
+# Test 8: Fractional subscripts (M-canonical ".5" form) sort numerically
+cat > /tmp/keyenc8.m << 'EOF'
+KEYENC8 ;
+SET ^D(0.5)="a"
+SET ^D(0.7)="b"
+SET ^D(0.3)="c"
+SET ^D(1.2)="d"
+SET ^D(10.5)="e"
+SET R=""
+SET K=""
+FOR  SET K=$ORDER(^D(K)) QUIT:K=""  SET R=R_K_","
+WRITE R
+QUIT
+EOF
+OUT=$($NIMM -d /tmp/keyenc_test8.lmdb -r /tmp/keyenc8.m -x 'DO ^KEYENC8' 2>&1)
+check "Fractional subscript order" ".3,.5,.7,1.2,10.5," "$OUT"
+
+# Test 9: Negative fractional subscripts sort numerically
+cat > /tmp/keyenc9.m << 'EOF'
+KEYENC9 ;
+SET ^E(-0.5)="a"
+SET ^E(-0.7)="b"
+SET ^E(-0.3)="c"
+SET ^E(-1.2)="d"
+SET R=""
+SET K=""
+FOR  SET K=$ORDER(^E(K)) QUIT:K=""  SET R=R_K_","
+WRITE R
+QUIT
+EOF
+OUT=$($NIMM -d /tmp/keyenc_test9.lmdb -r /tmp/keyenc9.m -x 'DO ^KEYENC9' 2>&1)
+check "Negative fractional order" "-1.2,-.7,-.5,-.3," "$OUT"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

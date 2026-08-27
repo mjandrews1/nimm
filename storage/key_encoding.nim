@@ -32,11 +32,18 @@ import strutils
 import math
 
 proc isNumeric*(s: string): bool =
-  ## Check if string represents a number
+  ## Check if string represents a number, including M-canonical fractional
+  ## forms ".5" and "-.25" (formatNumber drops the redundant leading zero).
   if s.len == 0: return false
   var i = 0
   if s[0] == '-': i = 1
   if i >= s.len: return false
+  if s[i] == '.':
+    # fractional-only form: .5, -.25
+    i += 1
+    if i >= s.len or (s[i] < '0' or s[i] > '9'): return false
+    while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
+    return i == s.len
   if s[i] < '0' or s[i] > '9': return false
   while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
   if i < s.len and s[i] == '.':
@@ -161,10 +168,15 @@ proc decodeKey*(key: string): (string, seq[string]) =
           else:  # positive
             num = absVal.float64 / 1_000_000_000_000.0
           
+          # Format in M-canonical form (drop leading zero: 0.5 -> ".5",
+          # -0.25 -> "-.25") so decode is the inverse of encode.
           if num == floor(num) and abs(num) < 1e15:
-            parts.add($int(num))
+            parts.add($int64(num))
           else:
-            parts.add($num)
+            var s = $num
+            if s.startsWith("-0."): s = "-" & s[2..^1]
+            elif s.startsWith("0."): s = s[1..^1]
+            parts.add(s)
         except:
           parts.add("0")
       else:
