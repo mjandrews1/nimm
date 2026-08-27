@@ -138,8 +138,8 @@ INNER ;
  QUIT
 ENDM
 R=$($NIMM -r /tmp/scoping_sub4.m -x 'SET A="global" DO OUTER WRITE "global:",A')
-run_test "NEW in OUTER, SET in INNER (nimm isolates DO scopes)" "inner:inner
-outer:global
+run_test "NEW in OUTER, SET in INNER (shares NEW'd var, restored on QUIT)" "inner:inner
+outer:inner
 global:global" "$R"
 
 # ============================================================
@@ -161,29 +161,30 @@ R=$($NIMM -r /tmp/scoping_sub5.m -x 'SET TYPE="global" SET VAL=99 DO CALC WRITE 
 run_test "NEW in DO'd routine restores caller vars" "test|42
 global|99" "$R"
 
-# Test: Multiple NEW levels
+# Test: Multiple NEW levels (labels L1/L2/L3 avoid the single-letter "B"=BREAK collision)
 cat > /tmp/scoping_sub6.m << 'ENDM'
-A ;
+L1 ;
  NEW X
  SET X="a"
- DO B
+ DO L2
  WRITE "A:",X,!
  QUIT
- ;
-B ;
+L2 ;
  NEW X
  SET X="b"
- DO C
+ DO L3
  WRITE "B:",X,!
  QUIT
- ;
-C ;
+L3 ;
  SET X="c"
  WRITE "C:",X,!
  QUIT
 ENDM
-R=$($NIMM -r /tmp/scoping_sub6.m -x 'SET X="top" DO A WRITE "TOP:",X')
-run_test "Nested NEW+DO preserves each scope" "C:c|B:b|A:a|TOP:top" "$R"
+R=$($NIMM -r /tmp/scoping_sub6.m -x 'SET X="top" DO L1 WRITE "TOP:",X')
+run_test "Nested NEW+DO preserves each scope" "C:c
+B:c
+A:a
+TOP:top" "$R"
 
 # ============================================================
 # SECTION 5: Cross-routine DO WRITE propagation
@@ -231,8 +232,17 @@ run_test "Wrapper calling cross-routine DO WRITE" "42" "$R"
 echo
 echo "--- QUIT inside FOR-DO block ---"
 
-R=$($NIMM -x 'SET X=0 FOR I=1:1:5 SET X=X+1 QUIT:X>=3 WRITE X')
-run_test "QUIT:X>=3 exits FOR loop" "3" "$R"
+# Test: QUIT:cond inside FOR exits the FOR loop (not the whole program)
+# Uses '< (not-less-than = >=) — '>=' is not valid M and mis-tokenizes.
+cat > /tmp/scoping_forquit.m << 'ENDM'
+FORQUIT ;
+ SET X=0
+ FOR I=1:1:5 SET X=X+1 QUIT:X'<3
+ WRITE X
+ QUIT
+ENDM
+R=$($NIMM -r /tmp/scoping_forquit.m -e 'DO FORQUIT^SCOPING_FORQUIT')
+run_test "QUIT:cond exits FOR loop" "3" "$R"
 
 # Test: QUIT in DO block exits DO, not FOR
 cat > /tmp/scoping_sub7.m << 'ENDM'

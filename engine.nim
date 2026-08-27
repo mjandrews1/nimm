@@ -44,6 +44,7 @@ type
     testValue*: bool
     quitAll*: bool  # Set by top-level QUIT: unwind everything and halt
     doDepth*: int   # DO/XECUTE/extrinsic frame depth (0 = top level)
+    doScopeBase*: seq[int]  # scope depth at each frame entry (QUIT unwinds to top)
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
     currentChannel: int  # Current channel number (0 = principal)
     jobTable*: JobTable  # Job table for JOB command
@@ -67,6 +68,7 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.currentChannel = 0
   result.quitAll = false
   result.doDepth = 0
+  result.doScopeBase = @[]
   result.jobTable = newJobTable()
   result.network = newNetworkManager()
   result.vm = newVM(globals.addr)
@@ -281,6 +283,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           result = eng.execute(cmd.elseBody, depth + 1)
 
       of CmdKind.cFor:
+        # A FOR body is a QUIT-able frame: QUIT exits the loop, not the program.
+        eng.doDepth.inc
+        eng.doScopeBase.add(eng.globals[].scopes.len)
         if cmd.forSpec.varName == "":
           # Argumentless FOR — loops until QUIT
           while true:
@@ -337,10 +342,15 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                   break
                 current += step
           discard quitFor
+        if eng.doScopeBase.len > 0:
+          eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
+        eng.doDepth.dec
 
       of CmdKind.cQuit:
-        # Unwind NEW scopes created since frame entry (or all at top level)
-        while eng.globals[].scopes.len > 1:
+        # Unwind NEW scopes created since the current frame's entry.
+        # At top level (no frame), unwind all the way to depth 1.
+        let base = if eng.doScopeBase.len > 0: eng.doScopeBase[^1] else: 1
+        while eng.globals[].scopes.len > base:
           eng.globals[].popScope()
           if eng.runtime[].etrapStack.len > 0:
             let savedEtrap = eng.runtime[].etrapStack[^1]
@@ -439,6 +449,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.callStack.add(frame)
             pushStack()
             eng.doDepth.inc
+            eng.doScopeBase.add(eng.globals[].scopes.len)
 
             # Bind DO arguments to formal parameters of target label (#370)
             # In M, DO LABEL(arg1,.arg2) makes arg1 available as a local
@@ -502,6 +513,8 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                   break
               offset.inc
             eng.doDepth.dec
+            if eng.doScopeBase.len > 0:
+              eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
             popStack()
             # Pop call stack frame
             if eng.callStack.len > 0:
@@ -511,7 +524,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # Inline DO: execute the body directly
         if cmd.doInlineBody != nil:
           eng.doDepth.inc
+          eng.doScopeBase.add(eng.globals[].scopes.len)
           result = eng.execute(cmd.doInlineBody, depth + 1)
+          if eng.doScopeBase.len > 0:
+            eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
           eng.doDepth.dec
 
       of CmdKind.cGoto:
@@ -713,7 +729,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         if cmd.xecExpr != nil:
           let code = eng.evaluator[].eval(cmd.xecExpr)
           eng.doDepth.inc
+          eng.doScopeBase.add(eng.globals[].scopes.len)
           result = eng.execute(eng.cachedParseLine(code), depth + 1)
+          if eng.doScopeBase.len > 0:
+            eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
           eng.doDepth.dec
 
       of CmdKind.cJob:
