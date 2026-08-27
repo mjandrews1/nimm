@@ -208,7 +208,8 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZL") or equiWord(w, "ZALLOCATE") or equiWord(w, "ZA") or
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK") or
     equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE") or
-    equiWord(w, "ZLOADXML") or equiWord(w, "ZVERIFY")
+    equiWord(w, "ZLOADXML") or equiWord(w, "ZVERIFY") or equiWord(w, "ZHALT") or
+    equiWord(w, "ZSAVE") or equiWord(w, "ZSYSTEM")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
   of 't':
     equiWord(w, "TSTART") or equiWord(w, "T") or

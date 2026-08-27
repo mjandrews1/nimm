@@ -23,6 +23,7 @@ type
   Routine* = object
     name*: string
     lines*: seq[string]
+    originalLines*: seq[string]    # pre-filter/merge source (for ZSAVE)
     labels*: Table[string, int]  # label -> line index
     filePath*: string            # Source file path (#304)
     bytecodeCache*: seq[Bytecode] # Compiled bytecode per line (nil = not compiled) (#342)
@@ -331,6 +332,10 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
     # Remove trailing whitespace
     routine.lines.add(line.strip(trailing = true))
   
+  # Preserve raw source for ZSAVE (before comment/blank filtering and
+  # dot-continuation merging)
+  routine.originalLines = routine.lines
+
   # Strip comments and blank lines FIRST — mergeDotContinuations needs
   # clean source lines so comment text can't swallow blockSep markers
   # and blank lines can't break depth tracking (#282)
@@ -352,6 +357,9 @@ proc loadRoutineFromString*(rt: var Runtime, name: string, code: string): Routin
   for line in code.splitLines():
     routine.lines.add(line.strip(trailing = true))
   
+  # Preserve raw source for ZSAVE
+  routine.originalLines = routine.lines
+
   # Same ordering as loadRoutine: filter, then merge (#282)
   filterRoutineLines(routine.lines)
   mergeDotContinuations(routine.lines)

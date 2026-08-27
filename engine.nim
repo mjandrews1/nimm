@@ -783,13 +783,37 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               eng.writeln("Error loading routine: " & routineName)
 
       of CmdKind.cZsave:
-        # ZSAVE [routine] - Save current routine
-        let routineName = if cmd.zsaveExpr != nil:
-          eng.evaluator[].eval(cmd.zsaveExpr)
+        # ZSAVE [routine] - Save routine source to disk (#376).
+        # No argument → current routine; bare/quoted name → that routine;
+        # label^routine → that routine. Writes to the routine's original
+        # filePath, else <name>.m in CWD.
+        var routineName = ""
+        if cmd.zsaveExpr == nil:
+          routineName = eng.runtime[].currentRoutine
         else:
-          eng.runtime[].currentRoutine
+          case cmd.zsaveExpr.kind
+          of eVar: routineName = cmd.zsaveExpr.vname
+          of eStr: routineName = cmd.zsaveExpr.sval
+          of eEntryRef: routineName = cmd.zsaveExpr.entryRoutine
+          else: routineName = eng.evaluator[].eval(cmd.zsaveExpr)
+        routineName = routineName.toUpperAscii()
         if routineName.len > 0:
-          eng.writeln("Saved: " & routineName)
+          if routineName notin eng.runtime[].routines:
+            eng.writeln("ZSAVE: routine not found: " & routineName)
+          else:
+            let routine = eng.runtime[].routines[routineName]
+            let lines = if routine.originalLines.len > 0:
+              routine.originalLines else: routine.lines
+            let outPath = if routine.filePath.len > 0:
+              routine.filePath else: routineName & ".m"
+            try:
+              let f = open(outPath, fmWrite)
+              defer: f.close()
+              for ln in lines:
+                f.writeLine(ln)
+              eng.writeln("Saved: " & outPath)
+            except:
+              eng.writeln("ZSAVE: cannot write " & outPath)
 
       of CmdKind.cZremove:
         # ZREMOVE routine - Remove routine from memory
