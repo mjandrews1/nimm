@@ -1,16 +1,20 @@
 # key_encoding.nim — M/MUMPS key encoding for LMDB
 # Encodes global references to LMDB keys with M-collation order
 #
-# M-collation order (§XX):
+# M-collation order:
 #   1. Empty string sorts first
 #   2. Numbers sort before strings
 #   3. Numbers sort by numeric value (negative < zero < positive)
 #   4. Strings sort lexicographically
 #
 # Key format per subscript:
-#   \x00                              — empty string
+#   \x00                              — empty string (type byte only, no content)
 #   \x01 + sign_byte + 18 digits      — number (zero-padded integer)
-#   \x02 + 4-byte-LE-length + bytes   — string (length-prefixed)
+#   \x02 + bytes + \x00               — string (null-terminated)
+#
+# Separator: each subscript's type byte distinguishes it from the next.
+# After a \x01 subscript, the next byte is always a type byte (\x00/\x01/\x02) or end-of-key.
+# After a \x02 string, the \x00 terminator is followed by another type byte or end-of-key.
 #
 # Numeric encoding detail:
 #   - Sign byte: \x00 for negative, \x01 for zero, \x02 for positive
@@ -18,9 +22,12 @@
 #   - For decimals: multiply by 10^12 and encode as integer
 #   - This preserves order: negative < zero < positive, and within each
 #     category, numeric value order matches byte order
+#
+# String encoding detail:
+#   - Type byte \x02 followed by raw bytes, terminated by \x00
+#   - The \x00 terminator also serves as the separator before the next subscript
 
 import strutils
-import algorithm
 import math
 
 proc isNumeric*(s: string): bool =
@@ -69,14 +76,17 @@ proc encodeNumeric*(num: float64): string =
 proc encodeKey*(global: string, subs: seq[string] = @[]): string =
   ## Encode global[sub1,sub2,...] to LMDB key with M-collation order
   ## Format: global\x00encoded_sub1\x00encoded_sub2\x00...\x00
+  ##
+  ## For strings: the \x00 separator before the next subscript (or the trailing
+  ## \x00) serves as the null terminator. No extra \x00 is added after string content.
   result = global
   for sub in subs:
     result.add('\x00')
     if sub.len == 0:
-      # Empty string: single null byte
+      # Empty string: single \x00 type byte (sorts first)
       result.add('\x00')
     elif isNumeric(sub):
-      # Numeric subscript: encode as sign + 18 digits
+      # Numeric subscript: type prefix + sign + 18 digits
       try:
         let num = parseFloat(sub)
         result.add('\x01')
@@ -84,49 +94,49 @@ proc encodeKey*(global: string, subs: seq[string] = @[]): string =
       except:
         # Fallback: treat as string
         result.add('\x02')
-        # Length-prefixed: 4-byte little-endian length
-        let len = sub.len
-        result.add(chr(byte(len and 0xFF)))
-        result.add(chr(byte((len shr 8) and 0xFF)))
-        result.add(chr(byte((len shr 16) and 0xFF)))
-        result.add(chr(byte((len shr 24) and 0xFF)))
         result.add(sub)
     else:
-      # String subscript: type prefix + length-prefixed bytes
+      # String subscript: type prefix + raw bytes
+      # The \x00 separator added by the next iteration (or trailing) acts as terminator
       result.add('\x02')
-      # Length-prefixed: 4-byte little-endian length
-      let len = sub.len
-      result.add(chr(byte(len and 0xFF)))
-      result.add(chr(byte((len shr 8) and 0xFF)))
-      result.add(chr(byte((len shr 16) and 0xFF)))
-      result.add(chr(byte((len shr 24) and 0xFF)))
       result.add(sub)
   result.add('\x00')
 
 proc decodeKey*(key: string): (string, seq[string]) =
   ## Decode LMDB key to (global, [sub1, sub2, ...])
   ## Inverse of encodeKey
+  ##
+  ## Key format:
+  ##   global\x00[subtype+data]*\x00
+  ## where subtype is:
+  ##   \x00 = empty string (immediately followed by next subtype or end-of-key)
+  ##   \x01 = number (followed by 19 bytes: sign + 18 digits)
+  ##   \x02 = string (followed by bytes until \x00 terminator)
+  ##
+  ## After the global separator, bytes are a stream of type+data.
+  ## End-of-key is detected when the next byte is \x00 AFTER all subscripts
+  ## have been consumed. We detect this by checking if we've consumed all bytes
+  ## or if the next type byte indicates a new subscript.
   var parts: seq[string] = @[]
+  var globalName = ""
   var i = 0
   
   # Find global name (everything before first \x00)
   while i < key.len and key[i] != '\x00':
     i += 1
-  result[0] = key[0..<i]
-  i += 1  # skip the \x00 separator
+  globalName = key[0..<i]
+  i += 1  # skip the \x00 separator after global
   
-  # Decode subscripts
+  # Decode subscripts — the stream after global separator is:
+  #   type_byte [data]* type_byte [data]* ... \x00 (end-of-key)
+  # We read until we hit end-of-key (\x00 with no preceding type context)
   while i < key.len:
-    if key[i] == '\x00':
-      # End of key (trailing separator)
-      break
-    
     let typeByte = key[i]
-    i += 1
+    i += 1  # move past type byte
     
     case typeByte
     of '\x00':
-      # Empty string
+      # Empty string subscript
       parts.add("")
     of '\x01':
       # Number: sign byte + 18 digits
@@ -136,7 +146,7 @@ proc decodeKey*(key: string): (string, seq[string]) =
         let digits = key[i..<i+18]
         i += 18
         
-        # Parse the integer
+        # Parse the number
         try:
           let absVal = parseInt(digits)
           var num: float64
@@ -147,7 +157,6 @@ proc decodeKey*(key: string): (string, seq[string]) =
           else:  # positive
             num = absVal.float64 / 1_000_000_000_000.0
           
-          # Format number: strip trailing zeros
           if num == floor(num) and abs(num) < 1e15:
             parts.add($int(num))
           else:
@@ -155,31 +164,39 @@ proc decodeKey*(key: string): (string, seq[string]) =
         except:
           parts.add("0")
       else:
-        # Malformed key — skip
         break
     of '\x02':
-      # String: length-prefixed (4-byte LE length)
-      if i + 4 <= key.len:
-        let len = int(key[i].byte) or
-                  (int(key[i+1].byte) shl 8) or
-                  (int(key[i+2].byte) shl 16) or
-                  (int(key[i+3].byte) shl 24)
-        i += 4
-        if i + len <= key.len:
-          parts.add(key[i..<i+len])
-          i += len
-          # Skip separator after string if present
-          if i < key.len and key[i] == '\x00':
-            i += 1
-        else:
-          break
-      else:
-        break
+      # String: read until \x00 terminator
+      var s = ""
+      while i < key.len and key[i] != '\x00':
+        s.add(key[i])
+        i += 1
+      parts.add(s)
+      # Skip the \x00 terminator
+      if i < key.len and key[i] == '\x00':
+        i += 1
+      # After skipping, check if we've consumed everything
+      # If next byte is \x00, it's the end-of-key marker
+      # If next byte is \x01/\x02, it's the next subscript
     else:
-      # Unknown type — skip
+      break
+    
+    # After processing a subscript, check if we've reached end-of-key
+    # End-of-key is: we've consumed all bytes, OR next byte is \x00
+    if i >= key.len:
+      break
+    if key[i] == '\x00':
+      # This \x00 could be end-of-key OR an empty string subscript
+      # Peek ahead: if there's a valid type byte after this \x00, it's an empty string
+      if i + 1 < key.len:
+        let nextType = key[i + 1]
+        if nextType == '\x01' or nextType == '\x02':
+          # This \x00 is an empty string subscript, not end-of-key
+          continue
+      # End-of-key
       break
   
-  result[1] = parts
+  result = (globalName, parts)
 
 proc mCollationCmp*(a, b: string): int =
   ## M-collation comparison: numeric before string

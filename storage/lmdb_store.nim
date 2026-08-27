@@ -360,8 +360,6 @@ proc putBatch*(store: var LmdbStore, global: string, subs: seq[string], value: s
   
   let rc = put(store.writeTxn, store.dbi, addr mdbKey, addr mdbVal, 0)
   if rc != SUCCESS:
-    echo "DEBUG putBatch failed: key=", key.len, " val=", value.len, " rc=", rc
-    echo "DEBUG key bytes: ", cast[seq[byte]](key)
     abort(store.writeTxn)
     store.writeTxnActive = false
     raise newException(IOError, "LMDB putBatch put failed: " & $rc)
@@ -541,12 +539,6 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
   ## Uses cached read transaction if in a batch, else creates a new one.
   let prefix = encodeKey(global, subs)
   
-  var parentPrefix = global
-  for i in 0..<subs.len:
-    parentPrefix.add('\0')
-    parentPrefix.add(subs[i])
-  parentPrefix.add('\0')
-  
   let readTxn = store.getReadTxn()
   if readTxn == nil: return ""
   
@@ -556,26 +548,45 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     store.abortIfNotBatch(readTxn)
     return ""
   
-  # Position cursor at prefix using SET_RANGE
+  let LEVEL = subs.len
+  let startSub = if LEVEL > 0: subs[^1] else: ""
+  
+  # Position cursor: for forward, use SET_RANGE to find first key >= prefix.
+  # For backward with empty startSub, position at the last key in the global
+  # (M semantics: $ORDER(^X(""),-1) returns the last subscript).
   var mdbKey: Val
-  mdbKey.mvSize = cast[uint](prefix.len)
-  mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
-  
   var mdbVal: Val
-  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
-  
-  if rc != SUCCESS:
-    # SET_RANGE failed — no key >= prefix exists. Try PREV for the last key before prefix.
-    if not forward:
+
+  if not forward and LEVEL > 0 and startSub.len == 0:
+    # Backward from empty: find the last key in this global's subtree.
+    # Use a prefix that is one past the end of the global's key range.
+    var endPrefix = global & "\x01"  # byte after all subscript type bytes
+    var endKey: Val
+    endKey.mvSize = cast[uint](endPrefix.len)
+    endKey.mvData = cast[pointer](unsafeAddr endPrefix[0])
+    rc = cursorGet(cursor, addr endKey, addr mdbVal, SET_RANGE)
+    if rc != SUCCESS:
+      # No key >= endPrefix; try LAST
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, LAST)
+      if rc != SUCCESS:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    else:
+      # SET_RANGE positioned at or past endPrefix; PREV gives the last key in global
       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
       if rc != SUCCESS:
-        cursorClose(cursor)
-        store.abortIfNotBatch(readTxn)
-        return ""
-    else:
-      cursorClose(cursor)
-      store.abortIfNotBatch(readTxn)
-      return ""
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+  else:
+    mdbKey.mvSize = cast[uint](prefix.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+    
+    if rc != SUCCESS:
+      if not forward:
+        rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+        if rc != SUCCESS:
+          cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+      else:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
   
   # Unified walk: find the next subscript at depth = subs.len, strictly
   # past startSub. M derives level-subscripts from deeper keys, so parent-
@@ -584,9 +595,6 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     let k = newString(mdbKey.mvSize)
     copyMem(addr k[0], mdbKey.mvData, mdbKey.mvSize)
     decodeKey(k)
-  
-  let LEVEL = subs.len
-  let startSub = if LEVEL > 0: subs[^1] else: ""
   
   var examine = true   # true → inspect current cursor key first
   while true:
@@ -600,23 +608,39 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     var (gname, ksubs) = decodeCur()
     
     # left this global (or fell short of parent path) → done
-    if gname != global or ksubs.len < LEVEL - 1:
+    if gname != global or ksubs.len < LEVEL:
       cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
-    var parentOk = ksubs.len >= LEVEL - 1
-    for i in 0..<LEVEL - 1:
+    # Parent path check: verify parent subscripts (0..LEVEL-2) match.
+    # At LEVEL=1 there are no parent subscripts to check.
+    var parentOk = true
+    for i in 0..<(LEVEL - 1):
       if ksubs[i] != subs[i]: parentOk = false; break
     if not parentOk:
       cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
     
     if ksubs.len == LEVEL:
-      let c = mCollationCmp(ksubs[^1], startSub)
-      if (forward and c > 0) or ((not forward) and c < 0):
-        cursorClose(cursor); store.abortIfNotBatch(readTxn)
-        return ksubs[^1]
+      # At the target depth: candidate subscript is ksubs[LEVEL-1]
+      # (ksubs[^1]). Compare with startSub.
+      if LEVEL > 0:
+        let candidate = ksubs[LEVEL - 1]
+        if startSub.len == 0 and not forward:
+          # Backward from empty: the first valid candidate walking backward is
+          # the last subscript by M-collation. Nothing is < "", so the normal
+          # comparison would never match — return the candidate directly.
+          cursorClose(cursor); store.abortIfNotBatch(readTxn)
+          return candidate
+        let c = mCollationCmp(candidate, startSub)
+        if (forward and c > 0) or ((not forward) and c < 0):
+          cursorClose(cursor); store.abortIfNotBatch(readTxn)
+          return candidate
+      # Either exact match or wrong direction — skip
       continue
     
-    # deeper than target: derive sibling at target level
-    let derived = ksubs[LEVEL - 1]
+    # deeper than target: derive subscript at target level
+    let derived = ksubs[LEVEL]
+    if startSub.len == 0 and not forward:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn)
+      return derived
     let c = mCollationCmp(derived, startSub)
     if (forward and c > 0) or ((not forward) and c < 0):
       cursorClose(cursor); store.abortIfNotBatch(readTxn)
@@ -628,9 +652,9 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       if rc != SUCCESS:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
       (gname, ksubs) = decodeCur()
-      if gname != global or ksubs.len < LEVEL:
+      if gname != global or ksubs.len < LEVEL + 1:
         break
-      if ksubs.len > LEVEL - 1 and ksubs[LEVEL - 1] != derived:
+      if ksubs[LEVEL] != derived:
         break
     # subtree skipped: CURRENT key is fresh candidate — re-examine
     examine = true

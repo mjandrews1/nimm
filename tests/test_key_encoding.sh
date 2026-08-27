@@ -73,8 +73,9 @@ WRITE R
 QUIT
 EOF
 OUT=$($NIMM -d /tmp/keyenc_test3.lmdb -r /tmp/keyenc3.m -x 'DO ^KEYENC3' 2>&1)
-# Empty key should sort first
-check "Empty key sorts first" ",hello,world," "$OUT"
+# Empty key should sort first — but $ORDER("") returns the first AFTER "",
+# which is "hello", not "" itself
+check "Empty key sorts first" "hello,world," "$OUT"
 
 # Test 4: $ORDER backward
 cat > /tmp/keyenc4.m << 'EOF'
@@ -89,8 +90,8 @@ WRITE R
 QUIT
 EOF
 OUT=$($NIMM -d /tmp/keyenc_test4.lmdb -r /tmp/keyenc4.m -x 'DO ^KEYENC4' 2>&1)
-# Reverse M collation: strings desc, then numbers desc
-check "Backward order" "2,10,1," "$OUT"
+# Reverse M collation: numbers desc by value
+check "Backward order" "10,2,1," "$OUT"
 
 # Test 5: Numeric subscripts in nested globals
 cat > /tmp/keyenc5.m << 'EOF'
