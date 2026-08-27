@@ -1094,13 +1094,27 @@ proc parseCommand(p: var Parser): CommandNode =
     cmd = Cmd(kind: cView, viewExpr: viewExpr)
   of "ZALLOCATE", "ZA":
     var allocRefs: seq[Expr] = @[]
-    if isExprStart(p) and not p.atCommandPos():
-      allocRefs = parseExprList(p)
+    while isExprStart(p) and not p.atCommandPos():
+      allocRefs.add p.parseExpr()
+      if p.peek() == tokColon:
+        discard p.advance()      # consume ':'
+        discard p.parseExpr()    # timeout (ignored, single-threaded)
+      if p.peek() == tokComma:
+        discard p.advance()
+      else:
+        break
     cmd = Cmd(kind: cZallocate, zallocRefs: allocRefs)
   of "ZDEALLOCATE", "ZD":
     var deallocRefs: seq[Expr] = @[]
-    if isExprStart(p) and not p.atCommandPos():
-      deallocRefs = parseExprList(p)
+    while isExprStart(p) and not p.atCommandPos():
+      deallocRefs.add p.parseExpr()
+      if p.peek() == tokColon:
+        discard p.advance()      # consume ':'
+        discard p.parseExpr()    # timeout (ignored, single-threaded)
+      if p.peek() == tokComma:
+        discard p.advance()
+      else:
+        break
     cmd = Cmd(kind: cZdeallocate, zdeallocRefs: deallocRefs)
   of "ZSTACK":
     cmd = Cmd(kind: cZstack)

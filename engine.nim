@@ -961,12 +961,35 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               else: discard
 
       of CmdKind.cZallocate:
-        # ZALLOCATE ^global — Pre-allocate global storage (no-op in nimm)
-        discard
+        # ZALLOCATE ref[,ref]... — lock variables without waiting (#379).
+        # Single-threaded: set each lock variable to "1" (locked). Timeout
+        # parameter is ignored (always succeeds). Mirrors LOCK's $TEST=true.
+        for refExpr in cmd.zallocRefs:
+          if refExpr.kind == eVar:
+            var subs: seq[string] = @[]
+            for sub in refExpr.subs:
+              subs.add(eng.evaluator[].eval(sub))
+            eng.globals[].set(refExpr.vname, subs, "1")
+          else:
+            let name = eng.evaluator[].eval(refExpr)
+            if name.len > 0:
+              eng.globals[].set(name, @[], "1")
+        eng.testValue = true
 
       of CmdKind.cZdeallocate:
-        # ZDEALLOCATE ^global — Deallocate global storage (no-op in nimm)
-        discard
+        # ZDEALLOCATE ref[,ref]... — release locks (#379).
+        # Set each lock variable to "0" (unlocked).
+        for refExpr in cmd.zdeallocRefs:
+          if refExpr.kind == eVar:
+            var subs: seq[string] = @[]
+            for sub in refExpr.subs:
+              subs.add(eng.evaluator[].eval(sub))
+            eng.globals[].set(refExpr.vname, subs, "0")
+          else:
+            let name = eng.evaluator[].eval(refExpr)
+            if name.len > 0:
+              eng.globals[].set(name, @[], "0")
+        eng.testValue = true
 
       of CmdKind.cZstack:
         # ZSTACK — Display call stack for introspection
