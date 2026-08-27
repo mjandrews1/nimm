@@ -132,6 +132,13 @@ proc subfieldsOf(blockText: string, code: string): seq[string] =
 proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
                   format: string): int =
   ## Stream-parse an NLM XML file into globals. Returns record count.
+  ## Tracks load state in ^FST("load",<basename>) so partial loads
+  ## (killed mid-run) are detectable: "in-progress" before, "complete:N" after.
+  let loadKey = extractFilename(filePath)
+  # Mark in-progress in its own transaction so it persists even if the
+  # process is killed mid-load (the data batch below has not yet begun).
+  g.set("^FST", @["load", loadKey], "in-progress")
+
   var src = openSource(filePath)
   defer: closeSource(src)
 
@@ -277,4 +284,6 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
 
   if g.writeTxnActive():
     g.endWriteBatch()
+  # Mark load complete (own transaction, after data committed)
+  g.set("^FST", @["load", loadKey], "complete:" & $count)
   return count

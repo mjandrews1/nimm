@@ -10,6 +10,7 @@ FAILED=0
 
 cleanup() {
   rm -rf "$DB" "$DB-lock" 2>/dev/null
+  rm -f /tmp/loadstate_fixture.xml 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -85,6 +86,37 @@ if [ -z "$INCOMPLETE" ]; then
   pass "No incomplete loads after all complete"
 else
   fail "No incomplete loads" "(empty)" "$INCOMPLETE"
+fi
+
+# Test 7: Real ZLOADXML integration — marks load complete with count
+echo "--- Test: ZLOADXML marks load complete ---"
+cat > /tmp/loadstate_fixture.xml << 'XEOF'
+<?xml version="1.0"?>
+<DescriptorRecordSet>
+<DescriptorRecord>
+<DescriptorUI>D000001</DescriptorUI>
+<DescriptorName><String>Hypertension</String></DescriptorName>
+</DescriptorRecord>
+<DescriptorRecord>
+<DescriptorUI>D000002</DescriptorUI>
+<DescriptorName><String>Diabetes</String></DescriptorName>
+</DescriptorRecord>
+</DescriptorRecordSet>
+XEOF
+RESULT=$($NIMM -d $DB -x 'ZLOADXML "/tmp/loadstate_fixture.xml","^MESH","mesh" W $G(^FST("load","loadstate_fixture.xml"))' 2>&1 | tail -1)
+if [ "$RESULT" = "complete:2" ]; then
+  pass "ZLOADXML marks load complete:2"
+else
+  fail "ZLOADXML marks load complete" "complete:2" "$RESULT"
+fi
+
+# Test 8: Loaded records are present
+echo "--- Test: Loaded records present ---"
+MESH_NAME=$($NIMM -d $DB -x 'w $G(^MESH("D000001","name"))' 2>&1)
+if [ "$MESH_NAME" = "Hypertension" ]; then
+  pass "ZLOADXML loaded records correctly"
+else
+  fail "ZLOADXML loaded records" "Hypertension" "$MESH_NAME"
 fi
 
 echo ""
