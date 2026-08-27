@@ -100,9 +100,9 @@ proc parseLabels(routine: var Routine) =
     if trimmed.len > 0 and not trimmed.startsWith(";"):
       # Check if line starts with a label (alphanumeric or %)
       if trimmed[0] in {'A'..'Z', 'a'..'z', '%'}:
-        # Find end of label
+        # Find end of label (underscores are part of label names in entryref context)
         var labelEnd = 0
-        while labelEnd < trimmed.len and trimmed[labelEnd] in {'A'..'Z', 'a'..'z', '0'..'9', '%'}:
+        while labelEnd < trimmed.len and trimmed[labelEnd] in {'A'..'Z', 'a'..'z', '0'..'9', '%', '_'}:
           inc labelEnd
         if labelEnd > 0:
           let label = trimmed[0..<labelEnd].toUpperAscii()
@@ -125,7 +125,7 @@ proc stripLabel*(line: string): string =
   if i >= line.len: return line
   var tok = ""
   if line[i] in {'A'..'Z', 'a'..'z', '%'}:
-    while i < line.len and line[i] in {'A'..'Z', 'a'..'z', '0'..'9', '%'}:
+    while i < line.len and line[i] in {'A'..'Z', 'a'..'z', '0'..'9', '%', '_'}:
       tok.add(line[i]); inc i
   elif line[i] in {'0'..'9'}:
     # Numeric entry label (§7.1)
@@ -134,23 +134,39 @@ proc stripLabel*(line: string): string =
   else:
     return line
   if tok.len == 0: return line
-  # A label must end at whitespace or EOL — "X(1)=..." is not one
-  if i < line.len and line[i] notin {' ', '\t'}: return line
+  # A label must end at whitespace, EOL, or '(' for parameter list
+  # "X(1)=..." is not a label, but "HELLO(Y);" is a label with params
+  if i < line.len and line[i] notin {' ', '\t', '('}: return line
   if isCommandKeyword(tok): return line
+  # Skip optional parameter list: LABEL(arg1,arg2,...)
+  if i < line.len and line[i] == '(':
+    var depth = 1
+    inc i
+    while i < line.len and depth > 0:
+      if line[i] == '(': inc depth
+      elif line[i] == ')': dec depth
+      inc i
   while i < line.len and line[i] in {' ', '\t'}: inc i
   return line[i..^1]
 
 proc stripMComment(line: string): string =
   ## Strip M-style comments from a line.
   ## In M, `;` starts a comment to end of line, but NOT inside string literals.
+  ## M uses `""` inside strings for a literal `"` character.
   result = ""
   var inString = false
   var i = 0
   while i < line.len:
     let c = line[i]
     if c == '"':
-      inString = not inString
-      result.add(c)
+      if inString and i + 1 < line.len and line[i + 1] == '"':
+        # M escaped quote inside string: "" -> literal "
+        result.add(c)
+        result.add(c)
+        inc i
+      else:
+        inString = not inString
+        result.add(c)
     elif c == ';' and not inString:
       break
     else:

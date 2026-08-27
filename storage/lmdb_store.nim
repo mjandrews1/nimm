@@ -243,6 +243,11 @@ proc endReadBatch*(store: var LmdbStore) =
 
 proc getReadTxn(store: var LmdbStore): ptr Txn =
   ## Get a read transaction — use cached if in batch, else create new.
+  ## During an active WRITE batch, reads must come from the write txn:
+  ## opening a second txn on the same env deadlocks (found via bm25idx
+  ## $ORDER-inside-BATCHON, #359/#368 dogfood).
+  if store.writeTxnActive and store.writeTxn != nil:
+    return store.writeTxn
   if store.readTxnActive:
     return store.readTxn
   # Create a new read transaction for single reads
@@ -253,6 +258,9 @@ proc getReadTxn(store: var LmdbStore): ptr Txn =
 
 proc abortIfNotBatch(store: var LmdbStore, txn: ptr Txn) =
   ## Abort a read transaction only if it's not the cached batch transaction.
+  ## Never abort the active WRITE txn that readers are borrowing.
+  if store.writeTxnActive and txn == store.writeTxn:
+    return
   if not store.readTxnActive or txn != store.readTxn:
     abort(txn)
 
@@ -400,6 +408,73 @@ proc delete*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
     abort(txn)
     raise
 
+proc deletePrefix*(store: var LmdbStore, global: string, subs: seq[string] = @[]) =
+  ## Delete global[sub1,sub2,...] and ALL descendants (M KILL semantics §7.2.9)
+  ## Uses cursor prefix scan to find and delete all keys with this prefix.
+  let prefix = encodeKey(global, subs)
+  
+  # First, collect all keys to delete (can't delete while iterating cursor)
+  var keysToDelete: seq[string] = @[]
+  
+  block:
+    let readTxn = store.getReadTxn()
+    if readTxn == nil: return
+    
+    var cursor: LMDBCursor
+    var rc = cursorOpen(readTxn, store.dbi, addr cursor)
+    if rc != SUCCESS:
+      store.abortIfNotBatch(readTxn)
+      return
+    
+    var mdbKey: Val
+    mdbKey.mvSize = cast[uint](prefix.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
+    
+    var mdbVal: Val
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+    
+    while rc == SUCCESS:
+      let key = newString(mdbKey.mvSize)
+      copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+      
+      # Check if key starts with prefix
+      if key.len >= prefix.len and key[0..<prefix.len] == prefix:
+        keysToDelete.add(key)
+      elif key > prefix:
+        break
+      
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+    
+    cursorClose(cursor)
+    store.abortIfNotBatch(readTxn)
+  
+  if keysToDelete.len == 0:
+    return
+  
+  # Now delete all collected keys in a single write transaction
+  var txn: ptr Txn
+  var rc = txnBegin(store.env, nil, 0, addr txn)
+  if rc != SUCCESS:
+    raise newException(IOError, "LMDB txn_begin failed for deletePrefix")
+  
+  try:
+    for rawKey in keysToDelete:
+      var mdbKey: Val
+      mdbKey.mvSize = cast[uint](rawKey.len)
+      mdbKey.mvData = cast[pointer](unsafeAddr rawKey[0])
+      
+      rc = del(txn, store.dbi, addr mdbKey, nil)
+      if rc != SUCCESS and rc != NOTFOUND:
+        abort(txn)
+        raise newException(IOError, "LMDB deletePrefix delete failed")
+    
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB deletePrefix commit failed")
+  except:
+    abort(txn)
+    raise
+
 proc sync*(store: LmdbStore) =
   ## Flush data to disk
   discard envSync(store.env, 1)
@@ -502,61 +577,67 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       store.abortIfNotBatch(readTxn)
       return ""
   
-  # After SET_RANGE, cursor is at first key >= prefix.
-  # Check if this key is already the answer (for forward $ORDER).
-  # If prefix == current key (exact match), we need NEXT to get the NEXT subscript.
-  # If prefix < current key, the current key IS the answer.
-  let currentKeyAfterSet = newString(mdbKey.mvSize)
-  copyMem(addr currentKeyAfterSet[0], mdbKey.mvData, mdbKey.mvSize)
-  let isExactMatch = (currentKeyAfterSet == prefix)
+  # Unified walk: find the next subscript at depth = subs.len, strictly
+  # past startSub. M derives level-subscripts from deeper keys, so parent-
+  # only nodes ARE returned (fixes subtree-skip bug found via bm25idx).
+  proc decodeCur(): (string, seq[string]) =
+    let k = newString(mdbKey.mvSize)
+    copyMem(addr k[0], mdbKey.mvData, mdbKey.mvSize)
+    decodeKey(k)
   
-  if not isExactMatch and forward:
-    # Current key is past the prefix — it's the answer for forward $ORDER
-    let decodedNow = decodeKey(currentKeyAfterSet)
-    if decodedNow[0] == global and decodedNow[1].len == subs.len:
-      cursorClose(cursor)
-      store.abortIfNotBatch(readTxn)
-      return decodedNow[1][^1]
+  let LEVEL = subs.len
+  let startSub = if LEVEL > 0: subs[^1] else: ""
   
-  # Move to next/previous
-  if forward:
-    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
-  else:
-    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+  var examine = true   # true → inspect current cursor key first
+  while true:
+    if not examine:
+      if forward: rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+      else:       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+      if rc != SUCCESS:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    examine = false
+    
+    var (gname, ksubs) = decodeCur()
+    
+    # left this global (or fell short of parent path) → done
+    if gname != global or ksubs.len < LEVEL - 1:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    var parentOk = ksubs.len >= LEVEL - 1
+    for i in 0..<LEVEL - 1:
+      if ksubs[i] != subs[i]: parentOk = false; break
+    if not parentOk:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    
+    if ksubs.len == LEVEL:
+      let c = system.cmp(ksubs[^1], startSub)
+      if (forward and c > 0) or ((not forward) and c < 0):
+        cursorClose(cursor); store.abortIfNotBatch(readTxn)
+        return ksubs[^1]
+      continue
+    
+    # deeper than target: derive sibling at target level
+    let derived = ksubs[LEVEL - 1]
+    let c = system.cmp(derived, startSub)
+    if (forward and c > 0) or ((not forward) and c < 0):
+      cursorClose(cursor); store.abortIfNotBatch(readTxn)
+      return derived
+    # derived <= startSub: skip its whole subtree
+    while true:
+      if forward: rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+      else:       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+      if rc != SUCCESS:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+      (gname, ksubs) = decodeCur()
+      if gname != global or ksubs.len < LEVEL:
+        break
+      if ksubs.len > LEVEL - 1 and ksubs[LEVEL - 1] != derived:
+        break
+    # subtree skipped: CURRENT key is fresh candidate — re-examine
+    examine = true
   
-  if rc != SUCCESS:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return ""
-  
-  # Decode the key from mdbKey
-  let key = newString(mdbKey.mvSize)
-  copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
-  let decoded = decodeKey(key)
-  
-  # Verify the key has the same global name
-  if decoded[0] != global:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return ""
-  
-  # Verify the key is at the same level (same number of subscripts)
-  if decoded[1].len != subs.len:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return ""
-  
-  # Verify all subscripts except the last match (same parent)
-  for i in 0..<subs.len - 1:
-    if decoded[1][i] != subs[i]:
-      cursorClose(cursor)
-      store.abortIfNotBatch(readTxn)
-      return ""
-  
-  # Return the last subscript (the next one at this level)
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
-  return decoded[1][^1]
+  return ""
 
 proc query*(store: var LmdbStore, global: string, subs: seq[string] = @[], forward: bool = true): (seq[string]) =
   ## Get next/previous node in LMDB (for $QUERY)

@@ -95,5 +95,22 @@ else
     exit 1
 fi
 
+# Test8: Parent-only nodes are visited (derived siblings) — #359 dogfood find
+echo "Test 8: Parent nodes visited / derived siblings"
+DB="/tmp/test_order_8_$$"
+R=$($NIMM -d "$DB" -x 'S ^T("P1","C")=1 S ^T("P2","C")=1 W $O(^T(""))," ",$O(^T("P1"))," ",$O(^T("P2"))')
+rm -f "$DB" "$DB-lock"
+if [ "$R" = "P1 P2 " ]; then echo "  PASS: forward parents"; else echo "  FAIL: '$R'"; exit 1; fi
+R=$($NIMM -d "$DB" -x 'S ^T("P1","C")=1 S ^T("P2","C")=1 W $O(^T(""),-1),"|",$O(^T("P2"),-1),"|",$O(^T("P1"),-1)')
+rm -f "$DB" "$DB-lock"
+if [ "$R" = "|P1|" ]; then echo "  PASS: reverse parents"; else echo "  FAIL: '$R'"; exit 1; fi
+
+# Test9: mixed leaf+parent ordering
+echo "Test 9: Mixed leaf/parent sequence"
+DB="/tmp/test_order_9_$$"
+R=$($NIMM -d "$DB" -x 'S ^T("A")=1 S ^T("B","X")=2 S ^T("C")=3 S O=$O(^T(""))_","_$O(^T("A"))_","_$O(^T("B"))_","_$O(^T("C")) W O')
+rm -f "$DB" "$DB-lock"
+if [ "$R" = "A,B,C," ]; then echo "  PASS"; else echo "  FAIL: '$R'"; exit 1; fi
+
 echo
 echo "=== All \$ORDER LMDB tests passed ==="

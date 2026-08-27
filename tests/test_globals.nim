@@ -48,15 +48,16 @@ proc main() =
   assert g.get("ARR", @["b"]) == "2"
   echo "✓ KILL subscript"
   
-  # Test NEW/QUIT scoping
+  # Test NEW/QUIT scoping (§7.2.11/7.2.12)
+  # Without NEW: writes persist after popScope (COW write-through)
   g.set("Y", @[], "outer")
   g.pushScope()
-  assert g.get("Y", @[]) == "outer"  # visible in new scope
+  assert g.get("Y", @[]) == "outer"  # visible in new scope (COW read)
   g.set("Y", @[], "inner")
   assert g.get("Y", @[]) == "inner"
   g.popScope()
-  assert g.get("Y", @[]) == "outer"  # restored after QUIT
-  echo "✓ NEW/QUIT scoping"
+  assert g.get("Y", @[]) == "inner"  # persists — Y was NOT NEW'd
+  echo "✓ NEW/QUIT scoping (non-NEW'd write persists)"
   
   # Test scope depth
   assert g.scopeDepth() == 1

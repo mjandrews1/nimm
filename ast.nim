@@ -198,6 +198,8 @@ type
       ## Entry reference: label^routine (§7.1) — used by DO, GOTO, ZGOTO.
       entryLabel*: string
       entryRoutine*: string
+      entryArgs*: seq[Expr]      ## Actual parameter list: DO LABEL(expr1,.var2)
+      entryByRef*: seq[bool]     ## True for .param (by-reference) arguments
 
   ## SetKind — SET Target Variants
   ##

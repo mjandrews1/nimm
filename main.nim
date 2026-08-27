@@ -32,7 +32,7 @@ import network
 type
   CliArgs = object
     code: string
-    routineFile: string
+    routineFiles: seq[string]
     dbPath: string
     mode: string
     repl: bool
@@ -52,7 +52,7 @@ type
 
 proc parseArgs(): CliArgs =
   result.code = ""
-  result.routineFile = ""
+  result.routineFiles = @[]
   result.dbPath = ""
   result.mode = "nimm"
   result.repl = false
@@ -84,7 +84,7 @@ proc parseArgs(): CliArgs =
       of "r":
         if i + 1 < args.len:
           inc i
-          result.routineFile = args[i]
+          result.routineFiles.add(args[i])
       of "e":
         if i + 1 < args.len:
           inc i
@@ -230,14 +230,14 @@ proc main() =
       except:
         discard
 
-  # Load routine file if specified
-  if args.routineFile.len > 0:
-    if not fileExists(args.routineFile):
-      echo "Error: File not found: " & args.routineFile
+  # Load routine files if specified
+  for routineFile in args.routineFiles:
+    if not fileExists(routineFile):
+      echo "Error: File not found: " & routineFile
       quit(1)
-    let routine = rt.loadRoutine(args.routineFile)
+    let routine = rt.loadRoutine(routineFile)
     rt.currentRoutine = routine.name
-    rt.currentFile = args.routineFile
+    rt.currentFile = routineFile
 
   # Execute, REPL, or MCP server
   if args.mcp:
@@ -619,7 +619,7 @@ proc main() =
     except:
       echo "Error: " & getCurrentExceptionMsg()
       quit(1)
-  elif args.routineFile.len > 0:
+  elif args.routineFiles.len > 0:
     # Routine loaded but no code to execute — just exit
     discard
   else:

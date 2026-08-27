@@ -382,6 +382,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         let currentEtrap = eng.globals[].getSpecialVar("$ETRAP")
         eng.runtime[].etrapStack.add(currentEtrap)
         eng.globals[].pushScope()
+        # Track which variables are NEW'd so popScope restores only those (#371)
+        for name in cmd.newNames:
+          eng.globals[].markNewed(name.toUpperAscii())
 
       of CmdKind.cNewExcept:
         # Exclusive NEW (A,B): listed vars stay visible, all others cleared
@@ -394,13 +397,25 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cDo:
         for arg in cmd.doArgs:
           # §7.2.5: DO entryref — label in current routine or label^routine (#288)
-          let label = if arg.kind == eEntryRef: arg.entryLabel
+          var label = if arg.kind == eEntryRef: arg.entryLabel
                       elif arg.kind == eVar: arg.vname
                       else: continue
           let routine = if arg.kind == eEntryRef and arg.entryRoutine.len > 0:
                           arg.entryRoutine
                         else:
                           eng.runtime[].currentRoutine
+          # DO ^routine (no label) — execute from routine's first label
+          if label.len == 0 and routine.len > 0 and routine in eng.runtime[].routines:
+            let r = eng.runtime[].routines[routine]
+            if r.labels.len > 0:
+              var firstLabel = ""
+              var firstIdx = high(int)
+              for lbl, idx in r.labels:
+                if idx < firstIdx:
+                  firstIdx = idx
+                  firstLabel = lbl
+              if firstLabel.len > 0:
+                label = firstLabel
           if routine.len > 0 and label.len > 0:
             # Compile routine to bytecode on first DO (#342)
             if eng.useBytecode and routine in eng.runtime[].routines:
@@ -424,6 +439,41 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.callStack.add(frame)
             pushStack()
             eng.doDepth.inc
+
+            # Bind DO arguments to formal parameters of target label (#370)
+            # In M, DO LABEL(arg1,.arg2) makes arg1 available as a local
+            # variable in the callee. .arg2 is by-reference.
+            if arg.kind == eEntryRef and arg.entryArgs.len > 0:
+              # Find the formal parameter list from the target label line
+              let targetLine = eng.runtime[].getLine(routine, label, 0)
+              var formals: seq[string] = @[]
+              # Parse formallist from label line: LABEL(X,Y,Z) or LABEL(X,Y,Z);
+              let parenStart = targetLine.find('(')
+              if parenStart >= 0:
+                var depth = 1
+                var j = parenStart + 1
+                var current = ""
+                while j < targetLine.len and depth > 0:
+                  case targetLine[j]
+                  of '(': inc depth
+                  of ')': dec depth
+                  of ',':
+                    if depth == 1:
+                      formals.add(current.strip().toUpperAscii())
+                      current = ""
+                  else:
+                    if depth == 1:
+                      current.add(targetLine[j])
+                  inc j
+                if current.len > 0:
+                  formals.add(current.strip().toUpperAscii())
+
+              # Bind actuals to formals
+              for i, actualExpr in arg.entryArgs:
+                if i < formals.len:
+                  let formalName = formals[i]
+                  let value = eng.evaluator[].eval(actualExpr)
+                  eng.globals[].setLocal(formalName, @[], value)
             var offset = 0
             while true:
               let gotLine = eng.runtime[].getLine(routine, label, offset)
@@ -853,8 +903,27 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # VIEW expr — View/modify system parameters (#308)
         # Read-only: VIEW 0..7 returns introspection values
         # Read-write: VIEW 10:val sets runtime flags
+        # String verbs (#368): VIEW "BATCHON" / "BATCHCOMMIT" — LMDB write
+        # batching for M routines (workaround for #371 TSTART local-wipe)
         if cmd.viewExpr != nil:
           let arg = eng.evaluator[].eval(cmd.viewExpr)
+          if arg == "BATCHON":
+            try:
+              eng.globals[].beginWriteBatch()
+            except:
+              eng.writeln("VIEW BATCHON error: " & getCurrentExceptionMsg())
+          elif arg == "BATCHCOMMIT":
+            try:
+              if eng.globals[].writeTxnActive:
+                eng.globals[].endWriteBatch()
+            except:
+              eng.writeln("VIEW BATCHCOMMIT error: " & getCurrentExceptionMsg())
+          elif arg == "BATCHOFF":
+            try:
+              if eng.globals[].writeTxnActive:
+                eng.globals[].endWriteBatch()
+            except:
+              discard
           # Check for expr:expr form (read-write)
           let colonPos = arg.find(':')
           if colonPos >= 0:

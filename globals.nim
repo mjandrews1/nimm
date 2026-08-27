@@ -34,6 +34,8 @@ type
     nakedGlobal*: string                  # Last global name for naked references
     nakedSubs*: seq[string]               # Last subscripts for naked references
     scopeShared*: seq[bool]               # True if scope shares parent (COW pending)
+    scopeNewedVars*: seq[HashSet[string]] # NEW'd variable names per scope level (#371)
+    scopeWrittenVars*: seq[HashSet[string]] # Variables written in each scope level
     heldLocks*: HashSet[string]           # Lock names held by this process (#278)
     txn*: TransactionState                # Transaction processing state (§11)
 
@@ -97,11 +99,17 @@ proc setLocal*(g: var Globals, name: string, subs: seq[string], value: string) =
   g.ensureWritable()
   let key = makeKey(name, subs)
   g.scopes[^1][key] = value
+  # Track which variables were written in this scope (#371)
+  if g.scopeWrittenVars.len > 0:
+    g.scopeWrittenVars[^1].incl(name)
 
 proc setLocalDirect*(g: var Globals, name: string, value: string) =
   ## Set local variable value directly (no subscripts, no seq allocation)
   g.ensureWritable()
   g.scopes[^1][name] = value
+  # Track which variables were written in this scope (#371)
+  if g.scopeWrittenVars.len > 0:
+    g.scopeWrittenVars[^1].incl(name)
 
 proc killLocal*(g: var Globals, name: string, subs: seq[string] = @[]) =
   ## Kill local variable
@@ -264,7 +272,7 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
       for k in toDelete:
         g.memGlobals.del(k)
     return
-  g.globals.delete(name, subs)
+  g.globals.deletePrefix(name, subs)
 
 # --- Batch write operations ---
 
@@ -414,9 +422,8 @@ proc tcommit*(g: var Globals) =
       var dels: seq[(string, seq[string])] = @[]
       for k in current.kills:
         let (name, subs) = decodeKey(k)
-        dels.add((name, subs))
-      if dels.len > 0:
-        g.globals.batchDelete(dels)
+        # Use deletePrefix to remove node and all descendants (M KILL §7.2.9)
+        g.globals.deletePrefix(name, subs)
     else:
       # In-memory: direct write
       for k, v in current.writes:
@@ -605,12 +612,41 @@ proc pushScope*(g: var Globals) =
   ## Push new local scope (NEW) — shares parent scope (COW)
   g.scopes.add(g.scopes[^1])  # Share reference (cheap)
   g.scopeShared.add(true)     # Mark as shared
+  g.scopeNewedVars.add(initHashSet[string]())  # No NEW'd vars yet
+  g.scopeWrittenVars.add(initHashSet[string]())  # No written vars yet
+
+proc markNewed*(g: var Globals, name: string) =
+  ## Mark a variable as NEW'd in the current scope (#371)
+  if g.scopeNewedVars.len > 0:
+    var hs = g.scopeNewedVars[^1]
+    hs.incl(name)
+    g.scopeNewedVars[^1] = hs
 
 proc popScope*(g: var Globals) =
-  ## Pop local scope (QUIT) — discards current scope
+  ## Pop local scope (QUIT) — restore NEW'd variables, propagate written non-NEW'd (#371)
+  ## In M, on QUIT:
+  ## - NEW'd vars: restored to their pre-NEW values (discard writes in this scope)
+  ## - Written non-NEW'd vars: propagate to parent (writes persist across scope exit)
+  ## - Unwritten vars: no action (parent's COW copy is already correct)
   if g.scopes.len > 1:
+    let writtenVars = g.scopeWrittenVars[^1]
+    let newedVars = g.scopeNewedVars[^1]
+    # Propagate written, non-NEW'd variables to parent scope
+    for name in writtenVars:
+      if name notin newedVars:
+        let prefix = name & "\x00"
+        for key, val in g.scopes[^1]:
+          if key == name or key.startsWith(prefix):
+            g.scopes[^2][key] = val
+        # Mark as written in parent so ancestor popScopes also propagate
+        if g.scopeWrittenVars.len > 1:
+          var pw = g.scopeWrittenVars[^2]
+          pw.incl(name)
+          g.scopeWrittenVars[^2] = pw
     g.scopes.setLen(g.scopes.len - 1)
     g.scopeShared.setLen(g.scopeShared.len - 1)
+    g.scopeNewedVars.setLen(g.scopeNewedVars.len - 1)
+    g.scopeWrittenVars.setLen(g.scopeWrittenVars.len - 1)
 
 proc scopeDepth*(g: Globals): int =
   return g.scopes.len

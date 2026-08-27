@@ -232,6 +232,14 @@ proc isCommandWord(p: Parser, w: string): bool =
 proc atCommandPos(p: Parser): bool =
   p.cur.kind == tokWord and isCommandWord(p, p.cur.text) and precededByWs(p, p.cur)
 
+## atCommandArgSep — True when a recognized command keyword follows TWO spaces
+##
+## In M, within a command's argument list, only TWO spaces terminate the
+## arguments and start a new command (ANSI Section 7.1.1). A single space
+## is just a separator between arguments, not a command boundary.
+proc atCommandArgSep(p: Parser): bool =
+  p.cur.kind == tokWord and isCommandWord(p, p.cur.text) and cmdSepBefore(p, p.cur)
+
 ## readWord — Consume a Word Token
 ##
 ## Returns the word text, or "" if the current token isn't a word.
@@ -496,9 +504,21 @@ proc parsePrimary(p: var Parser): Expr =
     else:
       innerExpr = parsePrimary(p)
     var subs: seq[Expr] = @[]
-    # Check for subscripts: @X(sub1, sub2)
+    # Check for subscripts: @X(sub1, sub2) or @X@(sub1, sub2) (M convention)
+    # Use lookahead: only consume @ if ( follows it
     if p.peek() == tokLParen:
       discard p.advance()
+      while true:
+        subs.add(parseExpr(p))
+        if p.peek() == tokComma:
+          discard p.advance()
+        else:
+          break
+      if p.peek() == tokRParen:
+        discard p.advance()
+    elif p.peek() == tokAt and p.peek2() == tokLParen:
+      discard p.advance()  # consume @ in @X@(subs)
+      discard p.advance()  # consume (
       while true:
         subs.add(parseExpr(p))
         if p.peek() == tokComma:
@@ -803,6 +823,10 @@ proc parseLine*(p: var Parser, inBody: bool = false): Line =
         continue
     if p.atCommandPos():
       result.cmds.add parseCommand(p)
+    elif p.peek() == tokWord and precededByWs(p, p.cur):
+      # Unknown bareword at command position — syntax error (#369)
+      let bad = p.cur.text
+      raise newException(ValueError, "Unknown command: " & bad)
     else:
       break
 
@@ -887,30 +911,22 @@ proc parseCommand(p: var Parser): CommandNode =
       cmd = Cmd(kind: cNewExcept, newKeep: keep)
     else:
     # NEW can have no arguments (push scope for all) or a list of variable names
-    # The first word after NEW is always a variable name (even X = XECUTE)
-    # But subsequent words should not be command words
+    # In M, ALL words after NEW are variable names — even single-letter names
+    # that spell command abbreviations like "C" (CLOSE), "S" (SET), etc.
+    # Only a bare NEW with no following word means push-scope-for-all.
       var names: seq[string] = @[]
       if p.peek() == tokWord:
-        let word = p.cur.text
-        # Check if this looks like a real command (not just X)
-        let upperWord = word.toUpperAscii
-        if upperWord != "X" and isCommandWord(p, upperWord):
-          # It's a real command like SET, WRITE — treat as NEW without args
-          discard
-        else:
-          # First word is a variable name
-          names.add(word)
+        # First word is always a variable name in NEW context
+        names.add(p.cur.text)
+        discard p.advance()
+        # Additional variable names (comma-separated)
+        while p.peek() == tokComma:
           discard p.advance()
-          # Additional variable names (comma-separated)
-          while p.peek() == tokComma:
+          if p.peek() == tokWord:
+            names.add(p.cur.text)
             discard p.advance()
-            if p.peek() == tokWord:
-              let nextWord = p.cur.text
-              let upperNext = nextWord.toUpperAscii
-              if upperNext != "X" and isCommandWord(p, upperNext):
-                break
-              names.add(nextWord)
-              discard p.advance()
+          else:
+            break
       cmd = Cmd(kind: cNew, newNames: names)
   of "HANG", "H":
     cmd = Cmd(kind: cHang, hangExpr: p.parseExpr())
@@ -1174,7 +1190,8 @@ proc parseCommand(p: var Parser): CommandNode =
   of "NICLOSE":
     cmd = Cmd(kind: cNiClose, niCloseConn: p.parseExpr())
   else:
-    cmd = Cmd(kind: cBreak)
+    # Unknown command — error (#369)
+    raise newException(ValueError, "Unknown command: " & name)
   CommandNode(postcond: postcond, cmd: cmd, line: p.cur.line, col: p.cur.col)
 
 ## parseSetArgs — Parse SET Arguments
@@ -1309,6 +1326,17 @@ proc parseVarRef(p: var Parser): (string, seq[Expr]) =
   let subs = parseSubscripts(p)
   (name, subs)
 
+## readEntryWord — Read an identifier that may contain underscores
+##
+## In entryref context, underscores are part of the identifier (not the
+## concatenation operator). tokConcat sequences are consumed and joined.
+proc readEntryWord(p: var Parser): string =
+  result = p.readWord()
+  while p.peek() == tokConcat:
+    discard p.advance()
+    if p.peek() == tokWord:
+      result.add("_" & p.readWord())
+
 ## parseEntryRef — Parse an Entry Reference (§7.1)
 ##
 ## Entry references appear in DO, GOTO, ZGOTO, and BREAK:
@@ -1321,16 +1349,64 @@ proc parseEntryRef(p: var Parser): Expr =
   if p.peek() == tokCaret:
     # ^routine form
     discard p.advance()
-    let routine = p.readWord()
-    return Expr(kind: eEntryRef, entryLabel: "", entryRoutine: routine.toUpperAscii())
-  let label = p.readWord()
+    let routine = p.readEntryWord()
+    result = Expr(kind: eEntryRef, entryLabel: "", entryRoutine: routine.toUpperAscii())
+    # Optional (args) after ^routine
+    if p.peek() == tokLParen:
+      discard p.advance()
+      while p.peek() != tokRParen and p.peek() != tokEof:
+        var byRef = false
+        if p.peek() == tokDot:
+          byRef = true
+          discard p.advance()
+        let argExpr = p.parseExpr()
+        result.entryArgs.add(argExpr)
+        result.entryByRef.add(byRef)
+        if p.peek() == tokComma:
+          discard p.advance()
+      if p.peek() == tokRParen:
+        discard p.advance()
+    return
+  let label = p.readEntryWord()
   if p.peek() == tokCaret:
     # label^routine form
     discard p.advance()
-    let routine = p.readWord()
-    return Expr(kind: eEntryRef, entryLabel: label.toUpperAscii(), entryRoutine: routine.toUpperAscii())
-  # Plain label — treat as variable reference for backward compatibility
-  Expr(kind: eVar, vname: label, subs: @[])
+    let routine = p.readEntryWord()
+    result = Expr(kind: eEntryRef, entryLabel: label.toUpperAscii(), entryRoutine: routine.toUpperAscii())
+    # Optional (args) after label^routine
+    if p.peek() == tokLParen:
+      discard p.advance()
+      while p.peek() != tokRParen and p.peek() != tokEof:
+        var byRef = false
+        if p.peek() == tokDot:
+          byRef = true
+          discard p.advance()
+        let argExpr = p.parseExpr()
+        result.entryArgs.add(argExpr)
+        result.entryByRef.add(byRef)
+        if p.peek() == tokComma:
+          discard p.advance()
+      if p.peek() == tokRParen:
+        discard p.advance()
+    return
+  # Plain label with optional args — return eEntryRef for DO arg binding (#370)
+  # Engine fills in currentRoutine when entryRoutine is empty
+  result = Expr(kind: eEntryRef, entryLabel: label.toUpperAscii(), entryRoutine: "")
+  # Check for (args) on plain label
+  if p.peek() == tokLParen:
+    discard p.advance()
+    while p.peek() != tokRParen and p.peek() != tokEof:
+      var byRef = false
+      if p.peek() == tokDot:
+        byRef = true
+        discard p.advance()
+      let argExpr = p.parseExpr()
+      result.entryArgs.add(argExpr)
+      result.entryByRef.add(byRef)
+      if p.peek() == tokComma:
+        discard p.advance()
+    if p.peek() == tokRParen:
+      discard p.advance()
 
 ## parseWriteArgs — Parse WRITE Arguments
 ##
@@ -1473,8 +1549,10 @@ proc parseExprList(p: var Parser): seq[Expr] =
   if not isExprStart(p):
     return list
   while true:
-    # Stop if we hit a command word at command position
-    if p.atCommandPos():
+    # Stop if we hit a command keyword preceded by TWO spaces (ANSI §7.1.1).
+    # A single space after a command is just an argument separator, not a
+    # command boundary — so "READ X" means X is a read-var, not XECUTE.
+    if p.atCommandArgSep():
       break
     list.add p.parseExpr()
     if p.peek() == tokComma:

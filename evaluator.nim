@@ -151,11 +151,19 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.fname in ["GET", "G"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
-      if varExpr.kind != eVar: return ""
-      let varName = varExpr.vname
+      var varName: string
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
-        subs.add(ev.eval(sub))
+      if varExpr.kind == eVar:
+        varName = varExpr.vname
+        for sub in varExpr.subs:
+          subs.add(ev.eval(sub))
+      elif varExpr.kind == eIndirect:
+        # $GET(@A(1)) — evaluate indirection to get var name
+        varName = ev.eval(varExpr.indirectExpr)
+        for sub in varExpr.indirectSubs:
+          subs.add(ev.eval(sub))
+      else:
+        return ""
       let val = ev.globals[].get(varName, subs)
       if val.len > 0: return val
       if expr.fargs.len > 1: return ev.eval(expr.fargs[1])
@@ -164,11 +172,18 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.fname in ["DATA", "D"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
-      if varExpr.kind != eVar: return ""
-      let varName = varExpr.vname
+      var varName: string
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
-        subs.add(ev.eval(sub))
+      if varExpr.kind == eVar:
+        varName = varExpr.vname
+        for sub in varExpr.subs:
+          subs.add(ev.eval(sub))
+      elif varExpr.kind == eIndirect:
+        varName = ev.eval(varExpr.indirectExpr)
+        for sub in varExpr.indirectSubs:
+          subs.add(ev.eval(sub))
+      else:
+        return ""
       return $ev.globals[].data(varName, subs)
     # Special handling for $ORDER — needs variable reference, not value.
     # The form $ORDER(A("",-1)) is ambiguous: grammatically -1 is a second
@@ -178,9 +193,17 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.fname in ["ORDER", "O"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
-      if varExpr.kind != eVar: return ""
-      let varName = varExpr.vname
-      var subExprs = varExpr.subs
+      var varName: string
+      var subExprs: seq[Expr] = @[]
+      if varExpr.kind == eVar:
+        varName = varExpr.vname
+        subExprs = varExpr.subs
+      elif varExpr.kind == eIndirect:
+        # $ORDER(@GLOB@(ID)) — evaluate indirection to get var name (#359)
+        varName = ev.eval(varExpr.indirectExpr)
+        subExprs = varExpr.indirectSubs
+      else:
+        return ""
       var hasDir = false
       var dirVal = 0
       if expr.fargs.len == 1 and subExprs.len > 0:
@@ -204,11 +227,18 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     if expr.fname in ["ZORDER"]:
       if expr.fargs.len < 1: return ""
       let varExpr = expr.fargs[0]
-      if varExpr.kind != eVar: return ""
-      let varName = varExpr.vname
+      var varName: string
       var subs: seq[string] = @[]
-      for sub in varExpr.subs:
-        subs.add(ev.eval(sub))
+      if varExpr.kind == eVar:
+        varName = varExpr.vname
+        for sub in varExpr.subs:
+          subs.add(ev.eval(sub))
+      elif varExpr.kind == eIndirect:
+        varName = ev.eval(varExpr.indirectExpr)
+        for sub in varExpr.indirectSubs:
+          subs.add(ev.eval(sub))
+      else:
+        return ""
       return ev.globals[].order(varName, subs, true)
     # Special handling for $ZPREVIOUS — backward traversal
     if expr.fname in ["ZPREVIOUS"]:
@@ -420,10 +450,14 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
     var subs: seq[string] = @[]
     for sub in expr.indirectSubs:
       subs.add(ev.eval(sub))
-    # Try expression indirection first
+    # Try expression indirection first — but if subscripts are present,
+    # apply them to the resolved variable name (#359 bm25idx.m @GLOB@(ID))
     try:
       var p = newParser(varName)
       let inner = p.parseExpr()
+      if subs.len > 0 and inner.kind == eVar:
+        # @A(1) where A="X" or A="^X" — apply outer subscripts
+        return ev.globals[].get(inner.vname, subs)
       return ev.eval(inner)
     except CatchableError:
       discard
