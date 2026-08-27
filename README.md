@@ -93,6 +93,7 @@ See [FUNCTIONS.md](FUNCTIONS.md) for complete function reference.
 ### nimm Extensions
 - Data structures: $NI_ARRAY, $NI_OBJECT, $NI_STACK, $NI_QUEUE, $NI_SET, $NI_MAP, $NI_SORTED, $NI_DEQUE, $NI_BAG
 - Network: $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
+- System: $NI_SYSTEM(subscript) — hostname, pid, uid, cwd, arch, os, version, cpu_count, env:KEY
 
 ## Commands
 

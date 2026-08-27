@@ -47,6 +47,26 @@ proc main() =
   assert httpResult == "", "Should return empty for unreachable"
   echo "✓ $NI_HTTP: graceful failure"
   
+  # Test $NI_SYSTEM
+  let hostname = niSystem("hostname")
+  assert hostname.len > 0, "hostname should be non-empty"
+  echo "✓ $NI_SYSTEM hostname: " & hostname
+  let pid = niSystem("pid")
+  assert parseInt(pid) > 0, "pid should be positive"
+  echo "✓ $NI_SYSTEM pid: " & pid
+  let cwd = niSystem("cwd")
+  assert cwd.len > 0, "cwd should be non-empty"
+  echo "✓ $NI_SYSTEM cwd: " & cwd
+  let arch = niSystem("arch")
+  assert arch.len > 0, "arch should be non-empty"
+  echo "✓ $NI_SYSTEM arch: " & arch
+  let osName = niSystem("os")
+  assert osName.len > 0, "os should be non-empty"
+  echo "✓ $NI_SYSTEM os: " & osName
+  let unknown = niSystem("does_not_exist")
+  assert unknown == "", "unknown subscript should be empty"
+  echo "✓ $NI_SYSTEM unknown: empty"
+  
   echo "\nAll tests passed!"
 
 when isMainModule:

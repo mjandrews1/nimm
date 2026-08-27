@@ -1,11 +1,12 @@
 # ni_functions.nim — $NI functions for nimm
-# Implements $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
+# Implements $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP, $NI_SYSTEM
 
 import httpclient
 import json
 import os
 import strutils
 import times
+import posix
 
 const hexChars = "0123456789abcdef"
 
@@ -106,3 +107,36 @@ proc niUuid*(): string =
 proc niSleep*(seconds: float) =
   ## $NI_SLEEP: Sleep for specified seconds
   os.sleep(int(seconds * 1000))
+
+proc niSystem*(sub: string): string =
+  ## $NI_SYSTEM: system information by subscript.
+  ## Subscripts: hostname, pid, uid, cwd, env:KEY, arch, os, version, cpu_count
+  ## Unknown subscript returns "" (never errors).
+  let key = sub.toLowerAscii()
+  case key
+  of "hostname":
+    var buf: array[256, char]
+    if gethostname(addr buf[0], buf.len) == 0:
+      return $cstring(addr buf[0])
+    return ""
+  of "pid":
+    return $getpid()
+  of "uid":
+    return $getuid()
+  of "cwd":
+    return getCurrentDir()
+  of "arch":
+    return hostCPU
+  of "os":
+    return hostOS
+  of "version":
+    var un: Utsname
+    if uname(un) == 0:
+      return $cstring(addr un.release[0])
+    return ""
+  of "cpu_count":
+    return $sysconf(SC_NPROCESSORS_ONLN)
+  else:
+    if key.startsWith("env:"):
+      return getEnv(sub[4..^1])
+    return ""

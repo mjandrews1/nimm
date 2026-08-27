@@ -1093,6 +1093,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     except:
       discard
     return ""
+  of "NI_SYSTEM":
+    # $NI_SYSTEM(subscript) — System information
+    let sub = if args.len >= 1: args[0] else: ""
+    return niSystem(sub)
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

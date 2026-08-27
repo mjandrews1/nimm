@@ -1,6 +1,5 @@
 #!/bin/bash
 # test_ni_system.sh — Verify #375: $NI_SYSTEM system information function
-# Tests current behavior (returns empty) and expected future behavior
 # Usage: ./tests/test_ni_system.sh
 
 set -euo pipefail
@@ -18,25 +17,71 @@ check() {
   fi
 }
 
+check_nonempty() {
+  local label="$1" actual="$2"
+  if [ -n "$actual" ]; then
+    echo "  PASS: $label ($actual)"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: $label (expected non-empty, got empty)"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+check_int() {
+  local label="$1" actual="$2"
+  if [[ "$actual" =~ ^[0-9]+$ ]] && [ "$actual" -gt 0 ] 2>/dev/null; then
+    echo "  PASS: $label ($actual)"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: $label (expected positive integer, got '$actual')"
+    FAIL=$((FAIL+1))
+  fi
+}
+
 echo "=== #375: \$NI_SYSTEM system information ==="
 
-# Test 1: $NI_SYSTEM returns a value (currently empty — needs implementation)
-OUT=$($NIMM -x 'WRITE $NI_SYSTEM' 2>&1)
-if [ -z "$OUT" ]; then
-  echo "  INFO: \$NI_SYSTEM returns empty (not yet implemented)"
+# Test 1: hostname
+HOST=$($NIMM -x 'WRITE $NI_SYSTEM("hostname")' 2>&1)
+check_nonempty "hostname" "$HOST"
+
+# Test 2: pid is a positive integer
+PID=$($NIMM -x 'WRITE $NI_SYSTEM("pid")' 2>&1)
+check_int "pid" "$PID"
+
+# Test 3: uid
+UIDV=$($NIMM -x 'WRITE $NI_SYSTEM("uid")' 2>&1)
+check_nonempty "uid" "$UIDV"
+
+# Test 4: cwd
+CWD=$($NIMM -x 'WRITE $NI_SYSTEM("cwd")' 2>&1)
+check_nonempty "cwd" "$CWD"
+
+# Test 5: arch
+ARCH=$($NIMM -x 'WRITE $NI_SYSTEM("arch")' 2>&1)
+check_nonempty "arch" "$ARCH"
+
+# Test 6: os
+OS=$($NIMM -x 'WRITE $NI_SYSTEM("os")' 2>&1)
+check_nonempty "os" "$OS"
+
+# Test 7: env:PATH is non-empty
+ENV=$($NIMM -x 'WRITE $NI_SYSTEM("env:PATH")' 2>&1)
+check_nonempty "env:PATH" "$ENV"
+
+# Test 8: unknown subscript returns empty
+UNK=$($NIMM -x 'WRITE $NI_SYSTEM("does_not_exist")' 2>&1)
+check "unknown subscript empty" "" "$UNK"
+
+# Test 9: works in expressions
+LEN=$($NIMM -x 'WRITE $LENGTH($NI_SYSTEM("hostname"))' 2>&1)
+if [[ "$LEN" =~ ^[0-9]+$ ]] && [ "$LEN" -gt 0 ] 2>/dev/null; then
+  echo "  PASS: usable in expressions (len=$LEN)"
   PASS=$((PASS+1))
 else
-  echo "  INFO: \$NI_SYSTEM returns: $OUT"
-  PASS=$((PASS+1))
+  echo "  FAIL: usable in expressions (got '$LEN')"
+  FAIL=$((FAIL+1))
 fi
-
-# Test 2: $NI_SYSTEM doesn't crash
-OUT=$($NIMM -x 'SET X=$NI_SYSTEM WRITE "OK"' 2>&1)
-check "Doesn't crash" "OK" "$OUT"
-
-# Test 3: $NI_SYSTEM can be used in expressions
-OUT=$($NIMM -x 'WRITE "LEN=",$LENGTH($NI_SYSTEM)' 2>&1)
-check "Can use in expressions" "LEN=0" "$OUT"
 
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
