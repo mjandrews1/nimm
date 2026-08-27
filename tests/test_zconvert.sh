@@ -50,6 +50,26 @@ PASS=$((PASS+1))
 OUT=$($NIMM -x 'WRITE $ZCONVERT("abc123!@#","U")' 2>&1)
 check "Numbers/special unchanged" "ABC123!@#" "$OUT"
 
+# Test 8: Title case ("T") — capitalize first letter, leave rest
+OUT=$($NIMM -x 'WRITE $ZCONVERT("hello world","T")' 2>&1)
+check "Title case" "Hello World" "$OUT"
+
+# Test 9: Title case leaves rest of word unchanged
+OUT=$($NIMM -x 'WRITE $ZCONVERT("hELLO wORLD","T")' 2>&1)
+check "Title case leaves rest" "HELLO WORLD" "$OUT"
+
+# Test 10: Word capitalization ("W") — capitalize first, lowercase rest
+OUT=$($NIMM -x 'WRITE $ZCONVERT("HELLO WORLD","W")' 2>&1)
+check "Word capitalization" "Hello World" "$OUT"
+
+# Test 11: Word capitalization with mixed case
+OUT=$($NIMM -x 'WRITE $ZCONVERT("hELLO wORLD","W")' 2>&1)
+check "Word capitalization mixed" "Hello World" "$OUT"
+
+# Test 12: M collation mode (identity)
+OUT=$($NIMM -x 'WRITE $ZCONVERT("AbC","M")' 2>&1)
+check "M collation identity" "AbC" "$OUT"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

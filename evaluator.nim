@@ -984,6 +984,23 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     case t
     of "u": return s.toUpperAscii
     of "l": return s.toLowerAscii
+    of "t", "w":
+      # Title case: uppercase the first letter of each word. "t" leaves the
+      # rest of each word unchanged; "w" also lowercases the rest.
+      var r = s
+      var inWord = false
+      for i in 0..<r.len:
+        let ch = r[i]
+        if ch.isAlphaAscii:
+          if not inWord:
+            r[i] = ch.toUpperAscii
+            inWord = true
+          elif t == "w":
+            r[i] = ch.toLowerAscii
+        else:
+          inWord = false
+      return r
+    of "m": return s  # M collation — identity for now
     else: return s
   of "ZWIDTH":
     # $ZWIDTH(expr) — Get display width (§9.16.7)
