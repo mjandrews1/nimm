@@ -609,7 +609,7 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
     
     if ksubs.len == LEVEL:
-      let c = system.cmp(ksubs[^1], startSub)
+      let c = mCollationCmp(ksubs[^1], startSub)
       if (forward and c > 0) or ((not forward) and c < 0):
         cursorClose(cursor); store.abortIfNotBatch(readTxn)
         return ksubs[^1]
@@ -617,7 +617,7 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     
     # deeper than target: derive sibling at target level
     let derived = ksubs[LEVEL - 1]
-    let c = system.cmp(derived, startSub)
+    let c = mCollationCmp(derived, startSub)
     if (forward and c > 0) or ((not forward) and c < 0):
       cursorClose(cursor); store.abortIfNotBatch(readTxn)
       return derived
