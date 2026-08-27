@@ -28,7 +28,7 @@ proc testBytecodeBasics() =
 
 proc testVMBasic() =
   echo "Testing VM basic operations..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   vm.push("hello")
   vm.push("world")
@@ -43,7 +43,7 @@ proc testVMBasic() =
 
 proc testVMWrite() =
   echo "Testing VM WRITE..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("W \"hello\"")
   let idx = bc.addConst("hello")
@@ -55,7 +55,7 @@ proc testVMWrite() =
 
 proc testVMArithmetic() =
   echo "Testing VM arithmetic..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("W 1+2")
   bc.addPushConst("1")
@@ -75,7 +75,7 @@ proc testVMArithmetic() =
 
 proc testVMComparison() =
   echo "Testing VM comparison..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("W 1<2")
   bc.addPushConst("1")
@@ -95,7 +95,7 @@ proc testVMComparison() =
 
 proc testVMConcat() =
   echo "Testing VM concatenation..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("W \"hello\"_\"world\"")
   bc.addPushConst("hello")
@@ -108,7 +108,7 @@ proc testVMConcat() =
 
 proc testVMVariables() =
   echo "Testing VM variables..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("SET X=1 WRITE X")
   bc.addPushConst("1")
@@ -121,7 +121,7 @@ proc testVMVariables() =
 
 proc testVMTransactions() =
   echo "Testing VM transactions..."
-  var g: ref Globals; new(g); g[] = newGlobals("")
+  var g = create(Globals); g[] = newGlobals("")
   var vm = newVM(g)
   let bc = newBytecode("TSTART SET ^X=1 TCOMMIT W ^X")
   bc.addInstr(opTstart)

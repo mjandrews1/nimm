@@ -263,8 +263,8 @@ proc foldConstants*(bc: var Bytecode) =
   var i = 0
   while i < bc.instructions.len - 2:
     let a = bc.instructions[i]
-    let op = bc.instructions[i + 1]
-    let b = bc.instructions[i + 2]
+    let b = bc.instructions[i + 1]
+    let op = bc.instructions[i + 2]
     if a.opcode == opPushConst and b.opcode == opPushConst:
       let aval = bc.constants[a.argInt]
       let bval = bc.constants[b.argInt]
