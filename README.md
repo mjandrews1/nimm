@@ -73,6 +73,8 @@ nimm -r file.m -e 'CODE'   Load routine and execute
 nimm -d /path/to/db        Specify LMDB database
 nimm --repl                Start interactive REPL
 nimm -m MODE               Set mode (nimm|strict|rsm)
+nimm --lint -r file.m      Lint routines without executing
+nimm --lint-strict -r file.m  Lint; exit non-zero on warnings/errors
 ```
 
 ## Supported Functions

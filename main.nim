@@ -48,6 +48,8 @@ type
     networkAllowlist: string
     fileAllowlist: string
     useBytecode: bool
+    lint: bool          # --lint: analyze code without executing
+    lintStrict: bool    # --lint-strict: exit non-zero on warnings/errors
     parentJobNum: int  # -p: parent M job number (set by JOB command)
 
 proc parseArgs(): CliArgs =
@@ -68,6 +70,8 @@ proc parseArgs(): CliArgs =
   result.networkAllowlist = ""
   result.fileAllowlist = ""
   result.useBytecode = false
+  result.lint = false
+  result.lintStrict = false
   result.parentJobNum = 0
 
   let args = os.commandLineParams()
@@ -146,6 +150,10 @@ proc parseArgs(): CliArgs =
           result.fileAllowlist = args[i]
       of "bytecode":
         result.useBytecode = true
+      of "lint":
+        result.lint = true
+      of "lint-strict":
+        result.lintStrict = true
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -179,6 +187,8 @@ proc parseArgs(): CliArgs =
         echo "  --network-allowlist HOST:PORT Allowlist for network connections (comma-separated)"
         echo "  --file-allowlist PATH Allowlist for file paths (comma-separated)"
         echo "  --bytecode   Enable bytecode VM for compiled routines"
+        echo "  --lint       Analyze loaded routine(s)/code, do not execute"
+        echo "  --lint-strict Exit non-zero on warnings or errors (implies --lint)"
         echo "  -h/--help     Show this help"
         quit(0)
       else:
@@ -238,6 +248,34 @@ proc main() =
     let routine = rt.loadRoutine(routineFile)
     rt.currentRoutine = routine.name
     rt.currentFile = routineFile
+
+  # Lint mode (#384): analyze routines + code and report without executing.
+  if args.lint or args.lintStrict:
+    var totalErrors = 0
+    var totalWarnings = 0
+    if args.routineFiles.len > 0:
+      for routineFile in args.routineFiles:
+        let name = extractFilename(routineFile).splitFile().name.toUpperAscii()
+        if name in rt.routines:
+          let r = rt.routines[name]
+          let srcLines = if r.originalLines.len > 0: r.originalLines else: r.lines
+          echo "=== " & name & " ==="
+          let report = analyzeLines(srcLines)
+          echo formatReport(report)
+          totalErrors += report.errorCount
+          totalWarnings += report.warningCount
+    if args.code.len > 0:
+      echo "=== <code> ==="
+      let report = analyzeRoutine(args.code)
+      echo formatReport(report)
+      totalErrors += report.errorCount
+      totalWarnings += report.warningCount
+    # Exit non-zero on errors (--lint) or errors+warnings (--lint-strict)
+    if args.lintStrict:
+      if totalErrors > 0 or totalWarnings > 0: quit(1)
+    elif totalErrors > 0:
+      quit(1)
+    quit(0)
 
   # Execute, REPL, or MCP server
   if args.mcp:

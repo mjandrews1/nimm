@@ -1126,11 +1126,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # ZANALYZE — Static analysis of current routine (#330)
         let routine = eng.runtime[].currentRoutine
         if routine.len > 0 and routine in eng.runtime[].routines:
-          # Strip labels before analysis — static_analysis expects command lines
-          var lines: seq[string] = @[]
-          for line in eng.runtime[].routines[routine].lines:
-            lines.add(stripLabel(line))
-          let report = analyzeRoutine(lines.join("\n"))
+          # Pass raw (label-bearing) lines — the linter distinguishes labels
+          # from commands itself via isCommandKeyword.
+          let report = analyzeLines(eng.runtime[].routines[routine].lines)
           eng.writeln(formatReport(report))
         else:
           eng.writeln("No routine loaded")

@@ -1,6 +1,5 @@
 #!/bin/bash
-# test_lint.sh — Verify #384: linter (ZANALYZE today, --lint gate later)
-# Tests the static analysis checks exposed via ZANALYZE.
+# test_lint.sh — Verify #384: linter (ZANALYZE + --lint / --lint-strict)
 # Usage: ./tests/test_lint.sh
 
 set -euo pipefail
@@ -19,7 +18,9 @@ check() {
   fi
 }
 
-echo "=== #384: Linter (ZANALYZE) ==="
+echo "=== #384: Linter ==="
+
+# --- ZANALYZE checks ---
 
 # Test 1: unused variable detection (W001)
 cat > /tmp/lint1.m << 'EOF'
@@ -30,7 +31,7 @@ MAIN ;
  QUIT
 EOF
 OUT=$($NIMM -r /tmp/lint1.m -e 'ZANALYZE' 2>&1)
-check "Unused variable detected" "W001" "$OUT"
+check "Unused variable (W001)" "W001" "$OUT"
 
 # Test 2: undefined label detection (W003)
 cat > /tmp/lint2.m << 'EOF'
@@ -40,12 +41,9 @@ MAIN ;
  QUIT
 EOF
 OUT=$($NIMM -r /tmp/lint2.m -e 'ZANALYZE' 2>&1)
-check "Undefined label detected" "W003" "$OUT"
+check "Undefined label (W003)" "W003" "$OUT"
 
-# Test 3: unreachable code after QUIT (W002) — currently BROKEN (#384)
-# W002 never fires: it treats any following line starting with a letter as a
-# label, so a command line like 'WRITE ...' is misclassified. Fixed by making
-# the check parser-aware. Re-enable this assertion when #384 lands.
+# Test 3: unreachable code after QUIT (W002)
 cat > /tmp/lint3.m << 'EOF'
 MAIN ;
  WRITE "hi",!
@@ -53,16 +51,27 @@ MAIN ;
  WRITE "unreachable",!
 EOF
 OUT=$($NIMM -r /tmp/lint3.m -e 'ZANALYZE' 2>&1)
-echo "  INFO: W002 unreachable-code check broken (see #384); output: $(echo "$OUT" | tr '\n' ' ')"
+check "Unreachable code (W002)" "W002" "$OUT"
 
-# Test 4: clean code produces no warnings
+# Test 4: unused label detection (W004)
 cat > /tmp/lint4.m << 'EOF'
+MAIN ;
+ WRITE "hi",!
+ QUIT
+DEAD ;
+ QUIT
+EOF
+OUT=$($NIMM -r /tmp/lint4.m -e 'ZANALYZE' 2>&1)
+check "Unused label (W004)" "W004" "$OUT"
+
+# Test 5: clean code has 0 warnings
+cat > /tmp/lint5.m << 'EOF'
 MAIN ;
  SET X=1
  WRITE X,!
  QUIT
 EOF
-OUT=$($NIMM -r /tmp/lint4.m -e 'ZANALYZE' 2>&1)
+OUT=$($NIMM -r /tmp/lint5.m -e 'ZANALYZE' 2>&1)
 if echo "$OUT" | grep -q "0 warnings"; then
   echo "  PASS: Clean code has 0 warnings"
   PASS=$((PASS+1))
@@ -72,11 +81,41 @@ else
   FAIL=$((FAIL+1))
 fi
 
-# Test 5: report includes a summary line
+# Test 6: report includes a summary line
 OUT=$($NIMM -r /tmp/lint1.m -e 'ZANALYZE' 2>&1)
 check "Report has summary" "Summary:" "$OUT"
 
+# --- --lint / --lint-strict CLI ---
+
+# Test 7: --lint -r prints report without executing (no output side-effects)
+OUT=$($NIMM --lint -r /tmp/lint3.m 2>&1)
+check "--lint prints W002" "W002" "$OUT"
+if echo "$OUT" | grep -q '^hi'; then
+  echo "  FAIL: --lint should not execute routine (WRITE 'hi' leaked)"
+  FAIL=$((FAIL+1))
+else
+  echo "  PASS: --lint does not execute (no WRITE output)"
+  PASS=$((PASS+1))
+fi
+
+# Test 8: --lint-strict exits non-zero on warnings
+if $NIMM --lint-strict -r /tmp/lint1.m > /dev/null 2>&1; then
+  echo "  FAIL: --lint-strict should exit non-zero on warnings"
+  FAIL=$((FAIL+1))
+else
+  echo "  PASS: --lint-strict exits non-zero on warnings"
+  PASS=$((PASS+1))
+fi
+
+# Test 9: --lint on clean code exits zero
+if $NIMM --lint -r /tmp/lint5.m > /dev/null 2>&1; then
+  echo "  PASS: --lint exits zero on clean code"
+  PASS=$((PASS+1))
+else
+  echo "  FAIL: --lint should exit zero on clean code"
+  FAIL=$((FAIL+1))
+fi
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
-echo "(--lint CLI gate tests will be added with #384)"
 [ $FAIL -eq 0 ] && exit 0 || exit 1
