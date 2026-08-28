@@ -214,7 +214,16 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opNewScope, arg1 = cmd.newKeep.join(","))
 
   of cDo:
-    bc.addInstr(opNop)  # placeholder — needs DO compilation
+    # DO label / DO label^routine — compile to opCallLabel; DO with args or
+    # DO ^routine (first-label resolution) falls back to AST (#378).
+    var canCompile = true
+    for arg in cmd.doArgs:
+      if arg.kind == eEntryRef and arg.entryArgs.len == 0 and arg.entryLabel.len > 0:
+        bc.addInstr(opCallLabel, arg1 = arg.entryLabel, arg2 = arg.entryRoutine)
+      else:
+        canCompile = false
+    if not canCompile:
+      bc.needsAst = true
 
   of cDoInline:
     if cmd.doInlineBody != nil:
@@ -222,7 +231,12 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
         bc.compileCommand(childCmd.cmd)
 
   of cGoto:
-    bc.addInstr(opNop)  # placeholder — needs GOTO compilation
+    if cmd.gotoExpr != nil and cmd.gotoExpr.kind == eEntryRef:
+      bc.addInstr(opGoto, arg1 = cmd.gotoExpr.entryLabel, arg2 = cmd.gotoExpr.entryRoutine)
+    elif cmd.gotoExpr != nil and cmd.gotoExpr.kind == eVar:
+      bc.addInstr(opGoto, arg1 = cmd.gotoExpr.vname)
+    else:
+      bc.needsAst = true
 
   of cBreak:
     bc.addInstr(opBreak)
@@ -234,7 +248,8 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opLockReleaseAll)
 
   of cMerge:
-    bc.addInstr(opNop)  # placeholder
+    for pair in cmd.mergePairs:
+      bc.addInstr(opMerge, arg1 = pair[0], arg2 = pair[1])
 
   of cTstart:
     bc.addInstr(opTstart)

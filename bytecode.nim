@@ -69,6 +69,9 @@ type
     opZloadxml      # ZLOADXML file, global, format
     opKill          # KILL var (arg1 = name, "" = kill all locals)
     opBreak         # BREAK (halt in bytecode VM)
+    opGoto          # GOTO label (arg1 = label, arg2 = routine or "")
+    opCallLabel     # DO label^routine (arg1 = label, arg2 = routine or "")
+    opMerge         # MERGE dst=src (arg1 = dst, arg2 = src)
     opNop           # No operation
 
   Instruction* = object
@@ -82,6 +85,7 @@ type
     instructions*: seq[Instruction]
     constants*: seq[string]     # String constants referenced by opPushConst
     sourceLine*: string         # Original source line (for debugging)
+    needsAst*: bool             # True if a command needs AST fallback (#378)
 
 proc newBytecode*(sourceLine: string = ""): Bytecode =
   new(result)

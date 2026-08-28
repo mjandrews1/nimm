@@ -16,6 +16,9 @@ type
     globalsRef*: ptr Globals     # Global variable storage
     pc*: int                     # Program counter
     halted*: bool                # Execution halted
+    ctrlKind*: string            # Control transfer: "" | "GOTO" | "CALL" | "QUIT"
+    ctrlLabel*: string           # Target label (for GOTO/CALL)
+    ctrlRoutine*: string         # Target routine (for GOTO/CALL; "" = current)
 
 proc newVM*(g: ptr Globals): VM =
   new(result)
@@ -24,6 +27,7 @@ proc newVM*(g: ptr Globals): VM =
   result.globalsRef = g
   result.pc = 0
   result.halted = false
+  result.ctrlKind = ""
 
 proc push*(vm: VM, value: string) =
   vm.stack.add(value)
@@ -46,6 +50,7 @@ proc execute*(vm: VM, bc: Bytecode): string =
   vm.output = ""
   vm.pc = 0
   vm.halted = false
+  vm.ctrlKind = ""
 
   while vm.pc < bc.instructions.len and not vm.halted:
     let instr = bc.instructions[vm.pc]
@@ -280,6 +285,7 @@ proc execute*(vm: VM, bc: Bytecode): string =
 
     of opQuit:
       vm.halted = true
+      vm.ctrlKind = "QUIT"
 
     # I/O
     of opWrite:
@@ -384,6 +390,31 @@ proc execute*(vm: VM, bc: Bytecode): string =
     of opBreak:
       # BREAK — halt in the bytecode VM (no interactive debugger)
       vm.halted = true
+
+    of opGoto:
+      # GOTO label[^routine] — signal the engine to jump (#378)
+      vm.ctrlKind = "GOTO"
+      vm.ctrlLabel = instr.arg1
+      vm.ctrlRoutine = instr.arg2
+      vm.halted = true
+
+    of opCallLabel:
+      # DO label[^routine] — signal the engine to call a sub-routine (#378)
+      vm.ctrlKind = "CALL"
+      vm.ctrlLabel = instr.arg1
+      vm.ctrlRoutine = instr.arg2
+      vm.halted = true
+
+    of opMerge:
+      # MERGE dst=src — copy the source variable tree to the destination
+      let dst = instr.arg1
+      let src = instr.arg2
+      if vm.globalsRef != nil:
+        let rootVal = vm.globalsRef[].get(src, @[])
+        if rootVal.len > 0:
+          vm.globalsRef[].set(dst, @[], rootVal)
+        for subs in vm.globalsRef[].listSubs(src):
+          vm.globalsRef[].set(dst, subs, vm.globalsRef[].get(src, subs))
 
     of opNop:
       discard

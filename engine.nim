@@ -23,6 +23,7 @@ import static_analysis
 import network
 import vm
 import compiler
+import bytecode
 
 type
   DeviceHandle = ref object
@@ -151,6 +152,105 @@ proc writeVarTree(eng: var Engine, name: string, base: seq[string]) =
     let nd = eng.globals[].data(name, node)
     if nd == 1 or nd == 11:
       eng.writeVarNode(name, node)
+
+proc execute*(eng: var Engine, line: Line, depth: int = 0): string
+
+proc ensureBytecode(eng: var Engine, routine: string) =
+  ## Compile a routine's lines to bytecode on first use (#342).
+  if routine notin eng.runtime[].routines: return
+  var rtRoutine = eng.runtime[].routines[routine]
+  if rtRoutine.bytecodeReady: return
+  rtRoutine.bytecodeCache = @[]
+  for lineStr in rtRoutine.lines:
+    let stripped = stripLabel(lineStr)
+    let parsed = eng.cachedParseLine(stripped)
+    if parsed != nil:
+      var bc = compileLine(parsed)
+      bc.optimize()
+      rtRoutine.bytecodeCache.add(bc)
+    else:
+      rtRoutine.bytecodeCache.add(nil)
+  rtRoutine.bytecodeReady = true
+  eng.runtime[].routines[routine] = rtRoutine
+
+proc getLineBytecode(eng: var Engine, routine: string, offset: int): Bytecode =
+  ## Return the compiled bytecode for a routine line (nil if unavailable).
+  if routine notin eng.runtime[].routines: return nil
+  let rtRoutine = eng.runtime[].routines[routine]
+  if rtRoutine.bytecodeReady and offset >= 0 and offset < rtRoutine.bytecodeCache.len:
+    return rtRoutine.bytecodeCache[offset]
+  return nil
+
+proc runRoutineBytecode(eng: var Engine, routine, label: string, depth: int): string =
+  ## Execute a routine from `label` line-by-line, honoring bytecode control
+  ## signals (opGoto/opCallLabel/opQuit) and falling back to the AST
+  ## interpreter for un-compiled lines (#378). Returns "QUIT" when a QUIT
+  ## unwinds this frame; top-level quit is surfaced via eng.quitAll.
+  if routine.len == 0 or label.len == 0: return ""
+  if routine notin eng.runtime[].routines: return ""
+  if label notin eng.runtime[].routines[routine].labels: return ""
+  var curRoutine = routine
+  var curLine = eng.runtime[].routines[routine].labels[label]
+  while true:
+    if curRoutine notin eng.runtime[].routines: break
+    let rtRoutine = eng.runtime[].routines[curRoutine]
+    if curLine < 0 or curLine >= rtRoutine.lines.len: break
+    let gotLine = rtRoutine.lines[curLine]
+    var bc: Bytecode = nil
+    if eng.useBytecode:
+      bc = eng.getLineBytecode(curRoutine, curLine)
+    if bc != nil and not bc.needsAst:
+      let vmOutput = eng.vm.execute(bc)
+      if vmOutput.len > 0:
+        eng.output.add(vmOutput)
+      case eng.vm.ctrlKind
+      of "GOTO":
+        if eng.vm.ctrlRoutine.len > 0 and eng.vm.ctrlRoutine in eng.runtime[].routines:
+          curRoutine = eng.vm.ctrlRoutine
+        if eng.vm.ctrlLabel in eng.runtime[].routines[curRoutine].labels:
+          curLine = eng.runtime[].routines[curRoutine].labels[eng.vm.ctrlLabel]
+        else:
+          break
+        continue
+      of "CALL":
+        let innerRoutine =
+          if eng.vm.ctrlRoutine.len > 0 and eng.vm.ctrlRoutine in eng.runtime[].routines:
+            eng.vm.ctrlRoutine
+          else:
+            curRoutine
+        let innerLabel = eng.vm.ctrlLabel
+        if innerLabel notin eng.runtime[].routines[innerRoutine].labels:
+          curLine += 1
+          continue
+        eng.callStack.add(StackFrame(routine: innerRoutine, label: innerLabel, line: 0))
+        pushStack()
+        eng.doDepth.inc
+        eng.doScopeBase.add(eng.globals[].scopes.len)
+        let r = runRoutineBytecode(eng, innerRoutine, innerLabel, depth + 1)
+        eng.doDepth.dec
+        if eng.doScopeBase.len > 0:
+          eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
+        popStack()
+        if eng.callStack.len > 0:
+          discard eng.callStack.pop()
+        if r == "QUIT" and eng.quitAll:
+          return "QUIT"
+        curLine += 1
+        continue
+      of "QUIT":
+        return "QUIT"
+      else:
+        if eng.vm.halted:
+          break
+        curLine += 1
+    else:
+      let parsed = eng.cachedParseLine(stripLabel(gotLine))
+      if parsed != nil and parsed.cmds.len > 0:
+        let r = eng.execute(parsed, depth + 1)
+        if r == "QUIT" or eng.quitAll:
+          return "QUIT"
+      curLine += 1
+  return ""
 
 
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
@@ -465,20 +565,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           if routine.len > 0 and label.len > 0:
             # Compile routine to bytecode on first DO (#342)
             if eng.useBytecode and routine in eng.runtime[].routines:
-              var rtRoutine = eng.runtime[].routines[routine]
-              if not rtRoutine.bytecodeReady:
-                rtRoutine.bytecodeCache = @[]
-                for i, lineStr in rtRoutine.lines:
-                  let stripped = stripLabel(lineStr)
-                  let parsed = eng.cachedParseLine(stripped)
-                  if parsed != nil:
-                    var bc = compileLine(parsed)
-                    bc.optimize()
-                    rtRoutine.bytecodeCache.add(bc)
-                  else:
-                    rtRoutine.bytecodeCache.add(nil)
-                rtRoutine.bytecodeReady = true
-                eng.runtime[].routines[routine] = rtRoutine
+              eng.ensureBytecode(routine)
 
             # Push call stack frame for introspection
             let frame = StackFrame(routine: routine, label: label, line: 0)
@@ -521,33 +608,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                   let formalName = formals[i]
                   let value = eng.evaluator[].eval(actualExpr)
                   eng.globals[].setLocal(formalName, @[], value)
-            var offset = 0
-            while true:
-              let gotLine = eng.runtime[].getLine(routine, label, offset)
-              if gotLine.len == 0:
-                break
 
-              # Try bytecode execution first (#342)
-              if eng.useBytecode and routine in eng.runtime[].routines:
-                let rtRoutine = eng.runtime[].routines[routine]
-                if rtRoutine.bytecodeReady and offset < rtRoutine.bytecodeCache.len:
-                  let bc = rtRoutine.bytecodeCache[offset]
-                  if bc != nil:
-                    let vmOutput = eng.vm.execute(bc)
-                    if vmOutput.len > 0:
-                      eng.output.add(vmOutput)
-                    if eng.vm.halted:
-                      break
-                    offset.inc
-                    continue
+            # Execute the routine line-by-line (bytecode with AST fallback).
+            discard eng.runRoutineBytecode(routine, label, depth)
 
-              # Fallback to AST interpreter
-              let parsed = eng.cachedParseLine(stripLabel(gotLine))
-              if parsed != nil and parsed.cmds.len > 0:
-                let r = eng.execute(parsed, depth + 1)
-                if r == "QUIT" or eng.quitAll:
-                  break
-              offset.inc
             eng.doDepth.dec
             if eng.doScopeBase.len > 0:
               eng.doScopeBase.setLen(eng.doScopeBase.len - 1)
