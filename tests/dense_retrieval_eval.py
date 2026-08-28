@@ -4,9 +4,10 @@
 # ranks by cosine similarity, and reports per-query rank + vocab metrics.
 #
 # Usage: dense_retrieval_eval.py [data_dir] [max_records] [model]
-# Requires: fastembed (run in the Python 3.12 venv, e.g. /tmp/fst_venv312)
+# Requires: fastembed (run in a Python 3.12 venv, e.g. /tmp/fst_venv312)
 
 import sys
+import time
 import xml.etree.ElementTree as ET
 
 DATA_DIR = sys.argv[1] if len(sys.argv) > 1 else "/Users/mark/_diary-data"
@@ -19,10 +20,45 @@ from fastembed import TextEmbedding
 GOLDEN = "tests/golden_queries.tsv"
 DESC = f"{DATA_DIR}/mesh-staging/xml/desc2026.xml"
 
+
+class Progress:
+    """Eye-watch stage telemetry: stage / elapsed / ETA, throttled."""
+
+    def __init__(self, name, quiet=False):
+        self.name = name
+        self.quiet = quiet
+        self.start = time.time()
+        self.last = self.start
+        if not quiet:
+            print(f"[{name}] start", file=sys.stderr, flush=True)
+
+    def tick(self, done, total=0):
+        now = time.time()
+        if now - self.last < 2:
+            return
+        self.last = now
+        if self.quiet:
+            return
+        el = now - self.start
+        if total > 0 and done > 0:
+            pct = done * 100 // total
+            eta = el * (total - done) / done
+            print(f"  [{self.name}] {done}/{total} ({pct}%, {el:.0f}s elapsed, "
+                  f"~{eta:.0f}s left)", file=sys.stderr, flush=True)
+        else:
+            print(f"  [{self.name}] {done} done ({el:.0f}s elapsed)",
+                  file=sys.stderr, flush=True)
+
+    def done(self):
+        if not self.quiet:
+            print(f"[{self.name}] done in {time.time() - self.start:.0f}s",
+                  file=sys.stderr, flush=True)
+
+
 print(f"=== dense retrieval eval ({MODEL}) ===", flush=True)
 
 # --- parse descriptors ---
-print("parsing descriptors...", flush=True)
+prog = Progress("parse descriptors")
 root = ET.parse(DESC).getroot()
 docs = []  # (ui, text)
 for rec in root.findall(".//DescriptorRecord"):
@@ -35,13 +71,22 @@ for rec in root.findall(".//DescriptorRecord"):
     if scope:
         text += " " + scope[:120]
     docs.append((ui, text))
+    prog.tick(len(docs), MAX_RECORDS if MAX_RECORDS > 0 else 0)
     if MAX_RECORDS > 0 and len(docs) >= MAX_RECORDS:
         break
+prog.done()
+print(f"loaded {len(docs)} docs", flush=True)
 
-print(f"loaded {len(docs)} docs; embedding...", flush=True)
+# --- embed docs (chunked, with progress) ---
+prog = Progress("embed docs")
 model = TextEmbedding(model_name=MODEL)
-doc_embs = np.array(list(model.embed([d[1] for d in docs], batch_size=256)), dtype="float32")
+embs = []
+for i, emb in enumerate(model.embed([d[1] for d in docs], batch_size=256)):
+    embs.append(emb)
+    prog.tick(i + 1, len(docs))
+doc_embs = np.array(embs, dtype="float32")
 doc_embs /= np.linalg.norm(doc_embs, axis=1, keepdims=True)
+prog.done()
 
 # --- golden vocab queries ---
 vocab = []
@@ -53,9 +98,10 @@ for line in open(GOLDEN):
     if len(p) >= 3 and p[0] == "vocab":
         vocab.append((p[1], p[2]))  # (query, expected_ui)
 
-print(f"embedding {len(vocab)} queries...", flush=True)
+prog = Progress("embed queries")
 q_embs = np.array(list(model.embed([q for q, _ in vocab], batch_size=64)), dtype="float32")
 q_embs /= np.linalg.norm(q_embs, axis=1, keepdims=True)
+prog.done()
 
 sims = q_embs @ doc_embs.T  # (nq, ndoc) cosine similarities
 

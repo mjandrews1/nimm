@@ -7,6 +7,7 @@
 # Usage: ./tests/test_semantic_eval.sh [data_dir] [max_records]
 
 set -euo pipefail
+source "$(dirname "$0")/progress.sh"
 
 DATA_DIR="${1:-/Users/mark/_diary-data}"
 MAX_RECORDS="${2:-20000}"   # 0 = all (31K, slow); 20000 covers all golden docs (max pos 18936)
@@ -25,13 +26,14 @@ echo "Max records: $MAX_RECORDS"
 echo
 
 # --- 1. Load MeSH descriptors (subset) via Python + SET batches ---
-echo "--- Loading MeSH descriptors ---"
+progress_start "load MeSH" 120
 python3 - "$DESC" "$DB" "$MAX_RECORDS" "$NIMM" << 'PYEOF'
-import sys, subprocess, xml.etree.ElementTree as ET
+import sys, subprocess, time, xml.etree.ElementTree as ET
 
 desc, db, maxn, nimm = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 tree = ET.parse(desc)
 root = tree.getroot()
+t0 = time.time()
 
 def esc(s):
     # double quotes -> "" and control chars -> space (scope notes have newlines)
@@ -69,17 +71,23 @@ for rec in root.findall('.//DescriptorRecord'):
         flush()
     if maxn > 0 and count >= maxn:
         break
+    if count % 2000 == 0:
+        print(f"  [load MeSH] {count} docs ({time.time()-t0:.0f}s elapsed)", flush=True)
 flush()
-print(f"  Loaded {count} descriptors")
+print(f"  Loaded {count} descriptors in {time.time()-t0:.0f}s")
 PYEOF
+progress_done
 
 # --- 2. Build BM25 index ---
-echo "--- Building BM25 index ---"
+progress_start "build BM25" 120
 $BM25 -e 'DO BUILDMESH^BM25IDX' 2>&1 | tail -1
+progress_done
 
 # --- 3. Run golden queries, collect dict + BM25 rankings ---
-echo "--- Running golden queries ---"
+progress_start "run golden queries" 60
 : > /tmp/semantic_rankings.txt
+QUERY_TOTAL=$(grep -v '^#' "$GOLDEN" | wc -l | tr -d ' ')
+qcount=0
 while IFS=$'\t' read -r cls query ui name; do
   [ -z "$query" ] && continue
   dict_ids=$($BM25 -x "S ^TMP(\"BM25\",\"terms\")=\"$query\" DO DICT^BM25IDX" 2>&1 \
@@ -87,10 +95,13 @@ while IFS=$'\t' read -r cls query ui name; do
   bm25_ids=$($BM25 -x "S ^TMP(\"BM25\",\"type\")=\"MESH\",^TMP(\"BM25\",\"terms\")=\"$query\" DO SEARCH^BM25IDX" 2>&1 \
              | head -50 | cut -f1 | paste -sd, -)
   printf '%s\t%s\t%s\n' "$query" "$dict_ids" "$bm25_ids" >> /tmp/semantic_rankings.txt
+  qcount=$((qcount+1))
+  progress_tick "$qcount" "$QUERY_TOTAL"
 done < <(grep -v '^#' "$GOLDEN")
+progress_done
 
 # --- 4. Compute metrics ---
-echo "--- Metrics ---"
+progress_start "compute metrics"
 python3 - "$GOLDEN" /tmp/semantic_rankings.txt << 'PYEOF'
 import sys, math, collections
 
@@ -149,6 +160,7 @@ for cls in ['exact', 'vocab']:
     for d in detail:
         print(d)
 PYEOF
+progress_done
 
 echo
 echo "=== Done ==="
