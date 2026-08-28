@@ -1039,6 +1039,36 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     # $ZARG(n) — nth command-line script argument (1-based) (#368)
     let n = if args.len >= 1: parseInt(args[0]) else: 0
     return getZArg(n)
+  of "ZCHAR":
+    # $ZCHAR(n[,n2,...]) — alias for $CHAR (#374)
+    var zr = ""
+    for a in args:
+      try: zr.add(char(parseInt(a)))
+      except: discard
+    return zr
+  of "ZCHANGE":
+    # $ZCHANGE(str, old, new) — replace all occurrences of old with new (#374)
+    if args.len < 3: return ""
+    let s = args[0]
+    let old = args[1]
+    let nw = args[2]
+    if old.len == 0: return s
+    return s.replace(old, nw)
+  of "ZSTRIPCOMMAND":
+    # $ZSTRIPCOMMAND(line) — strip a leading M command keyword (#374)
+    if args.len < 1: return ""
+    var s = args[0].strip()
+    var i = 0
+    var tok = ""
+    while i < s.len and s[i] in {'A'..'Z','a'..'z','0'..'9','%','_'}:
+      tok.add(s[i]); inc i
+    # A command keyword is followed by whitespace (or EOL); "X=1" is an
+    # assignment, not the XECUTE abbreviation "X".
+    if tok.len > 0 and isCommandKeyword(tok) and
+       (i >= s.len or s[i] in {' ', '\t'}):
+      while i < s.len and s[i] in {' ','\t'}: inc i
+      return s[i..^1]
+    return s
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
     let (output, exitCode) = execCmdEx(args[0])

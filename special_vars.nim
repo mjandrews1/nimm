@@ -150,6 +150,19 @@ proc getReference(): string =
 proc setReference(val: string) =
   reference = val
 
+proc getZio(): string =
+  # $ZIO — current I/O device (alias of $IO)
+  return io
+
+proc getZlevel(): string =
+  # $ZLEVEL — current DO/XECUTE stack depth
+  if doDepthRef != nil: return $doDepthRef[]
+  return "0"
+
+proc getZreference(): string =
+  # $ZREFERENCE — current global reference (alias of $REFERENCE)
+  return reference
+
 var storageCache: string = ""
 var storageCacheTime: int64 = 0
 
@@ -296,6 +309,9 @@ proc registerAllSpecialVars*(g: var Globals) =
   g.registerSpecialVar("$PRINCIPAL", getPrincipal, setPrincipal)
   g.registerSpecialVar("$QUIT", getQuit, setQuit)
   g.registerSpecialVar("$REFERENCE", getReference, setReference)
+  g.registerSpecialVar("$ZIO", getZio, setIo)
+  g.registerSpecialVar("$ZLEVEL", getZlevel)
+  g.registerSpecialVar("$ZREFERENCE", getZreference, setReference)
   g.registerSpecialVar("$STORAGE", getStorage)
   g.registerSpecialVar("$STACK", getStack)
   g.registerSpecialVar("$SYSTEM", getSystem)
