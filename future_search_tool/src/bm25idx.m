@@ -147,3 +147,16 @@ SEARCH ; top-K retrieval: reads ^TMP("BM25","type"/"terms"/"k"); WRITEs "id<TAB>
  . FOR  SET ID2=$ORDER(^TMP("RANK",SCK,ID2)) QUIT:ID2=""  DO
  .. WRITE ID2,$CHAR(9),-SCK,!
  QUIT
+ ;
+DICT ; entry-term dictionary lookup: reads ^TMP("BM25","terms"); WRITEs UIs
+ ; ^MESHTERM(term,ui)="1" for exact descriptor name, "0" for entry synonym.
+ ; Emits exact-name matches first, then synonym matches.
+ SET Q=$GET(^TMP("BM25","terms"))
+ SET Q=$TRANSLATE(Q,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")
+ SET UI=""
+ FOR  SET UI=$ORDER(^MESHTERM(Q,UI)) QUIT:UI=""  DO
+ . IF $GET(^MESHTERM(Q,UI))="1" WRITE UI,!
+ SET UI=""
+ FOR  SET UI=$ORDER(^MESHTERM(Q,UI)) QUIT:UI=""  DO
+ . IF $GET(^MESHTERM(Q,UI))'="1" WRITE UI,!
+ QUIT

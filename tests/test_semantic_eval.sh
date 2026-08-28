@@ -58,6 +58,12 @@ for rec in root.findall('.//DescriptorRecord'):
     batch.append(f'SET ^MESH("{esc(ui)}","name")="{esc(name)}"')
     if scope:
         batch.append(f'SET ^MESH("{esc(ui)}","scopeNote")="{esc(scope[:500])}"')
+    # entry-term dictionary: descriptor name -> "1", synonyms -> "0"
+    batch.append(f'SET ^MESHTERM("{esc(name.lower())}","{esc(ui)}")="1"')
+    for t in rec.findall('.//TermList/Term'):
+        s = t.findtext('String', '')
+        if s and s.lower() != name.lower():
+            batch.append(f'SET ^MESHTERM("{esc(s.lower())}","{esc(ui)}")="0"')
     count += 1
     if len(batch) >= 1000:
         flush()
@@ -71,14 +77,16 @@ PYEOF
 echo "--- Building BM25 index ---"
 $BM25 -e 'DO BUILDMESH^BM25IDX' 2>&1 | tail -1
 
-# --- 3. Run golden queries, collect ranked doc ids ---
+# --- 3. Run golden queries, collect dict + BM25 rankings ---
 echo "--- Running golden queries ---"
 : > /tmp/semantic_rankings.txt
 while IFS=$'\t' read -r cls query ui name; do
   [ -z "$query" ] && continue
-  ranked=$($BM25 -x "S ^TMP(\"BM25\",\"type\")=\"MESH\",^TMP(\"BM25\",\"terms\")=\"$query\" DO SEARCH^BM25IDX" 2>&1 \
-           | head -50 | cut -f1 | paste -sd, -)
-  printf '%s\t%s\n' "$query" "$ranked" >> /tmp/semantic_rankings.txt
+  dict_ids=$($BM25 -x "S ^TMP(\"BM25\",\"terms\")=\"$query\" DO DICT^BM25IDX" 2>&1 \
+             | head -50 | paste -sd, -)
+  bm25_ids=$($BM25 -x "S ^TMP(\"BM25\",\"type\")=\"MESH\",^TMP(\"BM25\",\"terms\")=\"$query\" DO SEARCH^BM25IDX" 2>&1 \
+             | head -50 | cut -f1 | paste -sd, -)
+  printf '%s\t%s\t%s\n' "$query" "$dict_ids" "$bm25_ids" >> /tmp/semantic_rankings.txt
 done < <(grep -v '^#' "$GOLDEN")
 
 # --- 4. Compute metrics ---
@@ -100,9 +108,14 @@ for line in open(golden_path):
 rankings = {}
 for line in open(rankings_path):
     line = line.rstrip('\n')
-    if '\t' in line:
-        q, rest = line.split('\t', 1)
-        rankings[q] = [x for x in rest.split(',') if x]
+    p = line.split('\t')
+    if len(p) >= 3:
+        q = p[0]
+        dict_ids = [x for x in p[1].split(',') if x]
+        bm25_ids = [x for x in p[2].split(',') if x]
+        # expanded ranking: dictionary hits first, then BM25 fill (dedup)
+        combined = dict_ids + [x for x in bm25_ids if x not in dict_ids]
+        rankings[q] = combined
 
 by_class = collections.defaultdict(list)
 for cls, query, ui in golden:
