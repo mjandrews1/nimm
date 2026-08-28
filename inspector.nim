@@ -17,13 +17,11 @@ type
     routine*: string
     label*: string
     line*: int
-    variables*: Table[string, string]
 
   RuntimeStats* = object
     commandsExecuted*: int
     functionCalls*: int
     variableAccesses*: int
-    memoryUsed*: int
     startTime*: float
     elapsedTime*: float
 
@@ -39,7 +37,6 @@ proc newInspector*(): Inspector =
     commandsExecuted: 0,
     functionCalls: 0,
     variableAccesses: 0,
-    memoryUsed: getOccupiedMem(),
     startTime: epochTime(),
     elapsedTime: 0
   )
@@ -105,9 +102,8 @@ proc formatStack*(frames: seq[StackFrame]): string =
 # --- ZSTATS: Statistics ---
 
 proc updateStats*(insp: var Inspector) =
-  ## Update elapsed time and memory usage
+  ## Update elapsed time
   insp.stats.elapsedTime = epochTime() - insp.stats.startTime
-  insp.stats.memoryUsed = getOccupiedMem()
 
 proc formatStats*(insp: var Inspector): string =
   ## Format statistics as string
@@ -140,7 +136,6 @@ proc resetStats*(insp: var Inspector) =
     commandsExecuted: 0,
     functionCalls: 0,
     variableAccesses: 0,
-    memoryUsed: 0,
     startTime: epochTime(),
     elapsedTime: 0
   )

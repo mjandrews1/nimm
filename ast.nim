@@ -163,9 +163,6 @@ type
   ## object with expandable children. For eBinary, it would show the
   ## operator, left subtree, and right subtree as a tree visualization.
   Expr* = ref object
-    ## Source location for debugging/introspection
-    line*: int       # 1-based line number (0 = unknown)
-    col*: int        # 1-based column number (0 = unknown)
     case kind*: ExprKind
     of numLit, eStr:
       sval*: string
@@ -429,9 +426,6 @@ type
   ## arguments, and for compound commands (IF, FOR), a tree of
   ## nested commands.
   Cmd* = ref object
-    ## Source location for debugging/introspection
-    line*: int       # 1-based line number (0 = unknown)
-    col*: int        # 1-based column number (0 = unknown)
     case kind*: CmdKind
     of cSet:
       setItems*: seq[SetItem]

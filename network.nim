@@ -10,10 +10,6 @@ type
   NiConnection* = object
     ## Network connection state
     socket*: Socket
-    id*: int
-    host*: string
-    port*: int
-    protocol*: string
     isOpen*: bool
     isListening*: bool
 
@@ -38,10 +34,6 @@ proc niopen*(nm: var NetworkManager, protocol: string, host: string, port: int):
       inc nm.nextId
       nm.connections[id] = NiConnection(
         socket: sock,
-        id: id,
-        host: host,
-        port: port,
-        protocol: protocol,
         isOpen: true,
         isListening: false
       )
@@ -66,10 +58,6 @@ proc nilisten*(nm: var NetworkManager, port: int): int =
     inc nm.nextId
     nm.connections[id] = NiConnection(
       socket: sock,
-      id: id,
-      host: "0.0.0.0",
-      port: port,
-      protocol: "tcp",
       isOpen: true,
       isListening: true
     )
@@ -96,10 +84,6 @@ proc niaccept*(nm: var NetworkManager, listenerId: int): int =
     inc nm.nextId
     nm.connections[id] = NiConnection(
       socket: clientSocket,
-      id: id,
-      host: "",
-      port: 0,
-      protocol: "tcp",
       isOpen: true,
       isListening: false
     )

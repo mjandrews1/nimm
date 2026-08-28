@@ -23,32 +23,17 @@ type
   JobEntry* = object
     jobNumber*: int
     pid*: Pid
-    entry*: string
     status*: JobStatus
-    startTime*: float
 
   JobTable* = ref object
     entries*: seq[JobEntry]
     nextJobNumber*: int
-    isChild*: bool
-    parentJobNumber*: int
 
 proc newJobTable*(): JobTable =
   result = JobTable(
     entries: @[],
-    nextJobNumber: 1,
-    isChild: false,
-    parentJobNumber: 0
+    nextJobNumber: 1
   )
-
-  # Detect if this process was spawned by JOB
-  let parentJobEnv = getEnv("NIMM_PARENT_JOB")
-  if parentJobEnv.len > 0:
-    result.isChild = true
-    try:
-      result.parentJobNumber = parseInt(parentJobEnv)
-    except:
-      result.parentJobNumber = 0
 
 proc reapCompleted*(jt: JobTable) =
   ## Check for completed children (non-blocking)
@@ -134,9 +119,7 @@ proc spawnJob*(jt: JobTable, entry: string, currentFile: string, dbPath: string 
   jt.entries.add(JobEntry(
     jobNumber: jobNum,
     pid: childPid,
-    entry: entry,
-    status: jsRunning,
-    startTime: epochTime()
+    status: jsRunning
   ))
 
   return jobNum

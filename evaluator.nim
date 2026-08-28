@@ -31,7 +31,6 @@ type
     globals*: ptr Globals
     runtime*: ptr Runtime
     inspector*: ptr Inspector
-    mode*: string
 
 # Global storage for data structures
 var niArrays: Table[string, NiArray] = initTable[string, NiArray]()
@@ -54,10 +53,9 @@ var zdtCacheTime: int64 = 0
 var zhorologCache: string = ""
 var zhorologCacheTime: int64 = 0
 
-proc newEvaluator*(globals: var Globals, runtime: var Runtime, mode: string = "nimm"): Evaluator =
+proc newEvaluator*(globals: var Globals, runtime: var Runtime): Evaluator =
   result.globals = globals.addr
   result.runtime = runtime.addr
-  result.mode = mode
 
 proc setInspector*(ev: var Evaluator, insp: var Inspector) =
   ## Wire inspector to evaluator for function call tracking

@@ -9,20 +9,16 @@ type
   Debugger* = ref object
     ## Debugger state
     breakpoints*: Table[string, seq[int]]  # routine -> [line numbers]
-    stepMode*: string       # off, into, over, out
     stepping*: bool         # Currently stepping
     debugPrompt*: bool      # Show debug prompt
-    lastCommand*: string    # Last debug command
     currentLine*: int       # Current source line (#326)
     currentCol*: int        # Current source column (#326)
 
 proc newDebugger*(): Debugger =
   new(result)
   result.breakpoints = initTable[string, seq[int]]()
-  result.stepMode = "off"
   result.stepping = false
   result.debugPrompt = false
-  result.lastCommand = ""
 
 proc setBreakpoint*(dbg: var Debugger, routine: string, line: int) =
   ## Set a breakpoint at a specific line
@@ -71,7 +67,6 @@ proc shouldBreak*(dbg: Debugger, routine: string, line: int): bool =
 
 proc setStepMode*(dbg: var Debugger, mode: string) =
   ## Set step mode: off, into, over, out
-  dbg.stepMode = mode
   if mode != "off":
     dbg.stepping = true
   else:

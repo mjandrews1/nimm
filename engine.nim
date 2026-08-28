@@ -28,8 +28,6 @@ type
   DeviceHandle = ref object
     ## Represents an open device (file or stream)
     fd: cint  # POSIX file descriptor
-    readBuf: string
-    readPos: int
     isOpen: bool
   
   Engine* = ref object
@@ -81,10 +79,10 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   
   # Initialize channel array
   for i in 0..63:
-    result.channels[i] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: false)
+    result.channels[i] = DeviceHandle(fd: -1, isOpen: false)
   
   # Channel 0 = principal device (stdin/stdout)
-  result.channels[0] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: true)
+  result.channels[0] = DeviceHandle(fd: -1, isOpen: true)
 
 proc write*(eng: var Engine, s: string) =
   advanceDevicePos(s)
@@ -483,7 +481,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                 eng.runtime[].routines[routine] = rtRoutine
 
             # Push call stack frame for introspection
-            let frame = StackFrame(routine: routine, label: label, line: 0, variables: initTable[string, string]())
+            let frame = StackFrame(routine: routine, label: label, line: 0)
             eng.callStack.add(frame)
             pushStack()
             eng.doDepth.inc
@@ -658,7 +656,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             # Reset file pointer to beginning
             discard lseek(fd, 0, SEEK_SET)
             
-            eng.channels[channel] = DeviceHandle(fd: fd, readBuf: "", readPos: 0, isOpen: true)
+            eng.channels[channel] = DeviceHandle(fd: fd, isOpen: true)
             eng.testValue = true
           except:
             eng.testValue = false
@@ -693,7 +691,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.testValue = true
         elif eng.channels[channel].isOpen:
           discard posix.close(eng.channels[channel].fd)
-          eng.channels[channel] = DeviceHandle(fd: -1, readBuf: "", readPos: 0, isOpen: false)
+          eng.channels[channel] = DeviceHandle(fd: -1, isOpen: false)
           if eng.currentChannel == channel:
             eng.currentChannel = 0
           eng.testValue = true
