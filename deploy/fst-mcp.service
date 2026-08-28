@@ -1,0 +1,19 @@
+# deploy/fst-mcp.service — systemd unit for the FST MCP server (#360)
+# Install: sudo cp deploy/fst-mcp.service /etc/systemd/system/ && sudo systemctl daemon-reload
+# Start:   sudo systemctl enable --now fst-mcp
+# Status:  systemctl status fst-mcp
+
+[Unit]
+Description=FST MCP Server (NLM search over MCP protocol)
+After=network.target
+
+[Service]
+User=mark
+WorkingDirectory=/home/mark/nimm
+Environment=NIMM_BIN=/home/mark/nimm/bin/nimm
+ExecStart=/usr/bin/python3 /home/mark/nimm/future_search_tool/src/fst_mcp_server.py --db /home/mark/fst.lmdb --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

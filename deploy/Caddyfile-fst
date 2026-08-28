@@ -1,0 +1,16 @@
+# deploy/Caddyfile-fst — Caddy reverse-proxy snippet for the FST MCP server (#360)
+# Append to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+#
+# Two routes:
+#   1. fst.flamingyak.com — public HTTPS endpoint (needs a DNS A record +
+#      ports 80/443 open on Utility-01)
+#   2. :8081 — plain-HTTP port for immediate Tailscale-internal access
+#      (endpoint: http://utility-01.taild03114.ts.net:8081)
+
+fst.flamingyak.com {
+    reverse_proxy 127.0.0.1:8080
+}
+
+:8081 {
+    reverse_proxy 127.0.0.1:8080
+}
