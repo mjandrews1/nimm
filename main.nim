@@ -48,6 +48,7 @@ type
     networkAllowlist: string
     fileAllowlist: string
     useBytecode: bool
+    pemdas: bool       # --pemdas: use operator precedence (math precedence)
     lint: bool          # --lint: analyze code without executing
     lintStrict: bool    # --lint-strict: exit non-zero on warnings/errors
     parentJobNum: int  # -p: parent M job number (set by JOB command)
@@ -71,6 +72,7 @@ proc parseArgs(): CliArgs =
   result.networkAllowlist = ""
   result.fileAllowlist = ""
   result.useBytecode = false
+  result.pemdas = false
   result.lint = false
   result.lintStrict = false
   result.parentJobNum = 0
@@ -152,6 +154,8 @@ proc parseArgs(): CliArgs =
           result.fileAllowlist = args[i]
       of "bytecode":
         result.useBytecode = true
+      of "pemdas":
+        result.pemdas = true
       of "lint":
         result.lint = true
       of "lint-strict":
@@ -191,6 +195,7 @@ proc parseArgs(): CliArgs =
         echo "  --bytecode   Enable bytecode VM for compiled routines"
         echo "  --lint       Analyze loaded routine(s)/code, do not execute"
         echo "  --lint-strict Exit non-zero on warnings or errors (implies --lint)"
+        echo "  --pemdas     Use standard math precedence (2+3*4 = 14, not 20)"
         echo "  -h/--help     Show this help"
         quit(0)
       else:
@@ -231,6 +236,7 @@ proc main() =
   setDoDepthRef(eng.doDepth)
   ev.setInspector(eng.inspector)
   setArgv(args.argv)
+  setPemdas(args.pemdas)
 
   # Detect if spawned by JOB command (child process mode)
   # Uses -p flag (preferred) or NIMM_PARENT_JOB env var (fallback)

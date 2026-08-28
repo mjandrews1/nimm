@@ -320,68 +320,105 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom]
 ## Parses a complete expression with binary operators and pattern matches.
 ## This is the top-level expression parser.
 ##
-## Algorithm:
-##   1. Parse the left operand (prefix expression)
-##   2. While we see a binary operator or pattern match:
-##      a. Consume the operator
-##      b. Parse the right operand
-##      c. Build a binary expression node
-##   3. Return the expression
+## Default (M standard): binary operators are left-associative, so "2+3*4"
+## parses as ((2+3)*4) and evaluates to 20.
 ##
-## Pattern match (? and '?) is handled here because it's an infix
-## operator in M, but its right operand is a pattern (not a normal
-## expression). We parse pattern atoms specially.
+## --pemdas mode (#373): binary operators use standard math precedence via
+## precedence climbing, so "2+3*4" parses as (2+(3*4)) and evaluates to 14.
 ##
-## Design Decision: We parse binary operators in a left-associative
-## loop. This means "1+2+3" becomes ((1+2)+3). M's arithmetic is
-## left-associative, so this is correct.
-proc parseExpr(p: var Parser): Expr =
+## Pattern match (? and '?) is handled at the lowest precedence in both
+## modes: its right operand is a pattern (not a normal expression).
+
+var pemdasMode* = false  # --pemdas: use operator precedence (#373)
+
+proc setPemdas*(on: bool) =
+  pemdasMode = on
+
+proc binopPrecedence(op: BinOp): int =
+  ## Operator precedence for --pemdas (#373). Higher binds tighter.
+  case op
+  of bAnd, bOr: 1
+  of bEql, bNeql, bLt, bGt, bNlt, bNgt, bFollows, bSortAfter,
+     bContains, bNotFollows, bNotContains: 2
+  of bConcat: 3
+  of bAdd, bSub: 4
+  of bMul, bDiv, bIntDiv, bMod: 5
+  of bPow: 6
+
+proc foldConst(left, right: Expr, op: BinOp): Expr =
+  ## Fold numeric literals at parse time (#322), else build an eBinary node.
+  if left.kind == numLit and left.hasCachedFloat and
+     right.kind == numLit and right.hasCachedFloat:
+    var folded: float
+    case op
+    of bAdd: folded = left.cachedFloat + right.cachedFloat
+    of bSub: folded = left.cachedFloat - right.cachedFloat
+    of bMul: folded = left.cachedFloat * right.cachedFloat
+    of bDiv:
+      if right.cachedFloat != 0.0: folded = left.cachedFloat / right.cachedFloat
+      else: folded = 0.0
+    of bIntDiv:
+      if right.cachedFloat != 0.0: folded = float(int(left.cachedFloat / right.cachedFloat))
+      else: folded = 0.0
+    of bMod:
+      if right.cachedFloat != 0.0: folded = left.cachedFloat - right.cachedFloat * floor(left.cachedFloat / right.cachedFloat)
+      else: folded = 0.0
+    of bPow: folded = pow(left.cachedFloat, right.cachedFloat)
+    else:
+      return Expr(kind: eBinary, op: op, left: left, right: right)
+    return Expr(kind: numLit, sval: formatNumber(folded), cachedFloat: folded, hasCachedFloat: true)
+  return Expr(kind: eBinary, op: op, left: left, right: right)
+
+proc parseExprPemdas(p: var Parser, minPrec: int): Expr =
+  ## Precedence-climbing binary expression parse (--pemdas).
   var left = parsePrefix(p)
   var iterations = 0
   while true:
-    if iterations >= MaxParseIterations:
-      break
+    if iterations >= MaxParseIterations: break
     inc iterations
     if isBinop(p.peek()):
       let op = tokToBinop(p.peek()).get()
+      let prec = binopPrecedence(op)
+      if prec < minPrec: break
       discard p.advance()
-      let right = parsePrefix(p)
-      # Constant folding: if both operands are numeric literals, fold at parse time (#322)
-      if left.kind == numLit and left.hasCachedFloat and right.kind == numLit and right.hasCachedFloat:
-        var folded: float
-        case op
-        of bAdd: folded = left.cachedFloat + right.cachedFloat
-        of bSub: folded = left.cachedFloat - right.cachedFloat
-        of bMul: folded = left.cachedFloat * right.cachedFloat
-        of bDiv:
-          if right.cachedFloat != 0.0: folded = left.cachedFloat / right.cachedFloat
-          else: folded = 0.0
-        of bIntDiv:
-          if right.cachedFloat != 0.0: folded = float(int(left.cachedFloat / right.cachedFloat))
-          else: folded = 0.0
-        of bMod:
-          if right.cachedFloat != 0.0: folded = left.cachedFloat - right.cachedFloat * floor(left.cachedFloat / right.cachedFloat)
-          else: folded = 0.0
-        of bPow: folded = pow(left.cachedFloat, right.cachedFloat)
-        else:
-          left = Expr(kind: eBinary, op: op, left: left, right: right)
-          continue
-        left = Expr(kind: numLit, sval: formatNumber(folded), cachedFloat: folded, hasCachedFloat: true)
-      else:
-        left = Expr(kind: eBinary, op: op, left: left, right: right)
-    elif p.peek() == tokQuestion:
-      # Pattern match: expr ? pattern
-      discard p.advance()
-      let atoms = parsePatternAtoms(p)
-      left = Expr(kind: ePattern, patLhs: left, atoms: atoms)
-    elif p.peek() == tokNotQuestion:
-      # Not pattern match: expr '? pattern → NOT(expr ? pattern)
-      discard p.advance()
-      let atoms = parsePatternAtoms(p)
-      left = Expr(kind: eNot, operand: Expr(kind: ePattern, patLhs: left, atoms: atoms))
+      let right = parseExprPemdas(p, prec + 1)
+      left = foldConst(left, right, op)
     else:
       break
   left
+
+proc parseExpr(p: var Parser): Expr =
+  if pemdasMode:
+    result = parseExprPemdas(p, 0)
+  else:
+    # left-associative loop (M standard)
+    result = parsePrefix(p)
+    var iterations = 0
+    while true:
+      if iterations >= MaxParseIterations: break
+      inc iterations
+      if isBinop(p.peek()):
+        let op = tokToBinop(p.peek()).get()
+        discard p.advance()
+        let right = parsePrefix(p)
+        result = foldConst(result, right, op)
+      else:
+        break
+  # Pattern match (? / '?) at the lowest precedence
+  var iterations = 0
+  while true:
+    if iterations >= MaxParseIterations: break
+    inc iterations
+    if p.peek() == tokQuestion:
+      discard p.advance()
+      let atoms = parsePatternAtoms(p)
+      result = Expr(kind: ePattern, patLhs: result, atoms: atoms)
+    elif p.peek() == tokNotQuestion:
+      discard p.advance()
+      let atoms = parsePatternAtoms(p)
+      result = Expr(kind: eNot, operand: Expr(kind: ePattern, patLhs: result, atoms: atoms))
+    else:
+      break
 
 ## parsePrefix — Parse Unary Prefix Operators
 ##
