@@ -3,13 +3,13 @@
 # Loads MeSH descriptors, builds BM25, runs golden queries, reports
 # P@5 / R@10 / MRR / nDCG@10 per class (exact vs vocab).
 #
-# SLOW one-time eval (~2-3 min); not part of the fast run_all.sh suite.
+# SLOW one-time eval (~15 min @20K); not part of the fast run_all.sh suite.
 # Usage: ./tests/test_semantic_eval.sh [data_dir] [max_records]
 
 set -euo pipefail
 
 DATA_DIR="${1:-/Users/mark/_diary-data}"
-MAX_RECORDS="${2:-10000}"   # 0 = all (31K, slow); 10000 covers all golden docs
+MAX_RECORDS="${2:-20000}"   # 0 = all (31K, slow); 20000 covers all golden docs (max pos 18936)
 
 DB=/tmp/semantic_eval.lmdb
 NIMM=./bin/nimm

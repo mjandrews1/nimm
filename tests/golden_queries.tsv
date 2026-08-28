@@ -15,3 +15,19 @@ vocab	heart attack	D009203	Myocardial Infarction
 vocab	high blood pressure	D006973	Hypertension
 vocab	cancer	D009369	Neoplasms
 vocab	sugar disease	D003920	Diabetes Mellitus
+vocab	stroke	D020521	Stroke
+vocab	flu	D007251	Influenza, Human
+vocab	chickenpox	D002644	Chickenpox
+vocab	pink eye	D003231	Conjunctivitis
+vocab	kidney stone	D007669	Kidney Calculi
+vocab	high cholesterol	D006937	Hypercholesterolemia
+vocab	heart disease	D006331	Heart Diseases
+vocab	blood clot	D013927	Thrombosis
+vocab	whooping cough	D014917	Whooping Cough
+vocab	measles	D008457	Measles
+vocab	lockjaw	D013742	Tetanus
+vocab	hardening of the arteries	D001161	Arteriosclerosis
+vocab	seizure	D012640	Seizures
+vocab	fainting	D013575	Syncope
+vocab	yellow fever	D015004	Yellow Fever
+vocab	stomach ache	D015746	Abdominal Pain
