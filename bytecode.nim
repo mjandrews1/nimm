@@ -67,6 +67,8 @@ type
     opTrollback     # Rollback transaction
     opXecute        # Fall back to AST for dynamic code
     opZloadxml      # ZLOADXML file, global, format
+    opKill          # KILL var (arg1 = name, "" = kill all locals)
+    opBreak         # BREAK (halt in bytecode VM)
     opNop           # No operation
 
   Instruction* = object

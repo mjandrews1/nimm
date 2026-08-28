@@ -372,6 +372,19 @@ proc execute*(vm: VM, bc: Bytecode): string =
       except:
         vm.push("0")
 
+    of opKill:
+      # KILL var (arg1 = name, "" = kill all locals)
+      let name = instr.arg1
+      if vm.globalsRef != nil:
+        if name.len == 0:
+          vm.globalsRef[].killAllLocal()
+        else:
+          vm.globalsRef[].kill(name, @[])
+
+    of opBreak:
+      # BREAK — halt in the bytecode VM (no interactive debugger)
+      vm.halted = true
+
     of opNop:
       discard
 

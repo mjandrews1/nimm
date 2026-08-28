@@ -198,7 +198,14 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opQuit)
 
   of cKill:
-    bc.addInstr(opNop)  # placeholder
+    if cmd.killRefs.len == 0:
+      bc.addInstr(opKill)  # arg1 = "" → kill all locals
+    else:
+      for refExpr in cmd.killRefs:
+        if refExpr.kind == eVar and refExpr.subs.len == 0:
+          bc.addInstr(opKill, arg1 = refExpr.vname)
+        else:
+          bc.addInstr(opXecute)  # subscripted/indirect → AST fallback
 
   of cNew:
     bc.addInstr(opNewScope, arg1 = cmd.newNames.join(","))
@@ -218,7 +225,7 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opNop)  # placeholder — needs GOTO compilation
 
   of cBreak:
-    bc.addInstr(opNop)  # placeholder
+    bc.addInstr(opBreak)
 
   of cXecute:
     bc.addInstr(opXecute)
