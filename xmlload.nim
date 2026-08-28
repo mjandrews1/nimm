@@ -129,6 +129,22 @@ proc subfieldsOf(blockText: string, code: string): seq[string] =
       if v.len > 0: result.add(v)
       pos = en
 
+proc extractEntryTerms(s: string): seq[string] =
+  ## Entry terms (synonyms) from TermList/Term/String, attribute-tolerant on
+  ## the <Term ...> opener. Used to build the ^MESHTERM search dictionary (#390).
+  result = @[]
+  var pos = 0
+  while true:
+    let st = s.find("<Term", pos)
+    if st < 0: break
+    let cs = s.find(">", st)
+    if cs < 0: break
+    let en = s.find("</Term>", cs)
+    if en < 0: break
+    let term = extractBetween(s[cs + 1 ..< en], "<String>", "</String>")
+    if term.len > 0: result.add(term)
+    pos = en + 7  # len("</Term>")
+
 proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
                   format: string): int =
   ## Stream-parse an NLM XML file into globals. Returns record count.
@@ -171,6 +187,12 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
             g.set(globalName, @[ui, "treeNumber", tree], "1")
           for qual in extractAll(buffer, "<QualifierUI>", "</QualifierUI>"):
             g.set(globalName, @[ui, "qualifier", qual], "1")
+          # entry-term search dictionary (#390): name="1", synonyms="0"
+          g.set("^MESHTERM", @[name.toLowerAscii, ui], "1")
+          for term in extractEntryTerms(buffer):
+            let t = term.toLowerAscii
+            if t.len > 0 and t != name.toLowerAscii:
+              g.set("^MESHTERM", @[t, ui], "0")
           inc count; flushBatch()
         buffer = ""
 
