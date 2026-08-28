@@ -35,7 +35,7 @@ for rec in root.findall(".//DescriptorRecord"):
     if scope:
         text += " " + scope[:120]
     docs.append((ui, text))
-    if len(docs) >= MAX_RECORDS:
+    if MAX_RECORDS > 0 and len(docs) >= MAX_RECORDS:
         break
 
 print(f"loaded {len(docs)} docs; embedding...", flush=True)
