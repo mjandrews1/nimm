@@ -43,6 +43,7 @@ type
     output*: string
     testValue*: bool
     quitAll*: bool  # Set by top-level QUIT: unwind everything and halt
+    quitValue*: string  # Top-level QUIT value → process exit code (#368)
     doDepth*: int   # DO/XECUTE/extrinsic frame depth (0 = top level)
     doScopeBase*: seq[int]  # scope depth at each frame entry (QUIT unwinds to top)
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
@@ -67,6 +68,7 @@ proc newEngine*(globals: var Globals, evaluator: var Evaluator, runtime: var Run
   result.testValue = false
   result.currentChannel = 0
   result.quitAll = false
+  result.quitValue = ""
   result.doDepth = 0
   result.doScopeBase = @[]
   result.jobTable = newJobTable()
@@ -391,7 +393,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.runtime[].etrapStack.setLen(eng.runtime[].etrapStack.len - 1)
             eng.globals[].setSpecialVar("$ETRAP", savedEtrap)
         if cmd.quitVal != nil:
-          discard eng.evaluator[].eval(cmd.quitVal)
+          let qv = eng.evaluator[].eval(cmd.quitVal)
+          if eng.doDepth == 0:
+            eng.quitValue = qv
         if eng.doDepth == 0:
           # Top-level QUIT: terminate execution entirely (ANSI/ISO 10.3)
           eng.quitAll = true
@@ -810,8 +814,13 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         if cmd.zsystemExpr != nil:
           cmdStr = eng.evaluator[].eval(cmd.zsystemExpr)
         if cmdStr.len > 0:
-          let exitCode = execShellCmd(cmdStr)
-          # Don't output exit code to stdout
+          # Capture child exit status + output (#368): $TEST = success,
+          # output surfaced via $ZSTATUS.
+          let (output, exitCode) = execCmdEx(cmdStr)
+          let ok = exitCode == 0
+          eng.testValue = ok
+          eng.globals[].setSpecialVar("$TEST", if ok: "1" else: "0")
+          setZsystemOutput(output.strip())
 
       of CmdKind.cZprint:
         if cmd.zprintExpr != nil and cmd.zprintExpr.kind == eVar:

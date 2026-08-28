@@ -28,6 +28,7 @@ var
   zstatus: string = ""  # $ZSTATUS - status
   ztrap: string = ""  # $ZTRAP - trap handler
   jobNumber: int = 0  # M job number for $JOB
+  argv: seq[string] = @[]  # script arguments for $ZARG (#368)
   isChildProcess: bool = false  # true if spawned by JOB command
   parentJobNum: int = 0  # parent's job number (negative in child)
   # $HOROLOG cache (1-second TTL)
@@ -109,6 +110,16 @@ proc getJob(): string =
 proc setJobNumber*(num: int) =
   ## Set the M job number for this process
   jobNumber = num
+
+proc setArgv*(args: seq[string]) =
+  ## Set script arguments for $ZARG (#368).
+  argv = args
+
+proc getZArg*(n: int): string =
+  ## $ZARG(n): nth script argument (1-based); "" if out of range (#368).
+  if n >= 1 and n <= argv.len:
+    return argv[n - 1]
+  return ""
 
 proc initChildJob*(parentNum: int) =
   ## Initialize as a child process spawned by JOB
@@ -256,6 +267,10 @@ proc getZstatus(): string =
 
 proc setZstatus(val: string) =
   zstatus = val
+
+proc setZsystemOutput*(output: string) =
+  ## Capture ZSYSTEM/$ZSYSTEM child output (#368), surfaced via $ZSTATUS.
+  zstatus = output
 
 proc getZtrap(): string =
   return ztrap

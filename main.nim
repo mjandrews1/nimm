@@ -51,6 +51,7 @@ type
     lint: bool          # --lint: analyze code without executing
     lintStrict: bool    # --lint-strict: exit non-zero on warnings/errors
     parentJobNum: int  # -p: parent M job number (set by JOB command)
+    argv: seq[string]  # positional script arguments ($ZARG)
 
 proc parseArgs(): CliArgs =
   result.code = ""
@@ -73,6 +74,7 @@ proc parseArgs(): CliArgs =
   result.lint = false
   result.lintStrict = false
   result.parentJobNum = 0
+  result.argv = @[]
 
   let args = os.commandLineParams()
   var i = 0
@@ -194,8 +196,10 @@ proc parseArgs(): CliArgs =
       else:
         discard
     else:
-      # Positional arg = code to execute
-      if result.code.len == 0:
+      # Positional arg — script argument ($ZARG); first is also code for
+      # backward-compat (nimm 'W 1') when no -x/-e/-r was given.
+      result.argv.add(arg)
+      if result.code.len == 0 and result.routineFiles.len == 0:
         result.code = arg
     inc i
 
@@ -226,6 +230,7 @@ proc main() =
   eng.useBytecode = args.useBytecode
   setDoDepthRef(eng.doDepth)
   ev.setInspector(eng.inspector)
+  setArgv(args.argv)
 
   # Detect if spawned by JOB command (child process mode)
   # Uses -p flag (preferred) or NIMM_PARENT_JOB env var (fallback)
@@ -651,6 +656,12 @@ proc main() =
       let output = eng.getOutput()
       if output.len > 0:
         echo output
+      # Reliable exit codes: top-level QUIT value → process exit status (#368)
+      if eng.quitValue.len > 0:
+        try:
+          quit(parseInt(eng.quitValue))
+        except ValueError:
+          quit(0)
       # Check for error indicators
       if result.startsWith("Error") or result.startsWith("M Error"):
         quit(1)

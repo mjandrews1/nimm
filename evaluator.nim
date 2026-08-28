@@ -6,6 +6,7 @@ import tables
 import math
 import random
 import os
+import osproc
 import times
 import posix
 import ast
@@ -19,6 +20,7 @@ import runtime
 import parser
 import lexer
 import inspector
+import special_vars
 
 # Shared empty seq — avoids @[] allocation on every bare variable access (#313)
 const emptySubs: seq[string] = @[]
@@ -1023,9 +1025,25 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return "0"
     except:
       return "0"
+  of "ZFILE":
+    # $ZFILE(path[, "exists"]) — file existence/size test (#368)
+    if args.len < 1: return ""
+    let path = args[0]
+    if args.len > 1 and args[1].toLowerAscii == "exists":
+      return if fileExists(path): "1" else: "0"
+    try:
+      return if fileExists(path): $getFileSize(path) else: ""
+    except:
+      return ""
+  of "ZARG":
+    # $ZARG(n) — nth command-line script argument (1-based) (#368)
+    let n = if args.len >= 1: parseInt(args[0]) else: 0
+    return getZArg(n)
   of "ZSYSTEM", "ZSY":
     if args.len < 1: return ""
-    return $execShellCmd(args[0])
+    let (output, exitCode) = execCmdEx(args[0])
+    setZsystemOutput(output.strip())
+    return $exitCode
   of "ZSTRIP":
     # $ZSTRIP(string, code) - Strip characters
     # Codes: "<" = leading, ">" = trailing, "*" = both
