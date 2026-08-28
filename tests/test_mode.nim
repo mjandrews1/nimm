@@ -11,8 +11,6 @@ proc main() =
   assert rtStrict.mode == Strict
   assert rtStrict.config.allowExtensions == false
   assert rtStrict.config.allowLowercase == false
-  assert rtStrict.config.maxIdentifierLen == 8
-  assert rtStrict.config.operatorPrecedence == false
   echo "✓ Strict mode configured"
   
   # Test RSM mode
@@ -20,8 +18,6 @@ proc main() =
   assert rtRSM.mode == RSM
   assert rtRSM.config.allowExtensions == false
   assert rtRSM.config.allowLowercase == true
-  assert rtRSM.config.maxIdentifierLen == 32
-  assert rtRSM.config.operatorPrecedence == false
   echo "✓ RSM mode configured"
   
   # Test nimm mode
@@ -29,8 +25,6 @@ proc main() =
   assert rtNimm.mode == nimm
   assert rtNimm.config.allowExtensions == true
   assert rtNimm.config.allowLowercase == true
-  assert rtNimm.config.maxIdentifierLen == 0
-  assert rtNimm.config.operatorPrecedence == true
   echo "✓ nimm mode configured"
   
   # Test default mode (should be nimm)

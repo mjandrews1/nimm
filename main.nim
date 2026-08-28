@@ -237,6 +237,7 @@ proc main() =
   ev.setInspector(eng.inspector)
   setArgv(args.argv)
   setPemdas(args.pemdas)
+  setLexerMode(rt.config.allowLowercase)
 
   # Detect if spawned by JOB command (child process mode)
   # Uses -p flag (preferred) or NIMM_PARENT_JOB env var (fallback)

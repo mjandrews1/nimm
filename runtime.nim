@@ -15,10 +15,8 @@ type
     nimm      # nimm extensions (data structures, network, $NI functions)
 
   ModeConfig* = object
-    allowExtensions*: bool      # Allow nimm extensions ($NI_, NI commands)
+    allowExtensions*: bool      # Allow nimm extensions ($NI_)
     allowLowercase*: bool       # Allow lowercase identifiers
-    maxIdentifierLen*: int      # Max identifier length (0 = unlimited)
-    operatorPrecedence*: bool   # Use PEMDAS vs left-to-right
 
   Routine* = object
     name*: string
@@ -61,18 +59,12 @@ proc getModeConfig*(mode: Mode): ModeConfig =
   of Strict:
     result.allowExtensions = false
     result.allowLowercase = false
-    result.maxIdentifierLen = 8
-    result.operatorPrecedence = false
   of RSM:
     result.allowExtensions = false
     result.allowLowercase = true
-    result.maxIdentifierLen = 32
-    result.operatorPrecedence = false
   of nimm:
     result.allowExtensions = true
     result.allowLowercase = true
-    result.maxIdentifierLen = 0
-    result.operatorPrecedence = true
 
 proc newRuntime*(mode: Mode = nimm): Runtime =
   result.routines = initTable[string, Routine]()

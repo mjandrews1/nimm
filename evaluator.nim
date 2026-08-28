@@ -493,6 +493,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
   # Record function call for introspection
   if ev.inspector != nil:
     ev.inspector[].recordFunctionCall()
+  # -m strict/rsm gate nimm extensions ($NI_*) (#385)
+  if name.startsWith("NI_") and ev.runtime != nil and
+     not ev.runtime[].config.allowExtensions:
+    return ""
   case name
   of "ASCII", "A":
     if args.len < 1: return "-1"

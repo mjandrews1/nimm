@@ -103,7 +103,8 @@ type
     tokOr,            # !
     tokQuestion,      # ?
     tokNotQuestion,   # '?
-    tokEof
+    tokEof,
+    tokErr            # mode-gate violation; text = message (#385)
 
   ## Token — A Single Lexical Token
   ##
@@ -146,6 +147,15 @@ type
 ## newLexer — Create a New Lexer
 proc newLexer*(src: string): Lexer =
   Lexer(src: src, pos: 0, line: 1, col: 1)
+
+# --- Mode gates (#385) ---
+# -m strict sets allowLowercaseLex = false; the word scanner then emits a
+# tokErr token for any identifier containing a lowercase letter, which the
+# parser raises as a syntax error.
+var allowLowercaseLex* = true
+
+proc setLexerMode*(allowLowercase: bool) =
+  allowLowercaseLex = allowLowercase
 
 ## peekAt — Look Ahead Without Consuming
 ##
@@ -314,6 +324,13 @@ proc nextToken*(lex: var Lexer): Token =
       inc wLen
       inc lex.pos
     w.setLen(wLen)
+    # -m strict disallows lowercase identifiers (#385)
+    if not allowLowercaseLex:
+      for i in 0 ..< wLen:
+        if w[i] in {'a'..'z'}:
+          return Token(kind: tokErr,
+            text: "lowercase identifiers not allowed in this mode: " & w,
+            start: start, line: startLine, col: startCol)
     return Token(kind: tokWord, text: w, start: start, line: startLine, col: startCol)
 
   # Operators and delimiters

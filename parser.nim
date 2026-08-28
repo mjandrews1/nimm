@@ -249,6 +249,8 @@ proc readWord(p: var Parser): string =
   let t = p.advance()
   if t.kind == tokWord:
     t.text
+  elif t.kind == tokErr:
+    raise newException(ValueError, t.text)
   else:
     ""
 
@@ -861,6 +863,8 @@ proc parseLine*(p: var Parser, inBody: bool = false): Line =
         continue
     if p.atCommandPos():
       result.cmds.add parseCommand(p)
+    elif p.peek() == tokErr:
+      raise newException(ValueError, p.cur.text)
     elif p.peek() == tokWord and precededByWs(p, p.cur):
       # Unknown bareword at command position — syntax error (#369)
       let bad = p.cur.text

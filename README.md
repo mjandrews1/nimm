@@ -77,6 +77,14 @@ nimm --lint -r file.m      Lint routines without executing
 nimm --lint-strict -r file.m  Lint; exit non-zero on warnings/errors
 ```
 
+The `-m MODE` flag selects a language dialect (default `nimm`):
+
+| Mode | Lowercase identifiers | `$NI_*` extensions |
+|------|-----------------------|--------------------|
+| `strict` | rejected | rejected |
+| `rsm`    | allowed | rejected |
+| `nimm`   | allowed | allowed |
+
 ## Supported Functions
 
 See [FUNCTIONS.md](FUNCTIONS.md) for complete function reference.
