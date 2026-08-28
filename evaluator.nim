@@ -42,6 +42,26 @@ var niMaps: Table[string, NiMap] = initTable[string, NiMap]()
 var niSorted: Table[string, NiSorted] = initTable[string, NiSorted]()
 var niDeques: Table[string, NiDeque] = initTable[string, NiDeque]()
 var niBags: Table[string, NiBag] = initTable[string, NiBag]()
+var niHeaps: Table[string, NiHeap] = initTable[string, NiHeap]()
+var niRings: Table[string, NiRing] = initTable[string, NiRing]()
+var niLrus: Table[string, NiLRU] = initTable[string, NiLRU]()
+var niBitSets: Table[string, NiBitSet] = initTable[string, NiBitSet]()
+var niTries: Table[string, NiTrie] = initTable[string, NiTrie]()
+var niGraphs: Table[string, NiGraph] = initTable[string, NiGraph]()
+var niMatrices: Table[string, NiMatrix] = initTable[string, NiMatrix]()
+var niBlooms: Table[string, NiBloom] = initTable[string, NiBloom]()
+var niSkipLists: Table[string, NiSkipList] = initTable[string, NiSkipList]()
+var niTreaps: Table[string, NiTreap] = initTable[string, NiTreap]()
+var niDisjointSets: Table[string, NiDisjointSet] = initTable[string, NiDisjointSet]()
+var niSegTrees: Table[string, NiSegmentTree] = initTable[string, NiSegmentTree]()
+var niFenwicks: Table[string, NiFenwickTree] = initTable[string, NiFenwickTree]()
+var niSparse: Table[string, NiSparseMatrix] = initTable[string, NiSparseMatrix]()
+var niIntervals: Table[string, NiIntervalTree] = initTable[string, NiIntervalTree]()
+var niSuffixes: Table[string, NiSuffixArray] = initTable[string, NiSuffixArray]()
+var niWavelets: Table[string, NiWaveletTree] = initTable[string, NiWaveletTree]()
+var niKdTrees: Table[string, NiKdTree] = initTable[string, NiKdTree]()
+var niRopes: Table[string, NiRope] = initTable[string, NiRope]()
+var niMerkles: Table[string, NiMerkleTree] = initTable[string, NiMerkleTree]()
 
 # $ZDATETIME cache (keyed by horolog string, 1-second TTL)
 var zdtCacheHorolog: string = ""
@@ -1490,6 +1510,704 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     of "destroy":
       if id in niBags:
         niBags.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_HEAP":
+    # $NI_HEAP(action, id, ...) — Min-heap priority queue operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niHeaps[id] = newHeap()
+      return id
+    of "push":
+      if args.len < 3: return ""
+      if id notin niHeaps: return ""
+      niHeaps[id].push(args[2])
+      return $niHeaps[id].len
+    of "pop":
+      if id notin niHeaps: return ""
+      return niHeaps[id].pop()
+    of "peek":
+      if id notin niHeaps: return ""
+      return niHeaps[id].peek()
+    of "len":
+      if id notin niHeaps: return "0"
+      return $niHeaps[id].len
+    of "destroy":
+      if id in niHeaps:
+        niHeaps.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_RING":
+    # $NI_RING(action, id, ...) — Ring buffer operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niRings[id] = newRing(parseInt(args[2]))
+      return id
+    of "push":
+      if args.len < 3: return ""
+      if id notin niRings: return ""
+      niRings[id].push(args[2])
+      return $niRings[id].len
+    of "pop":
+      if id notin niRings: return ""
+      return niRings[id].pop()
+    of "peek":
+      if id notin niRings: return ""
+      return niRings[id].peek()
+    of "len":
+      if id notin niRings: return "0"
+      return $niRings[id].len
+    of "isfull":
+      if id notin niRings: return "0"
+      return if niRings[id].isFull(): "1" else: "0"
+    of "isempty":
+      if id notin niRings: return "0"
+      return if niRings[id].isEmpty(): "1" else: "0"
+    of "toseq":
+      if id notin niRings: return ""
+      return niRings[id].toSeq().join(",")
+    of "destroy":
+      if id in niRings:
+        niRings.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_LRU":
+    # $NI_LRU(action, id, ...) — LRU cache operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niLrus[id] = newLRU(parseInt(args[2]))
+      return id
+    of "put":
+      if args.len < 4: return ""
+      if id notin niLrus: return ""
+      niLrus[id].put(args[2], args[3])
+      return "1"
+    of "get":
+      if args.len < 3: return ""
+      if id notin niLrus: return ""
+      return niLrus[id].get(args[2])
+    of "has":
+      if args.len < 3: return ""
+      if id notin niLrus: return "0"
+      return if niLrus[id].has(args[2]): "1" else: "0"
+    of "len":
+      if id notin niLrus: return "0"
+      return $niLrus[id].len
+    of "clear":
+      if id notin niLrus: return ""
+      niLrus[id].clear()
+      return "1"
+    of "destroy":
+      if id in niLrus:
+        niLrus.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_BITSET":
+    # $NI_BITSET(action, id, ...) — Bit set operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niBitSets[id] = newBitSet(parseInt(args[2]))
+      return id
+    of "set":
+      if args.len < 3: return ""
+      if id notin niBitSets: return ""
+      niBitSets[id].set(parseInt(args[2]))
+      return "1"
+    of "clear":
+      if id notin niBitSets: return ""
+      if args.len >= 3:
+        niBitSets[id].clear(parseInt(args[2]))
+      else:
+        niBitSets[id].clear()
+      return "1"
+    of "test":
+      if args.len < 3: return ""
+      if id notin niBitSets: return "0"
+      return if niBitSets[id].test(parseInt(args[2])): "1" else: "0"
+    of "count":
+      if id notin niBitSets: return "0"
+      return $niBitSets[id].count()
+    of "destroy":
+      if id in niBitSets:
+        niBitSets.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_TRIE":
+    # $NI_TRIE(action, id, ...) — Trie operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niTries[id] = newTrie()
+      return id
+    of "insert":
+      if args.len < 3: return ""
+      if id notin niTries: return ""
+      let val = if args.len >= 4: args[3] else: ""
+      niTries[id].insert(args[2], val)
+      return "1"
+    of "search":
+      if args.len < 3: return ""
+      if id notin niTries: return "0"
+      return if niTries[id].search(args[2]): "1" else: "0"
+    of "get":
+      if args.len < 3: return ""
+      if id notin niTries: return ""
+      return niTries[id].get(args[2])
+    of "startswith":
+      if args.len < 3: return ""
+      if id notin niTries: return "0"
+      return if niTries[id].startsWith(args[2]): "1" else: "0"
+    of "autocomplete":
+      if args.len < 3: return ""
+      if id notin niTries: return ""
+      return niTries[id].autocomplete(args[2]).join(",")
+    of "destroy":
+      if id in niTries:
+        niTries.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_GRAPH":
+    # $NI_GRAPH(action, id, ...) — Graph operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len >= 3 and args[2].toLowerAscii in ["0", "false", "no"]:
+        niGraphs[id] = newGraph(false)
+      else:
+        niGraphs[id] = newGraph(true)
+      return id
+    of "addnode":
+      if args.len < 3: return ""
+      if id notin niGraphs: return ""
+      niGraphs[id].addNode(args[2])
+      return "1"
+    of "addedge":
+      if args.len < 4: return ""
+      if id notin niGraphs: return ""
+      let w = if args.len >= 5: parseFloat(args[4]) else: 1.0
+      niGraphs[id].addEdge(args[2], args[3], w)
+      return "1"
+    of "neighbors":
+      if args.len < 3: return ""
+      if id notin niGraphs: return ""
+      let ns = niGraphs[id].neighbors(args[2])
+      var names: seq[string] = @[]
+      for pair in ns:
+        names.add(pair[0])
+      return names.join(",")
+    of "hasnode":
+      if args.len < 3: return ""
+      if id notin niGraphs: return "0"
+      return if niGraphs[id].hasNode(args[2]): "1" else: "0"
+    of "hasedge":
+      if args.len < 4: return ""
+      if id notin niGraphs: return "0"
+      return if niGraphs[id].hasEdge(args[2], args[3]): "1" else: "0"
+    of "nodecount":
+      if id notin niGraphs: return "0"
+      return $niGraphs[id].nodeCount()
+    of "edgecount":
+      if id notin niGraphs: return "0"
+      return $niGraphs[id].edgeCount()
+    of "dfs":
+      if args.len < 3: return ""
+      if id notin niGraphs: return ""
+      return niGraphs[id].dfs(args[2]).join(",")
+    of "bfs":
+      if args.len < 3: return ""
+      if id notin niGraphs: return ""
+      return niGraphs[id].bfs(args[2]).join(",")
+    of "destroy":
+      if id in niGraphs:
+        niGraphs.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_MATRIX":
+    # $NI_MATRIX(action, id, ...) — Dense matrix operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 4: return ""
+      niMatrices[id] = newMatrix(parseInt(args[2]), parseInt(args[3]))
+      return id
+    of "set":
+      if args.len < 5: return ""
+      if id notin niMatrices: return ""
+      niMatrices[id].set(parseInt(args[2]), parseInt(args[3]), parseFloat(args[4]))
+      return "1"
+    of "get":
+      if args.len < 4: return ""
+      if id notin niMatrices: return ""
+      return formatNumber(niMatrices[id].get(parseInt(args[2]), parseInt(args[3])))
+    of "rows":
+      if id notin niMatrices: return "0"
+      return $niMatrices[id].rows()
+    of "cols":
+      if id notin niMatrices: return "0"
+      return $niMatrices[id].cols()
+    of "tostring":
+      if id notin niMatrices: return ""
+      return niMatrices[id].toString()
+    of "destroy":
+      if id in niMatrices:
+        niMatrices.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_BLOOM":
+    # $NI_BLOOM(action, id, ...) — Bloom filter operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      let hc = if args.len >= 4: parseInt(args[3]) else: 3
+      niBlooms[id] = newBloom(parseInt(args[2]), hc)
+      return id
+    of "add":
+      if args.len < 3: return ""
+      if id notin niBlooms: return ""
+      niBlooms[id].add(args[2])
+      return "1"
+    of "contains":
+      if args.len < 3: return ""
+      if id notin niBlooms: return "0"
+      return if niBlooms[id].contains(args[2]): "1" else: "0"
+    of "clear":
+      if id notin niBlooms: return ""
+      niBlooms[id].clear()
+      return "1"
+    of "destroy":
+      if id in niBlooms:
+        niBlooms.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SKIPLIST":
+    # $NI_SKIPLIST(action, id, ...) — Skip list operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      let ml = if args.len >= 3: parseInt(args[2]) else: 16
+      niSkipLists[id] = newSkipList(ml)
+      return id
+    of "insert":
+      if args.len < 3: return ""
+      if id notin niSkipLists: return ""
+      niSkipLists[id].insert(args[2])
+      return "1"
+    of "search":
+      if args.len < 3: return ""
+      if id notin niSkipLists: return "0"
+      return if niSkipLists[id].search(args[2]): "1" else: "0"
+    of "len":
+      if id notin niSkipLists: return "0"
+      return $niSkipLists[id].len
+    of "destroy":
+      if id in niSkipLists:
+        niSkipLists.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_TREAP":
+    # $NI_TREAP(action, id, ...) — Treap operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niTreaps[id] = newTreap()
+      return id
+    of "insert":
+      if args.len < 3: return ""
+      if id notin niTreaps: return ""
+      niTreaps[id].insert(args[2])
+      return "1"
+    of "search":
+      if args.len < 3: return ""
+      if id notin niTreaps: return "0"
+      return if niTreaps[id].search(args[2]): "1" else: "0"
+    of "len":
+      if id notin niTreaps: return "0"
+      return $niTreaps[id].len
+    of "destroy":
+      if id in niTreaps:
+        niTreaps.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_DSET":
+    # $NI_DSET(action, id, ...) — Disjoint set operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niDisjointSets[id] = newDisjointSet(parseInt(args[2]))
+      return id
+    of "union":
+      if args.len < 4: return ""
+      if id notin niDisjointSets: return ""
+      niDisjointSets[id].union(parseInt(args[2]), parseInt(args[3]))
+      return "1"
+    of "find":
+      if args.len < 3: return ""
+      if id notin niDisjointSets: return ""
+      return $niDisjointSets[id].find(parseInt(args[2]))
+    of "connected":
+      if args.len < 4: return ""
+      if id notin niDisjointSets: return "0"
+      return if niDisjointSets[id].connected(parseInt(args[2]), parseInt(args[3])): "1" else: "0"
+    of "count":
+      if id notin niDisjointSets: return "0"
+      return $niDisjointSets[id].componentCount()
+    of "destroy":
+      if id in niDisjointSets:
+        niDisjointSets.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SEGTREE":
+    # $NI_SEGTREE(action, id, ...) — Segment tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      let op = if args.len >= 4: args[3] else: "sum"
+      niSegTrees[id] = newSegmentTree(parseInt(args[2]), op)
+      return id
+    of "setdata":
+      if id notin niSegTrees: return ""
+      niSegTrees[id].data = newSeq[int](args.len - 2)
+      for i in 2 ..< args.len:
+        try: niSegTrees[id].data[i - 2] = parseInt(args[i])
+        except: discard
+      return "1"
+    of "build":
+      if id notin niSegTrees: return "0"
+      if niSegTrees[id].n < 1: return "0"
+      niSegTrees[id].build(1, 0, niSegTrees[id].n - 1)
+      return "1"
+    of "update":
+      if args.len < 4: return ""
+      if id notin niSegTrees: return ""
+      niSegTrees[id].update(1, 0, niSegTrees[id].n - 1, parseInt(args[2]), parseInt(args[3]))
+      return "1"
+    of "query":
+      if args.len < 4: return ""
+      if id notin niSegTrees: return "0"
+      return $niSegTrees[id].query(1, 0, niSegTrees[id].n - 1, parseInt(args[2]), parseInt(args[3]))
+    of "len":
+      if id notin niSegTrees: return "0"
+      return $niSegTrees[id].n
+    of "destroy":
+      if id in niSegTrees:
+        niSegTrees.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_FENWICK":
+    # $NI_FENWICK(action, id, ...) — Fenwick tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niFenwicks[id] = newFenwickTree(parseInt(args[2]))
+      return id
+    of "update":
+      if args.len < 4: return ""
+      if id notin niFenwicks: return ""
+      niFenwicks[id].update(parseInt(args[2]), parseInt(args[3]))
+      return "1"
+    of "query":
+      if args.len < 3: return ""
+      if id notin niFenwicks: return "0"
+      return $niFenwicks[id].query(parseInt(args[2]))
+    of "range":
+      if args.len < 4: return ""
+      if id notin niFenwicks: return "0"
+      return $niFenwicks[id].rangeQuery(parseInt(args[2]), parseInt(args[3]))
+    of "len":
+      if id notin niFenwicks: return "0"
+      return $niFenwicks[id].n
+    of "destroy":
+      if id in niFenwicks:
+        niFenwicks.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SPARSE":
+    # $NI_SPARSE(action, id, ...) — Sparse matrix operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 4: return ""
+      niSparse[id] = newSparseMatrix(parseInt(args[2]), parseInt(args[3]))
+      return id
+    of "set":
+      if args.len < 5: return ""
+      if id notin niSparse: return ""
+      niSparse[id].set(parseInt(args[2]), parseInt(args[3]), parseFloat(args[4]))
+      return "1"
+    of "get":
+      if args.len < 4: return ""
+      if id notin niSparse: return ""
+      return formatNumber(niSparse[id].get(parseInt(args[2]), parseInt(args[3])))
+    of "nnz":
+      if id notin niSparse: return "0"
+      return $niSparse[id].nnz()
+    of "rows":
+      if id notin niSparse: return "0"
+      return $niSparse[id].rows
+    of "cols":
+      if id notin niSparse: return "0"
+      return $niSparse[id].cols
+    of "destroy":
+      if id in niSparse:
+        niSparse.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_ITREE":
+    # $NI_ITREE(action, id, ...) — Interval tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      niIntervals[id] = newIntervalTree()
+      return id
+    of "insert":
+      if args.len < 4: return ""
+      if id notin niIntervals: return ""
+      let data = if args.len >= 5: args[4] else: ""
+      niIntervals[id].insert(parseInt(args[2]), parseInt(args[3]), data)
+      return "1"
+    of "query":
+      if args.len < 4: return ""
+      if id notin niIntervals: return ""
+      let res = niIntervals[id].query(parseInt(args[2]), parseInt(args[3]))
+      var parts: seq[string] = @[]
+      for it in res:
+        parts.add($it.low & "-" & $it.high)
+      return parts.join(",")
+    of "destroy":
+      if id in niIntervals:
+        niIntervals.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_SUFFIX":
+    # $NI_SUFFIX(action, id, ...) — Suffix array operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niSuffixes[id] = newSuffixArray(args[2])
+      return id
+    of "search":
+      if args.len < 3: return ""
+      if id notin niSuffixes: return ""
+      let res = niSuffixes[id].search(args[2])
+      var parts: seq[string] = @[]
+      for p in res:
+        parts.add($p)
+      return parts.join(",")
+    of "len":
+      if id notin niSuffixes: return "0"
+      return $niSuffixes[id].sa.len
+    of "destroy":
+      if id in niSuffixes:
+        niSuffixes.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_WAVELET":
+    # $NI_WAVELET(action, id, ...) — Wavelet tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      var data: seq[int] = @[]
+      for i in 2 ..< args.len:
+        try: data.add(parseInt(args[i]))
+        except: discard
+      niWavelets[id] = newWaveletTree(data)
+      return id
+    of "range":
+      if args.len < 5: return ""
+      if id notin niWavelets: return "0"
+      return $niWavelets[id].rangeRank(parseInt(args[2]), parseInt(args[3]), parseInt(args[4]))
+    of "min":
+      if id notin niWavelets: return "0"
+      return $niWavelets[id].minVal
+    of "max":
+      if id notin niWavelets: return "0"
+      return $niWavelets[id].maxVal
+    of "len":
+      if id notin niWavelets: return "0"
+      return $niWavelets[id].data.len
+    of "destroy":
+      if id in niWavelets:
+        niWavelets.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_KDTREE":
+    # $NI_KDTREE(action, id, ...) — K-d tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niKdTrees[id] = newKdTree(parseInt(args[2]))
+      return id
+    of "insert":
+      if id notin niKdTrees: return ""
+      let dims = niKdTrees[id].dimensions
+      if args.len < 2 + dims: return ""
+      var coords: seq[float] = @[]
+      for i in 0 ..< dims:
+        try: coords.add(parseFloat(args[2 + i]))
+        except: return ""
+      let data = if args.len > 2 + dims: args[2 + dims] else: ""
+      niKdTrees[id].insert(coords, data)
+      return "1"
+    of "nearest":
+      if id notin niKdTrees: return ""
+      let dims = niKdTrees[id].dimensions
+      if args.len < 2 + dims: return ""
+      var coords: seq[float] = @[]
+      for i in 0 ..< dims:
+        try: coords.add(parseFloat(args[2 + i]))
+        except: return ""
+      return niKdTrees[id].nearest(coords).data
+    of "destroy":
+      if id in niKdTrees:
+        niKdTrees.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_ROPE":
+    # $NI_ROPE(action, id, ...) — Rope operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      niRopes[id] = newRope(args[2])
+      return id
+    of "concat":
+      if args.len < 4: return ""
+      if id notin niRopes or args[2] notin niRopes: return ""
+      niRopes[args[3]] = concat(niRopes[id], niRopes[args[2]])
+      return args[3]
+    of "tostring":
+      if id notin niRopes: return ""
+      return niRopes[id].toString()
+    of "substring":
+      if args.len < 4: return ""
+      if id notin niRopes: return ""
+      return niRopes[id].substring(parseInt(args[2]), parseInt(args[3]))
+    of "len":
+      if id notin niRopes: return "0"
+      return $niRopes[id].length
+    of "destroy":
+      if id in niRopes:
+        niRopes.del(id)
+        return "1"
+      return "0"
+    else:
+      return ""
+  of "NI_MERKLE":
+    # $NI_MERKLE(action, id, ...) — Merkle tree operations
+    if args.len < 2: return ""
+    let action = args[0].toLowerAscii
+    let id = args[1]
+    case action
+    of "create":
+      if args.len < 3: return ""
+      var leaves: seq[string] = @[]
+      for i in 2 ..< args.len:
+        leaves.add(args[i])
+      niMerkles[id] = newMerkleTree(leaves)
+      return id
+    of "root":
+      if id notin niMerkles: return ""
+      return niMerkles[id].rootHash()
+    of "verify":
+      if args.len < 4: return ""
+      if id notin niMerkles: return "0"
+      return if niMerkles[id].verify(parseInt(args[2]), args[3]): "1" else: "0"
+    of "leafcount":
+      if id notin niMerkles: return "0"
+      return $niMerkles[id].leafCount()
+    of "destroy":
+      if id in niMerkles:
+        niMerkles.del(id)
         return "1"
       return "0"
     else:

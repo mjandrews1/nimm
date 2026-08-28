@@ -94,8 +94,29 @@ See [FUNCTIONS.md](FUNCTIONS.md) for complete function reference.
 
 ### nimm Extensions
 - Data structures: $NI_ARRAY, $NI_OBJECT, $NI_STACK, $NI_QUEUE, $NI_SET, $NI_MAP, $NI_SORTED, $NI_DEQUE, $NI_BAG
+- Advanced data structures: $NI_HEAP, $NI_RING, $NI_LRU, $NI_BITSET, $NI_TRIE, $NI_GRAPH, $NI_MATRIX, $NI_BLOOM, $NI_SKIPLIST, $NI_TREAP, $NI_DSET, $NI_SEGTREE, $NI_FENWICK, $NI_SPARSE, $NI_ITREE, $NI_SUFFIX, $NI_WAVELET, $NI_KDTREE, $NI_ROPE, $NI_MERKLE
 - Network: $NI_HTTP, $NI_JSON, $NI_UUID, $NI_SLEEP
 - System: $NI_SYSTEM(subscript) — hostname, pid, uid, cwd, arch, os, version, cpu_count, env:KEY
+
+The advanced data structures are used as `$NI_<TYPE>("create","id",...)` to
+allocate a named instance, then `$NI_<TYPE>("<action>","id",...)` to operate on
+it. Each returns a status/value string. Examples:
+
+```
+WRITE $NI_HEAP("create","h")                    ; -> "h"
+WRITE $NI_HEAP("push","h","apple")              ; -> 1 (size)
+WRITE $NI_HEAP("peek","h")                      ; -> "apple" (min)
+WRITE $NI_MATRIX("create","m",2,2)              ; -> "m"
+WRITE $NI_MATRIX("set","m",0,0,3.5)             ; -> 1
+WRITE $NI_SEGTREE("create","s",5)               ; -> "s"
+WRITE $NI_SEGTREE("setdata","s",1,2,3,4,5)      ; -> 1
+WRITE $NI_SEGTREE("build","s")                  ; -> 1
+WRITE $NI_SEGTREE("query","s",0,4)              ; -> 15
+```
+
+Common actions: `create`, `destroy`, plus type-specific verbs (e.g. `push`/`pop`
+for $NI_HEAP, `put`/`get`/`has` for $NI_LRU, `insert`/`query` for
+$NI_SEGTREE/$NI_ITREE, `verify`/`root` for $NI_MERKLE).
 
 ## Commands
 
