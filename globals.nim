@@ -274,6 +274,17 @@ proc killGlobal*(g: var Globals, name: string, subs: seq[string] = @[]) =
     return
   g.globals.deletePrefix(name, subs)
 
+proc killValueOnly*(g: var Globals, name: string, subs: seq[string] = @[]) =
+  ## ZKILL: kill the node's value but keep descendants (unlike KILL §7.2.9).
+  if name.len > 0 and name[0] == '^':
+    if g.dbPath.len == 0:
+      g.memGlobals.del(makeKey(name, subs))
+    else:
+      g.globals.delete(name, subs)
+  else:
+    g.ensureWritable()
+    g.scopes[^1].del(makeKey(name, subs))
+
 # --- Batch write operations ---
 
 proc beginWriteBatch*(g: var Globals) =
@@ -477,6 +488,25 @@ proc tupCollationCmp(a, b: seq[string]): int =
     let c = mCollationCmp(a[i], b[i])
     if c != 0: return c
   return system.cmp(a.len, b.len)
+
+proc listNodes*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[string]] =
+  ## All strict descendants of name[subs] in DFS pre-order (for ZWRITE).
+  ## Includes every node with a value or children below the given node.
+  if name.len > 0 and name[0] == '^':
+    if g.dbPath.len == 0:
+      let prefix = makeKey(name, subs) & "\x00"
+      for k in g.memGlobals.keys:
+        if k.startsWith(prefix):
+          result.add(subs & k[prefix.len ..^ 1].split('\x00'))
+      result.sort(tupCollationCmp)
+    else:
+      result = g.globals.listSubs(name, subs)
+  else:
+    let prefix = makeKey(name, subs) & "\x00"
+    for k in g.scopes[^1].keys:
+      if k.startsWith(prefix):
+        result.add(subs & k[prefix.len ..^ 1].split('\x00'))
+    result.sort(tupCollationCmp)
 
 proc queryGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool): seq[string] =
   ## $QUERY over the in-memory global store: next node in DFS pre-order

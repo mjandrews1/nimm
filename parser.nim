@@ -1005,9 +1005,15 @@ proc parseCommand(p: var Parser): CommandNode =
   of "READ", "R":
     cmd = Cmd(kind: cRead, readVars: parseExprList(p))
   of "ZWRITE":
-    cmd = Cmd(kind: cZwrite, zwriteExpr: p.parseExpr())
+    var e: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      e = p.parseExpr()
+    cmd = Cmd(kind: cZwrite, zwriteExpr: e)
   of "ZKILL":
-    cmd = Cmd(kind: cZkill, zkillExpr: p.parseExpr())
+    var e: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      e = p.parseExpr()
+    cmd = Cmd(kind: cZkill, zkillExpr: e)
   of "ZHALT":
     var haltCode: Expr = nil
     if isExprStart(p) and not p.atCommandPos():

@@ -118,6 +118,40 @@ proc lockRefName(ev: var Evaluator, e: Expr): string =
   else:
     return ev.eval(e)
 
+proc resolveVarRef(ev: var Evaluator, e: Expr): (string, seq[string]) =
+  ## Resolve a variable reference to (name, subs). Bare names / indirection.
+  case e.kind
+  of eVar:
+    var subs: seq[string] = @[]
+    for sub in e.subs:
+      subs.add(ev.eval(sub))
+    return (e.vname, subs)
+  else:
+    return (ev.eval(e), @[])
+
+proc writeVarNode(eng: var Engine, name: string, subs: seq[string]) =
+  ## ZWRITE a single node: name=value or name("sub",...)=value.
+  var s = name
+  if subs.len > 0:
+    s.add("(")
+    for i, sub in subs:
+      if i > 0: s.add(",")
+      s.add("\"" & sub & "\"")
+    s.add(")")
+  s.add("=")
+  s.add("\"" & eng.globals[].get(name, subs) & "\"")
+  eng.writeln(s)
+
+proc writeVarTree(eng: var Engine, name: string, base: seq[string]) =
+  ## ZWRITE a node and all descendants that have values, in DFS pre-order.
+  let d = eng.globals[].data(name, base)
+  if d == 1 or d == 11:
+    eng.writeVarNode(name, base)
+  for node in eng.globals[].listNodes(name, base):
+    let nd = eng.globals[].data(name, node)
+    if nd == 1 or nd == 11:
+      eng.writeVarNode(name, node)
+
 
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
   ## Execute a line of M code (Line is already ref object)
@@ -787,6 +821,24 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             let line = eng.runtime[].getLine(routine, label, 0)
             if line.len > 0:
               eng.writeln(line)
+
+      of CmdKind.cZwrite:
+        # ZWRITE [expr] — display variable(s) with structure (#386).
+        if cmd.zwriteExpr == nil:
+          # Bare ZWRITE: all local variables in the current scope.
+          for key in eng.globals[].scopes[^1].keys:
+            let base = key.split('\x00')[0]
+            eng.writeln(base & "=\"" & eng.globals[].getLocalDirect(base) & "\"")
+        else:
+          let (name, subs) = resolveVarRef(eng.evaluator[], cmd.zwriteExpr)
+          if name.len > 0:
+            eng.writeVarTree(name, subs)
+
+      of CmdKind.cZkill:
+        # ZKILL expr — kill the node's value but keep descendants (#386).
+        let (name, subs) = resolveVarRef(eng.evaluator[], cmd.zkillExpr)
+        if name.len > 0:
+          eng.globals[].killValueOnly(name, subs)
 
       of CmdKind.cZload:
         # ZLOAD routine - Load a routine
