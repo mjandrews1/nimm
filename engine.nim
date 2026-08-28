@@ -975,7 +975,22 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
               offset.inc
 
       of CmdKind.cZquit:
-        # ZQUIT — Exit with value (Z-version of QUIT)
+        # ZQUIT [val] — RSM alias for QUIT; honors the value argument (#387).
+        # Mirrors cQuit's scope unwinding + top-level quit value handling.
+        let base = if eng.doScopeBase.len > 0: eng.doScopeBase[^1] else: 1
+        while eng.globals[].scopes.len > base:
+          eng.globals[].popScope()
+          if eng.runtime[].etrapStack.len > 0:
+            let savedEtrap = eng.runtime[].etrapStack[^1]
+            eng.runtime[].etrapStack.setLen(eng.runtime[].etrapStack.len - 1)
+            eng.globals[].setSpecialVar("$ETRAP", savedEtrap)
+        if cmd.zquitExpr != nil:
+          let qv = eng.evaluator[].eval(cmd.zquitExpr)
+          if eng.doDepth == 0:
+            eng.quitValue = qv
+        if eng.doDepth == 0:
+          eng.quitAll = true
+          return ""
         return "QUIT"
 
       of CmdKind.cZedit:

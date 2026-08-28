@@ -1171,11 +1171,10 @@ proc parseCommand(p: var Parser): CommandNode =
   of "ZVHISTORY":
     cmd = Cmd(kind: cZvhistory)
   of "OPEN", "O":
-    # OPEN channel:(file:mode)[:timeout]
+    # OPEN channel:(file:mode)
     let channelExpr = p.parseExpr()
     var deviceExpr = Expr(kind: eStr, sval: "")
     var modeExpr = Expr(kind: eStr, sval: "IO")
-    var timeoutExpr: Expr = nil
     
     if p.peek() == tokColon:
       discard p.advance()  # consume :
@@ -1185,21 +1184,14 @@ proc parseCommand(p: var Parser): CommandNode =
         if p.peek() == tokColon:
           discard p.advance()  # consume :
           modeExpr = p.parseExpr()
-          if p.peek() == tokColon:
-            discard p.advance()  # consume :
-            timeoutExpr = p.parseExpr()
         if p.peek() == tokRParen:
           discard p.advance()  # consume )
     
-    cmd = Cmd(kind: cOpen, openChannel: channelExpr, openDevice: deviceExpr, openMode: modeExpr, openTimeout: timeoutExpr)
+    cmd = Cmd(kind: cOpen, openChannel: channelExpr, openDevice: deviceExpr, openMode: modeExpr)
   of "USE", "U":
-    # USE channel[:params]
+    # USE channel
     let channelExpr = p.parseExpr()
-    var paramsExpr: Expr = nil
-    if p.peek() == tokColon:
-      discard p.advance()  # consume :
-      paramsExpr = p.parseExpr()
-    cmd = Cmd(kind: cUse, useChannel: channelExpr, useParams: paramsExpr)
+    cmd = Cmd(kind: cUse, useChannel: channelExpr)
   of "CLOSE", "C":
     # CLOSE channel
     let channelExpr = p.parseExpr()
@@ -1207,19 +1199,13 @@ proc parseCommand(p: var Parser): CommandNode =
   of "YOPEN", "YLISTEN", "YREAD", "YWRITE", "YCLOSE":
     cmd = Cmd(kind: cNoop)
   of "TSTART", "T":
-    var tstartExpr: Expr = nil
-    if isExprStart(p) and not p.atCommandPos():
-      tstartExpr = p.parseExpr()
-    cmd = Cmd(kind: cTstart, tstartExpr: tstartExpr)
+    cmd = Cmd(kind: cTstart)
   of "TCOMMIT", "TC":
     cmd = Cmd(kind: cTcommit)
   of "TROLLBACK", "TRO":
     cmd = Cmd(kind: cTrollback)
   of "ZANALYZE":
-    var zanalyzeExpr: Expr = nil
-    if isExprStart(p) and not p.atCommandPos():
-      zanalyzeExpr = p.parseExpr()
-    cmd = Cmd(kind: cZanalyze, zanalyzeExpr: zanalyzeExpr)
+    cmd = Cmd(kind: cZanalyze)
   of "NIOPEN":
     let protocol = p.parseExpr()
     var host = Expr(kind: eStr, sval: "")
@@ -1417,13 +1403,10 @@ proc parseEntryRef(p: var Parser): Expr =
     if p.peek() == tokLParen:
       discard p.advance()
       while p.peek() != tokRParen and p.peek() != tokEof:
-        var byRef = false
         if p.peek() == tokDot:
-          byRef = true
-          discard p.advance()
+          discard p.advance()   # .param accepted; args always bound by value (#387)
         let argExpr = p.parseExpr()
         result.entryArgs.add(argExpr)
-        result.entryByRef.add(byRef)
         if p.peek() == tokComma:
           discard p.advance()
       if p.peek() == tokRParen:
@@ -1439,13 +1422,10 @@ proc parseEntryRef(p: var Parser): Expr =
     if p.peek() == tokLParen:
       discard p.advance()
       while p.peek() != tokRParen and p.peek() != tokEof:
-        var byRef = false
         if p.peek() == tokDot:
-          byRef = true
-          discard p.advance()
+          discard p.advance()   # .param accepted; args always bound by value (#387)
         let argExpr = p.parseExpr()
         result.entryArgs.add(argExpr)
-        result.entryByRef.add(byRef)
         if p.peek() == tokComma:
           discard p.advance()
       if p.peek() == tokRParen:
@@ -1458,13 +1438,10 @@ proc parseEntryRef(p: var Parser): Expr =
   if p.peek() == tokLParen:
     discard p.advance()
     while p.peek() != tokRParen and p.peek() != tokEof:
-      var byRef = false
       if p.peek() == tokDot:
-        byRef = true
-        discard p.advance()
+        discard p.advance()   # .param accepted; args always bound by value (#387)
       let argExpr = p.parseExpr()
       result.entryArgs.add(argExpr)
-      result.entryByRef.add(byRef)
       if p.peek() == tokComma:
         discard p.advance()
     if p.peek() == tokRParen:

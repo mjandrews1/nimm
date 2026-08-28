@@ -196,7 +196,6 @@ type
       entryLabel*: string
       entryRoutine*: string
       entryArgs*: seq[Expr]      ## Actual parameter list: DO LABEL(expr1,.var2)
-      entryByRef*: seq[bool]     ## True for .param (by-reference) arguments
 
   ## SetKind — SET Target Variants
   ##
@@ -475,10 +474,8 @@ type
       openChannel*: Expr          # Channel number (0-63)
       openDevice*: Expr           # Device/file path
       openMode*: Expr             # Mode: "READ", "WRITE", "APPEND", "IO"
-      openTimeout*: Expr          # Optional timeout
     of cUse:
       useChannel*: Expr           # Channel number
-      useParams*: Expr            # Optional device parameters
     of cClose:
       closeChannel*: Expr         # Channel number
     of cRead:
@@ -523,7 +520,7 @@ type
     of cZdeallocate:
       zdeallocRefs*: seq[Expr]
     of cTstart:
-      tstartExpr*: Expr           # Optional timeout/restart expression
+      discard
     of cTcommit:
       discard
     of cTrollback:
@@ -535,7 +532,7 @@ type
     of cZvhistory:
       discard
     of cZanalyze:
-      zanalyzeExpr*: Expr
+      discard
     of cZloadxml:
       zloadxmlFile*: Expr
       zloadxmlGlobal*: Expr
