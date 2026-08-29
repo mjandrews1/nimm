@@ -897,9 +897,8 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # ZWRITE [expr] — display variable(s) with structure (#386).
         if cmd.zwriteExpr == nil:
           # Bare ZWRITE: all local variables in the current scope.
-          for key in eng.globals[].scopes[^1].keys:
-            let base = key.split('\x00')[0]
-            eng.writeln(base & "=\"" & eng.globals[].getLocalDirect(base) & "\"")
+          for (name, subs) in eng.globals[].listLocals():
+            eng.writeVarNode(name, subs)
         else:
           let (name, subs) = resolveVarRef(eng.evaluator[], cmd.zwriteExpr)
           if name.len > 0:
@@ -910,6 +909,20 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         let (name, subs) = resolveVarRef(eng.evaluator[], cmd.zkillExpr)
         if name.len > 0:
           eng.globals[].killValueOnly(name, subs)
+
+      of CmdKind.cZinspect:
+        # ZINSPECT [expr] — structured variable inspection (#389 Phase A).
+        if cmd.zinspectExpr == nil:
+          for (name, subs) in eng.globals[].listLocals():
+            let kind = if name.startsWith("^"): "global" else: "local"
+            let val = eng.globals[].get(name, subs)
+            eng.writeln(formatVariable(inspectVariableWithSubs(name, subs, val, kind)))
+        else:
+          let (name, subs) = resolveVarRef(eng.evaluator[], cmd.zinspectExpr)
+          if name.len > 0:
+            let kind = if name.startsWith("^"): "global" else: "local"
+            let val = eng.globals[].get(name, subs)
+            eng.writeln(formatVariable(inspectVariableWithSubs(name, subs, val, kind)))
 
       of CmdKind.cZload:
         # ZLOAD routine - Load a routine

@@ -200,7 +200,8 @@ proc isCommandKeyword*(w: string): bool =
   of 'v': equiWord(w, "VIEW") or equiWord(w, "V")
   of 'j': equiWord(w, "JOB") or equiWord(w, "J")
   of 'z':
-    equiWord(w, "ZWRITE") or equiWord(w, "ZKILL") or equiWord(w, "ZBREAK") or
+    equiWord(w, "ZWRITE") or equiWord(w, "ZKILL") or equiWord(w, "ZINSPECT") or
+    equiWord(w, "ZBREAK") or
     equiWord(w, "ZGOTO") or equiWord(w, "ZPRINT") or equiWord(w, "ZQUIT") or
     equiWord(w, "ZMESSAGE") or equiWord(w, "ZTRAP") or equiWord(w, "ZLOAD") or
     equiWord(w, "ZSTEP") or equiWord(w, "ZCONTINUE") or equiWord(w, "ZREMOVE") or
@@ -1055,6 +1056,11 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       e = p.parseExpr()
     cmd = Cmd(kind: cZkill, zkillExpr: e)
+  of "ZINSPECT":
+    var e: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      e = p.parseExpr()
+    cmd = Cmd(kind: cZinspect, zinspectExpr: e)
   of "ZHALT":
     var haltCode: Expr = nil
     if isExprStart(p) and not p.atCommandPos():

@@ -53,12 +53,12 @@ proc inspectVariable*(name: string, value: string, kind: string = "local"): Vari
     dataFlags: if value.len > 0: 1 else: 0
   )
 
-proc inspectVariableWithSubs*(name: string, subs: seq[string], value: string): VariableInfo =
+proc inspectVariableWithSubs*(name: string, subs: seq[string], value: string, kind: string = "global"): VariableInfo =
   ## Create variable info with subscripts
   return VariableInfo(
     name: name,
     value: value,
-    kind: "global",
+    kind: kind,
     subscripts: subs,
     dataFlags: if value.len > 0: 1 else: 0
   )

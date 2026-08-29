@@ -390,7 +390,7 @@ type
   CmdKind* = enum
     cSet, cWrite, cIf, cElse, cFor, cQuit, cKill, cKillExcept, cNew,
     cNewExcept, cHang, cLock, cMerge, cXecute, cDo, cDoInline, cGoto, cBreak, cNoop,
-    cZwrite, cZkill, cOpen, cUse, cClose, cRead, cJob,
+    cZwrite, cZkill, cZinspect, cOpen, cUse, cClose, cRead, cJob,
     cZhalt, cZmessage, cZsave, cZsystem, cZtrap, cZbreak, cZgoto, cZprint, cZquit,
     cZload, cZstep, cZcontinue, cZremove,
     cZedit, cZlink, cView, cZallocate, cZdeallocate,
@@ -470,6 +470,8 @@ type
       zwriteExpr*: Expr
     of cZkill:
       zkillExpr*: Expr
+    of cZinspect:
+      zinspectExpr*: Expr
     of cOpen:
       openChannel*: Expr          # Channel number (0-63)
       openDevice*: Expr           # Device/file path

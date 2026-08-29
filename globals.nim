@@ -139,6 +139,24 @@ proc killAllLocal*(g: var Globals) =
   g.ensureWritable()
   g.scopes[^1].clear()
 
+proc listLocals*(g: Globals, scopeIdx: int = -1): seq[(string, seq[string])] =
+  ## Enumerate local variables in a scope as (name, subscripts) pairs.
+  ## scopeIdx = -1 means the top (current) scope. Keys are stored flat as
+  ## `name\x00sub1\x00sub2...`; decoded here so callers get structured refs.
+  let idx = if scopeIdx < 0: g.scopes.len - 1 else: scopeIdx
+  if idx < 0 or idx >= g.scopes.len: return @[]
+  var seen: seq[(string, seq[string])] = @[]
+  for key in g.scopes[idx].keys:
+    let parts = key.split('\x00')
+    var subs: seq[string] = @[]
+    for i in 1 ..< parts.len:
+      subs.add(parts[i])
+    seen.add((parts[0], subs))
+  seen.sort(proc(a, b: (string, seq[string])): int =
+    if a[0] != b[0]: return cmp(a[0], b[0])
+    return cmp(a[1].join("\x00"), b[1].join("\x00")))
+  result = seen
+
 proc killAllExceptLocal*(g: var Globals, keep: seq[string]) =
   ## Exclusive KILL: delete every local whose base variable is not in keep
   g.ensureWritable()
