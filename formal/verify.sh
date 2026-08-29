@@ -18,5 +18,6 @@ dafny verify key_encoding.dfy numeric_encoding.dfy
 dafny verify pattern.dfy
 dafny verify value_format.dfy
 dafny verify scope_stack.dfy
+dafny verify entry_term_expansion.dfy
 dafny verify bm25.dfy
 echo "formal models verified."
