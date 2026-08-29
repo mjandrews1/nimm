@@ -9,7 +9,9 @@ if ! command -v dafny >/dev/null 2>&1; then
     exit 1
 fi
 
-# key_encoding is a dependency of globals_order, so verify them together.
+# key_encoding is a dependency of globals_order and txn_overlay, so verify it
+# together with the modules that import it.
 dafny verify key_encoding.dfy globals_order.dfy
+dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify pattern.dfy
 echo "formal models verified."
