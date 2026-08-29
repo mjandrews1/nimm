@@ -47,27 +47,33 @@ not the point:
 
 1. **Framing round-trip** — `Decode(Encode(g, subs)) == (g, subs)`. This is the
    AGENTS.md "unambiguous separators" rule, formalized: each type byte
-   (`0x00`/`0x01`/`0x02`) unambiguously delimits its data. (Done: structural
-   injectivity in `EncodeInjective`; numeric body via `NumCodecRoundTrip`.)
+   (`0x00`/`0x01`/`0x02`) unambiguously delimits its data. (Done: `Encode`
+   framing + `NumCodecRoundTrip`; verified.)
 2. **Collation total order** — `mCollationCmp` is antisymmetric, transitive,
    and total, with `Empty < Num < Str`, numeric by value, string lexicographic.
-   (Done: `CmpAntisymmetric`, `CmpTransitive`, `CmpInRange`.)
-3. **`$ORDER`/`$QUERY` §9.9 + DFS pre-order** — `orderPairs`/`queryPairs`
-   (globals.nim) return the correct successor/predecessor, and backward-from-
-   null returns empty. (Next.)
+   (Done: `LexLt`/`Cmp` antisymmetric/transitive/total; verified.)
+3. **`$ORDER`/`$QUERY` §9.9 + DFS pre-order** — `TupCmp` is a total order
+   (the DFS pre-order); `Empty` is the minimum (§9.9); `Successor` over a
+   sorted list stays strictly after its reference. (Done, `formal/globals_order.dfy`;
+   the full multi-level `orderPairs` candidate walk is a follow-on.)
 4. **Transaction overlay monotonicity** — `txnSubs` merges writes/kills so that
    reads see the innermost level; kills remove node + descendants. (Next.)
 5. **Pattern matching termination + whole-string consumption** — `matchPattern`
-   is total and matches only if the entire string is consumed. (Next.)
+   is total, is the disjunction of alternatives (the `!` fix from #406), and
+   consumes a length bounded below by the atoms' minimum. (Done,
+   `formal/pattern.dfy`; verified.)
 
 ## Roadmap
 
 - [x] Mark `storage/key_encoding.nim` functions `func` (enforce purity at compile time).
-- [x] `formal/key_encoding.dfy` — framing + collation model and lemmas.
-- [ ] Install/verify Dafny (or CI with `dafny verify`), tighten proof bodies.
-- [ ] Model `orderPairs`/`queryPairs` + txn overlay (`formal/globals_order.dfy`).
-- [ ] Model pattern matching (`formal/pattern.dfy`).
-- [ ] Wire a `make verify` target that runs Dafny + the property tests together.
+- [x] Install Dafny 4.11 (MacBook via Homebrew; Utility-01 via release zip).
+- [x] `formal/key_encoding.dfy` — framing + collation model, verified (0 errors).
+- [x] `formal/globals_order.dfy` — `TupCmp` total order + §9.9 + query successor, verified.
+- [x] `formal/pattern.dfy` — pattern disjunction + termination + whole-string, verified.
+- [ ] Model `txnSubs` overlay monotonicity (`formal/txn_overlay.dfy`).
+- [ ] Model the multi-level `orderPairs` candidate walk (candLevel + parent path).
+- [ ] Model the numeric 9's-complement body (byte-order == numeric-order).
+- [ ] Wire a `make verify` / CI target that runs `dafny verify formal/*.dfy` + property tests.
 
 ## Non-goals
 
