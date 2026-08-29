@@ -39,8 +39,15 @@ EOF
 
 "$NIMM" -r /tmp/phasef.m --mcp --mcp-port "$PORT" &>/tmp/phasef_mcp.log &
 MCP_PID=$!
-trap 'kill $MCP_PID 2>/dev/null; rm -f /tmp/phasef.m /tmp/phasef_mcp.log' EXIT
-sleep 2
+trap 'kill $MCP_PID 2>/dev/null || true; rm -f /tmp/phasef.m /tmp/phasef_mcp.log || true' EXIT
+# Wait for the server to accept JSON-RPC (up to ~10s) instead of a fixed sleep.
+for _ in $(seq 1 20); do
+  if curl -s -X POST "http://localhost:$PORT" -H 'Content-Type: application/json' \
+      --data-raw '{"jsonrpc":"2.0","id":0,"method":"tools/list","params":{}}' >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
 
 # list_routines
 OUT=$(mcp_call '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_routines","arguments":{}}}')
