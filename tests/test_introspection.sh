@@ -89,9 +89,9 @@ run "BREAK enters debugger" 'SET X=42 BREAK' "Debugger"
 # $ZJOB returns PID
 run "\$ZJOB returns PID" 'W $ZJOB' "[0-9]"
 
-# $ZPOS returns position (empty at top level)
+# $ZPOS returns position (routine:line)
 printf 'ENTRY\n W $ZPOS\n Q\n' > /tmp/test_zpos.m
-run_routine "\$ZPOS returns position" /tmp/test_zpos.m "DO ENTRY" "TEST_ZPOS:0"
+run_routine "\$ZPOS returns position" /tmp/test_zpos.m "DO ENTRY" "TEST_ZPOS:2"
 
 # $ZROUTINE returns routine name
 printf 'ENTRY\n W $ZROUTINE\n Q\n' > /tmp/test_zroutine.m

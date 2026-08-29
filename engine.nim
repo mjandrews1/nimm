@@ -261,6 +261,9 @@ proc runRoutineBytecode(eng: var Engine, routine, label: string, depth: int): st
     let rtRoutine = eng.runtime[].routines[curRoutine]
     if curLine < 0 or curLine >= rtRoutine.lines.len: break
     let gotLine = rtRoutine.lines[curLine]
+    # Track position for $ZPOS and self-describing errors (#389 Phase E)
+    eng.runtime[].currentRoutine = curRoutine
+    eng.runtime[].currentLine = curLine
     var bc: Bytecode = nil
     if eng.useBytecode:
       bc = eng.getLineBytecode(curRoutine, curLine)
@@ -1572,7 +1575,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         except:
           eng.output.add("Error in $ETRAP: " & getCurrentExceptionMsg() & "\n")
       else:
-        eng.output.add("Error: " & errorMsg & "\n")
+        # Self-describing error with source position (#389 Phase E)
+        let rtn = eng.runtime[].currentRoutine
+        var loc = ""
+        var snippet = ""
+        if rtn.len > 0 and rtn in eng.runtime[].routines:
+          let ln = eng.runtime[].currentLine
+          loc = " at " & rtn & ":" & $(ln + 1)
+          let lines = eng.runtime[].routines[rtn].lines
+          if ln >= 0 and ln < lines.len:
+            snippet = "    " & lines[ln].strip()
+        eng.output.add("Error: " & errorMsg & loc & "\n")
+        if snippet.len > 0:
+          eng.output.add(snippet & "\n")
 
       return "Error"
 

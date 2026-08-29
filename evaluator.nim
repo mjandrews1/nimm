@@ -2220,10 +2220,10 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     # $ZJOB — Return current job (process) ID (#301)
     return $getpid()
   of "ZPOS":
-    # $ZPOS — Return current execution position (#302)
-    # Returns "ROUTINE:LABEL+offset" format
+    # $ZPOS — Return current execution position (#302, #389 Phase E)
+    # "ROUTINE:LINE" (1-based source line; empty when not in a routine).
     let routine = if ev.runtime != nil: ev.runtime[].currentRoutine else: ""
-    let line = if ev.runtime != nil: ev.runtime[].currentLine else: 0
+    let line = if ev.runtime != nil: ev.runtime[].currentLine + 1 else: 0
     if routine.len == 0: return ""
     return routine & ":" & $line
   of "ZROUTINE":
