@@ -36,10 +36,9 @@ proc compileExpr*(bc: Bytecode, expr: Expr) =
         bc.addInstr(opPushVarSub, arg1 = expr.vname, argInt = expr.subs.len)
 
   of eFunc:
-    # Compile arguments first (pushed onto stack in order)
-    for arg in expr.fargs:
-      bc.compileExpr(arg)
-    bc.addInstr(opCall, arg1 = expr.fname, argInt = expr.fargs.len)
+    # Intrinsic $ functions are not compiled (opCall is a stub); fall back to
+    # the AST interpreter for the whole line so they evaluate correctly (#402).
+    bc.needsAst = true
 
   of eSvar:
     bc.addInstr(opPushSvar, arg1 = expr.sname)
@@ -77,15 +76,15 @@ proc compileExpr*(bc: Bytecode, expr: Expr) =
     of bNgt: bc.addInstr(opCmpLe)  # 'not greater than' = <=
     of bContains: bc.addInstr(opCmpContains)
     of bFollows: bc.addInstr(opCmpFollows)
-    else: bc.addInstr(opNop)
+    else: bc.needsAst = true  # unhandled operator → AST fallback (#402)
 
   of ePattern:
-    # Pattern match — fall back to AST
-    bc.addPushConst("")
+    # Pattern match — not compiled; fall back to AST (#402)
+    bc.needsAst = true
 
   of eIndirect:
-    # Indirection — fall back to AST
-    bc.addInstr(opXecute)
+    # Indirection — not compiled; fall back to AST (#402)
+    bc.needsAst = true
 
   of eEntryRef:
     bc.addPushConst(expr.entryLabel)
@@ -125,9 +124,8 @@ proc compileSetTarget*(bc: Bytecode, target: SetTarget, valueExpr: Expr) =
       else:
         bc.addInstr(opSetVarSub, arg1 = target.tname, argInt = target.tsubs.len)
   of stPiece, stExtract, stIndirect:
-    # SET $PIECE/$EXTRACT/@indirect — fall back to AST
-    bc.addInstr(opPop)  # discard compiled value
-    bc.addInstr(opXecute)
+    # SET $PIECE/$EXTRACT/@indirect — not compiled; fall back to AST (#402)
+    bc.needsAst = true
 
 proc compileCommand*(bc: Bytecode, cmd: Cmd) =
   ## Compile a command to bytecode
@@ -220,7 +218,7 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
         if refExpr.kind == eVar and refExpr.subs.len == 0:
           bc.addInstr(opKill, arg1 = refExpr.vname)
         else:
-          bc.addInstr(opXecute)  # subscripted/indirect → AST fallback
+          bc.needsAst = true  # subscripted/indirect → AST fallback (#402)
 
   of cNew:
     bc.addInstr(opNewScope, arg1 = cmd.newNames.join(","))
@@ -257,10 +255,12 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opBreak)
 
   of cXecute:
-    bc.addInstr(opXecute)
+    # Dynamic code — not compiled; fall back to AST (#402)
+    bc.needsAst = true
 
   of cLock:
-    bc.addInstr(opLockReleaseAll)
+    # LOCK +/-/bare — not compiled; fall back to AST (#402)
+    bc.needsAst = true
 
   of cMerge:
     for pair in cmd.mergePairs:
