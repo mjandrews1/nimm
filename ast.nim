@@ -186,7 +186,7 @@ type
       left*, right*: Expr
     of ePattern:
       patLhs*: Expr
-      atoms*: seq[PatternAtom]
+      atoms*: seq[seq[PatternAtom]]  # list of alternatives, split on `!` (§7.5.4)
     of eIndirect:
       ## Indirection: @expr — expr evaluates to a variable name
       indirectExpr*: Expr

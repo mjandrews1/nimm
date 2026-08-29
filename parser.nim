@@ -318,7 +318,7 @@ proc parsePrefix(p: var Parser): Expr
 proc parsePrimary(p: var Parser): Expr
 proc parseSubscripts(p: var Parser): seq[Expr]
 proc parseFuncArgs(p: var Parser, name: string): seq[Expr]
-proc parsePatternAtoms(p: var Parser): seq[PatternAtom]
+proc parsePatternAtoms(p: var Parser): seq[seq[PatternAtom]]
 
 ## parseExpr — Parse an Expression
 ##
@@ -672,8 +672,9 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
 ## (any character) atoms. This is a simplification — the standard
 ## says literal patterns match the exact string. A more complete
 ## implementation would handle literals specially.
-proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
-  var atoms: seq[PatternAtom] = @[]
+proc parsePatternAtoms(p: var Parser): seq[seq[PatternAtom]] =
+  var current: seq[PatternAtom] = @[]
+  var alts: seq[seq[PatternAtom]] = @[]
   var pendingWord = ""
   var pendingCount = -1
   var pendingOrMore = false
@@ -722,7 +723,7 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
           pendingWord = pendingWord[pos..^1]
         else:
           pendingWord = ""
-        atoms.add PatternAtom(count: count, code: code, orMore: orMore)
+        current.add PatternAtom(count: count, code: code, orMore: orMore)
         continue
       elif pos < pendingWord.len and pendingWord[pos] in {'0'..'9'}:
         var numStr2 = ""
@@ -751,6 +752,12 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         else:
           break
     else:
+      # Pattern alternation: `!` ends the current alternative (§7.5.4).
+      if p.peek() == tokOr:
+        alts.add(current)
+        current = @[]
+        discard p.advance()
+        continue
       # Read from parser tokens
       if pendingCount >= 0:
         count = pendingCount
@@ -778,7 +785,7 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         let word = p.cur.text
         if word.len == 1:
           discard p.advance()
-          atoms.add PatternAtom(count: count, code: word[0], orMore: orMore)
+          current.add PatternAtom(count: count, code: word[0], orMore: orMore)
           continue
         elif word.len > 1:
           pendingWord = word
@@ -790,12 +797,13 @@ proc parsePatternAtoms(p: var Parser): seq[PatternAtom] =
         # Literal string atom: must match exactly (§7.5.1)
         let litVal = p.cur.text
         discard p.advance()
-        atoms.add PatternAtom(count: count, code: '\0', orMore: false, lit: litVal)
+        current.add PatternAtom(count: count, code: '\0', orMore: false, lit: litVal)
         continue
       else:
         break
   
-  atoms
+  alts.add(current)
+  alts
 
 # ======================================================================
 # Command Parsing
