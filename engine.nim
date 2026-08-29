@@ -181,6 +181,14 @@ proc getLineBytecode(eng: var Engine, routine: string, offset: int): Bytecode =
     return rtRoutine.bytecodeCache[offset]
   return nil
 
+proc snapshotLocals(eng: Engine): seq[string] =
+  ## Snapshot the current scope's locals as pre-formatted "name=value" strings
+  ## (for per-frame locals in ZSTACK, #389 Phase B).
+  for (name, subs) in eng.globals[].listLocals():
+    let kind = if name.startsWith("^"): "global" else: "local"
+    result.add(formatVariable(inspectVariableWithSubs(name, subs,
+      eng.globals[].get(name, subs), kind)))
+
 proc runRoutineBytecode(eng: var Engine, routine, label: string, depth: int): string =
   ## Execute a routine from `label` line-by-line, honoring bytecode control
   ## signals (opGoto/opCallLabel/opQuit) and falling back to the AST
@@ -222,7 +230,8 @@ proc runRoutineBytecode(eng: var Engine, routine, label: string, depth: int): st
         if innerLabel notin eng.runtime[].routines[innerRoutine].labels:
           curLine += 1
           continue
-        eng.callStack.add(StackFrame(routine: innerRoutine, label: innerLabel, line: 0))
+        eng.callStack.add(StackFrame(routine: innerRoutine, label: innerLabel, line: 0,
+                                     variables: snapshotLocals(eng)))
         pushStack()
         eng.doDepth.inc
         eng.doScopeBase.add(eng.globals[].scopes.len)
@@ -567,9 +576,8 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             if eng.useBytecode and routine in eng.runtime[].routines:
               eng.ensureBytecode(routine)
 
-            # Push call stack frame for introspection
-            let frame = StackFrame(routine: routine, label: label, line: 0)
-            eng.callStack.add(frame)
+            # Push scope bookkeeping (frame push happens after arg binding so
+            # the per-frame locals snapshot includes the DO formals).
             pushStack()
             eng.doDepth.inc
             eng.doScopeBase.add(eng.globals[].scopes.len)
@@ -608,6 +616,11 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
                   let formalName = formals[i]
                   let value = eng.evaluator[].eval(actualExpr)
                   eng.globals[].setLocal(formalName, @[], value)
+
+            # Push call stack frame with per-frame locals snapshot (#389 Phase B)
+            let frame = StackFrame(routine: routine, label: label, line: 0,
+                                   variables: snapshotLocals(eng))
+            eng.callStack.add(frame)
 
             # Execute the routine line-by-line (bytecode with AST fallback).
             discard eng.runRoutineBytecode(routine, label, depth)
@@ -819,7 +832,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             except:
               discard
             return ""
-          eng.debugger.debugPromptLoop(evalProc)
+          let stackProc = proc(): string =
+            if globalEngine.callStack.len == 0:
+              return "  (empty)"
+            return formatStack(globalEngine.callStack)
+          let varsProc = proc(): string =
+            var s = ""
+            for (name, subs) in globalEngine.globals[].listLocals():
+              let kind = if name.startsWith("^"): "global" else: "local"
+              s.add(formatVariable(inspectVariableWithSubs(name, subs,
+                globalEngine.globals[].get(name, subs), kind)) & "\n")
+            if s.len == 0: return "  (none)"
+            return s
+          eng.debugger.debugPromptLoop(evalProc, stackProc, varsProc)
         else:
           # Fallback: enter step mode
           eng.debugger.setStepMode("into")
@@ -1186,13 +1211,12 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         eng.testValue = true
 
       of CmdKind.cZstack:
-        # ZSTACK — Display call stack for introspection
-        eng.writeln("Call Stack:")
+        # ZSTACK — Display call stack (with per-frame locals, #389 Phase B)
         if eng.callStack.len == 0:
+          eng.writeln("Call Stack:")
           eng.writeln("  (empty)")
         else:
-          for i, frame in eng.callStack:
-            eng.writeln("  " & $i & ": " & frame.routine & ":" & frame.label)
+          eng.write(formatStack(eng.callStack))
 
       of CmdKind.cZstats:
         # ZSTATS — Display runtime statistics for introspection

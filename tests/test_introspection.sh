@@ -2,7 +2,7 @@
 # test_introspection.sh — Test introspection/debugger features
 set -euo pipefail
 
-NIMM="${NIMM_BIN:-./nimm}"
+NIMM="${1:-./bin/nimm}"
 PASS=0
 FAIL=0
 
@@ -42,6 +42,10 @@ run_routine "ZSTACK shows call stack" /tmp/test_zstack.m "DO ENTRY" "Call Stack"
 
 # ZSTACK shows routine:label
 run_routine "ZSTACK shows routine:label" /tmp/test_zstack.m "DO ENTRY" "TEST_ZSTACK:ENTRY"
+
+# ZSTACK shows per-frame locals (#389 Phase B)
+printf 'ENTRY\n SET X="hello"\n D SUB\n Q\nSUB\n ZSTACK\n Q\n' > /tmp/test_zstack_locals.m
+run_routine "ZSTACK shows per-frame locals" /tmp/test_zstack_locals.m "DO ENTRY" 'X="hello"'
 
 # BREAK enters interactive debugger
 run "BREAK enters debugger" 'BREAK' "Debugger"
@@ -101,6 +105,6 @@ echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
 # Cleanup
-rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m /tmp/test_zpos.m /tmp/test_zroutine.m /tmp/test_zsource.m
+rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m /tmp/test_zpos.m /tmp/test_zroutine.m /tmp/test_zsource.m /tmp/test_zstack_locals.m
 
 [ "$FAIL" -eq 0 ]

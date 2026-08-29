@@ -268,7 +268,10 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     bc.addInstr(opZloadxml)
 
   else:
-    bc.addInstr(opNop)
+    # Any command without a bytecode implementation must fall back to the
+    # AST interpreter for the whole line (otherwise it is silently dropped).
+    # (#389 Phase B — ZSTACK/ZINSPECT/ZWRITE/etc. were opNop'd before.)
+    bc.needsAst = true
 
 proc compileLine*(line: Line): Bytecode =
   ## Compile a parsed line to bytecode

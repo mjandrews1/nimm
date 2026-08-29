@@ -79,7 +79,9 @@ proc continueExecution*(dbg: var Debugger) =
   dbg.debugPrompt = false
   echo "Continuing..."
 
-proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
+proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string,
+                      stackProc: proc(): string = nil,
+                      varsProc: proc(): string = nil) =
   ## Interactive debug prompt
   dbg.debugPrompt = true
   echo ""
@@ -130,11 +132,15 @@ proc debugPromptLoop*(dbg: var Debugger, evalProc: proc(cmd: string): string) =
     of "list", "l":
       dbg.listBreakpoints()
     of "stack", "k":
-      # Show call stack — requires engine reference
-      echo "Call stack: (use ZSTACK for detailed view)"
+      if stackProc != nil:
+        echo stackProc()
+      else:
+        echo "Call stack: (use ZSTACK for detailed view)"
     of "vars", "v":
-      # List local variables — requires engine reference
-      echo "Variables: (use ZWRITE for detailed view)"
+      if varsProc != nil:
+        echo varsProc()
+      else:
+        echo "Variables: (use ZWRITE for detailed view)"
     of "source", "src":
       if dbg.currentLine > 0:
         echo "Line ", dbg.currentLine, ", Col ", dbg.currentCol

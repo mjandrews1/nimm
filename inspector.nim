@@ -17,6 +17,7 @@ type
     routine*: string
     label*: string
     line*: int
+    variables*: seq[string]  # pre-formatted "name=value" local snapshots
 
   RuntimeStats* = object
     commandsExecuted*: int
@@ -94,10 +95,12 @@ proc formatStackFrame*(frame: StackFrame): string =
     result.add("+" & $frame.line)
 
 proc formatStack*(frames: seq[StackFrame]): string =
-  ## Format entire call stack
+  ## Format entire call stack, including per-frame locals
   result = "Call Stack:\n"
   for i, frame in frames:
     result.add("  " & $i & ": " & formatStackFrame(frame) & "\n")
+    if frame.variables.len > 0:
+      result.add("    " & frame.variables.join(", ") & "\n")
 
 # --- ZSTATS: Statistics ---
 
