@@ -3,7 +3,6 @@
 # $KEY, $PRINCIPAL, $QUIT, $REFERENCE, $STORAGE
 # $STACK, $SYSTEM, $TEST, $X, $Y
 
-import os
 import times
 import strutils
 import osproc

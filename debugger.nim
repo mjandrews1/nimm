@@ -3,7 +3,6 @@
 
 import strutils
 import tables
-import os
 
 type
   Debugger* = ref object

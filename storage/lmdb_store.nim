@@ -733,7 +733,7 @@ proc listSubs*(store: var LmdbStore, global: string, subs: seq[string] = @[]): s
     store.abortIfNotBatch(readTxn)
     return @[]
   
-  var result: seq[seq[string]] = @[]
+  var res: seq[seq[string]] = @[]
   
   # Iterate through all keys with the same prefix
   while rc == SUCCESS:
@@ -751,13 +751,13 @@ proc listSubs*(store: var LmdbStore, global: string, subs: seq[string] = @[]): s
           match = false
           break
       if match:
-        result.add(decoded[1])
+        res.add(decoded[1])
     
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
-  return result
+  return res
 
 proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
   ## List all keys with optional prefix

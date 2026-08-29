@@ -3,7 +3,6 @@
 
 import strutils
 import os
-import tables
 import engine
 import runtime
 import globals

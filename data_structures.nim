@@ -3,7 +3,6 @@
 
 import tables
 import deques
-import strutils
 import sequtils
 import random
 

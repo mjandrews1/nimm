@@ -3,16 +3,6 @@
 
 import posix
 import os
-import strutils
-import times
-
-# Platform-specific POSIX_SPAWN_SETSID constant
-when defined(macosx):
-  const POSIX_SPAWN_SETSID = cint(0x0400)
-elif defined(linux):
-  const POSIX_SPAWN_SETSID = cint(4)
-else:
-  const POSIX_SPAWN_SETSID = cint(0)
 
 type
   JobStatus* = enum

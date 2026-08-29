@@ -6,7 +6,6 @@ import tables
 import algorithm
 import os
 import osproc
-import streams
 import posix
 import ast
 import globals
@@ -1201,7 +1200,6 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cZedit:
         # ZEDIT routine — Open routine in external editor
         if cmd.zeditExpr != nil:
-          let routineName = eng.evaluator[].eval(cmd.zeditExpr)
           let currentFile = eng.runtime[].currentFile
           if currentFile.len > 0:
             let editor = getEnv("EDITOR", "vi")
@@ -1210,7 +1208,6 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cZlink:
         # ZLINK routine — Reload routine from disk
         if cmd.zlinkExpr != nil:
-          let routineName = eng.evaluator[].eval(cmd.zlinkExpr)
           let currentFile = eng.runtime[].currentFile
           if currentFile.len > 0:
             try:
@@ -1334,7 +1331,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         else:
           eng.writeln("Variable History (last " & $min(history.len, 20) & "):")
           for i in max(0, history.len - 20)..<history.len:
-            let (name, value, ts) = history[i]
+            let (name, value, _) = history[i]
             eng.writeln("  " & name & " = \"" & value & "\"")
 
       of CmdKind.cTstart:

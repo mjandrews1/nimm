@@ -15,7 +15,6 @@ import strutils
 import tables
 import osproc
 
-import ast
 import globals
 import evaluator
 import runtime
@@ -307,9 +306,9 @@ proc main() =
       let code = params["code"].getStr()
       try:
         eng.clearOutput()
-        let result = execCode(eng, code)
+        let execResult = execCode(eng, code)
         let output = eng.getOutput()
-        return %*{"result": result, "output": output}
+        return %*{"result": execResult, "output": output}
       except:
         return %*{"error": getCurrentExceptionMsg()}
     )

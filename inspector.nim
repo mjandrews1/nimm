@@ -1,7 +1,6 @@
 # inspector.nim — Inspector for nimm (ZINSPECT/ZSTACK/ZSTATS)
 # Provides variable inspection, call stack display, and statistics
 
-import tables
 import strutils
 import times
 

@@ -116,8 +116,8 @@ proc niSystem*(sub: string): string =
   case key
   of "hostname":
     var buf: array[256, char]
-    if gethostname(addr buf[0], buf.len) == 0:
-      return $cstring(addr buf[0])
+    if gethostname(cast[cstring](addr buf[0]), buf.len) == 0:
+      return $cast[cstring](addr buf[0])
     return ""
   of "pid":
     return $getpid()
@@ -132,7 +132,7 @@ proc niSystem*(sub: string): string =
   of "version":
     var un: Utsname
     if uname(un) == 0:
-      return $cstring(addr un.release[0])
+      return $cast[cstring](addr un.release[0])
     return ""
   of "cpu_count":
     return $sysconf(SC_NPROCESSORS_ONLN)

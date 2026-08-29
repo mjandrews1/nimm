@@ -18,7 +18,6 @@ import ni_functions
 import data_structures
 import runtime
 import parser
-import lexer
 import inspector
 import special_vars
 
@@ -313,12 +312,12 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
       if varName.len > 0 and varName[0] == '^':
         ev.globals[].setNaked(varName, nextSubs)
       # Construct full variable reference
-      var result = varName & "("
+      var res = varName & "("
       for i, sub in nextSubs:
-        if i > 0: result.add(",")
-        result.add(sub)
-      result.add(")")
-      return result
+        if i > 0: res.add(",")
+        res.add(sub)
+      res.add(")")
+      return res
     var args = newSeq[string](expr.fargs.len)
     for i, arg in expr.fargs:
       args[i] = ev.eval(arg)
@@ -509,11 +508,11 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     if pos < 1 or pos > s.len: return "-1"
     return $int(uint8(s[pos - 1]))
   of "CHAR", "C":
-    var result = ""
+    var res = ""
     for a in args:
-      try: result.add(char(parseInt(a)))
+      try: res.add(char(parseInt(a)))
       except: discard
-    return result
+    return res
   of "DATA", "D":
     if args.len < 1: return ""
     return $ev.globals[].data(args[0])
@@ -619,12 +618,12 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       else:
         current.add(ch)
     pieces.add(current)
-    var result = ""
+    var res = ""
     for i in start..stop:
       if i > 0 and i <= pieces.len:
-        if result.len > 0: result.add(d)
-        result.add(pieces[i - 1])
-    return result
+        if res.len > 0: res.add(d)
+        res.add(pieces[i - 1])
+    return res
   of "RANDOM", "R":
     if args.len < 1: return "0"
     try:
@@ -657,15 +656,15 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     let s = args[0]
     let fromChars = args[1]
     let toChars = if args.len > 2: args[2] else: ""
-    var result = ""
+    var res = ""
     for ch in s:
       let pos = fromChars.find(ch)
       if pos >= 0:
         if pos < toChars.len:
-          result.add(toChars[pos])
+          res.add(toChars[pos])
       else:
-        result.add(ch)
-    return result
+        res.add(ch)
+    return res
   of "CASE", "CAS":
     # $CASE(expr, val1:result1, val2:result2, ..., :default)
     # Flattened to [expr, val1, result1, val2, result2, ...]
@@ -718,12 +717,12 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         sign = "-"
         intPart = intPart[1..^1]
       # Add commas
-      var result = ""
+      var res = ""
       for i, ch in intPart:
         if i > 0 and (intPart.len - i) mod 3 == 0:
-          result.add(',')
-        result.add(ch)
-      s = sign & result & decPart
+          res.add(',')
+        res.add(ch)
+      s = sign & res & decPart
     return s
   of "TEXT", "T":
     # $TEXT(label+offset^routine) - Returns source line
@@ -962,44 +961,44 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return align($year, 4, '0') & "-" & align($month, 2, '0') & "-" & align($day, 2, '0') & " " &
              align($hour, 2, '0') & ":" & align($minute, 2, '0') & ":" & align($second, 2, '0')
     let fmt = args[1]
-    var result = ""
+    var res = ""
     var i = 0
     while i < fmt.len:
       if i + 3 < fmt.len and fmt[i..i+3] == "YYYY":
-        result.add(align($year, 4, '0'))
+        res.add(align($year, 4, '0'))
         i += 4
       elif i + 1 < fmt.len and fmt[i..i+1] == "YY":
-        result.add(align($(year mod 100), 2, '0'))
+        res.add(align($(year mod 100), 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "MM":
-        result.add(align($month, 2, '0'))
+        res.add(align($month, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "DD":
-        result.add(align($day, 2, '0'))
+        res.add(align($day, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "HH":
-        result.add(align($hour, 2, '0'))
+        res.add(align($hour, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "MI":
-        result.add(align($minute, 2, '0'))
+        res.add(align($minute, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "SS":
-        result.add(align($second, 2, '0'))
+        res.add(align($second, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "12":
         let h12 = if hour == 0: 12 elif hour > 12: hour - 12 else: hour
-        result.add(align($h12, 2, '0'))
+        res.add(align($h12, 2, '0'))
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "AM":
-        result.add(if hour < 12: "AM" else: "PM")
+        res.add(if hour < 12: "AM" else: "PM")
         i += 2
       elif i + 1 < fmt.len and fmt[i..i+1] == "nn":
-        result.add(if hour < 12: "am" else: "pm")
+        res.add(if hour < 12: "am" else: "pm")
         i += 2
       else:
-        result.add(fmt[i])
+        res.add(fmt[i])
         i.inc
-    return result
+    return res
   of "ZCONVERT":
     # $ZCONVERT(expr, type) - Convert string case
     if args.len < 2: return args[0]
@@ -1150,12 +1149,12 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       else:
         current.add(ch)
     pieces.add(current)
-    var result = ""
+    var res = ""
     for i in start..stop:
       if i > 0 and i <= pieces.len:
-        if result.len > 0: result.add(d)
-        result.add(pieces[i - 1])
-    return result
+        if res.len > 0: res.add(d)
+        res.add(pieces[i - 1])
+    return res
   of "NI_HTTP":
     # $NI_HTTP(method, url, body) — HTTP client
     if args.len < 2: return ""

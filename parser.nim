@@ -636,9 +636,9 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
       let val = parseExpr(p)
       if p.peek() == tokColon:
         discard p.advance()
-      let result = parseExpr(p)
+      let valExpr = parseExpr(p)
       args.add val
-      args.add result
+      args.add valExpr
       if p.peek() == tokComma:
         discard p.advance()
       else:
@@ -832,7 +832,6 @@ proc parseForSpec(p: var Parser): ForSpec
 proc parseForArg(p: var Parser, varName: string): ForSpec
 proc parseKill(p: var Parser): Cmd
 proc parseExprList(p: var Parser): seq[Expr]
-proc parseNameList(p: var Parser): seq[string]
 proc parseMergePairs(p: var Parser): seq[(string, string)]
 
 ## parseLine — Parse a Line of M Commands
@@ -1630,19 +1629,6 @@ proc parseExprList(p: var Parser): seq[Expr] =
     else:
       break
   list
-
-## parseNameList — Parse a Comma-Separated Name List
-##
-## Used for NEW: NEW A,B,C
-proc parseNameList(p: var Parser): seq[string] =
-  var names: seq[string] = @[]
-  while true:
-    names.add p.readWord()
-    if p.peek() == tokComma:
-      discard p.advance()
-    else:
-      break
-  names
 
 ## parseMergePairs — Parse MERGE Command Arguments
 ##

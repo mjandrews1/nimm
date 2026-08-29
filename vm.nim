@@ -262,12 +262,12 @@ proc execute*(vm: VM, bc: Bytecode): string =
         else:
           current.add(ch)
       pieces.add(current)
-      var result = ""
+      var res = ""
       for i in fromIdx..toIdx:
         if i > 0 and i <= pieces.len:
-          if result.len > 0: result.add(delimiter)
-          result.add(pieces[i - 1])
-      vm.push(result)
+          if res.len > 0: res.add(delimiter)
+          res.add(pieces[i - 1])
+      vm.push(res)
 
     of opExtract:
       let last = parseInt(vm.pop())
@@ -297,8 +297,8 @@ proc execute*(vm: VM, bc: Bytecode): string =
         vm.pc = instr.argInt
 
     of opCall:
-      # Function call — args already on stack
-      let name = instr.arg1
+      # Function call — args already on stack (opCall is currently unused:
+      # the compiler falls back to AST for $ functions).
       let argc = instr.argInt
       var args: seq[string] = @[]
       for i in 0..<argc:

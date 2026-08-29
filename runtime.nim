@@ -179,36 +179,6 @@ proc filterRoutineLines(lines: var seq[string]) =
       filtered.add(stripped)
   lines = filtered
 
-proc isBlockOpener(content: string): bool =
-  ## True when a (dot-stripped, comment-stripped) line opens an implicit
-  ## block that source-line boundaries must close: IF/ELSE/FOR always scope
-  ## to end-of-line or dot-block; DO only when bare (#282).
-  var i = 0
-  while i < content.len and content[i] in {' ', '\t'}: inc i
-  var w = ""
-  while i < content.len and content[i] in {'a'..'z', 'A'..'Z'}:
-    w.add(content[i]); inc i
-  case w.toUpperAscii
-  of "IF", "I", "ELSE", "E", "FOR", "F":
-    result = true
-  of "DO", "D":
-    # Bare DO opens a block; DO label^routine / DO entry:(args) do not.
-    # Skip postconditional chain (":expr" — exprs contain no spaces except
-    # inside quotes), then the opener is bare iff nothing remains.
-    while i < content.len and content[i] in {' ', '\t'}: inc i
-    var inStr = false
-    while i < content.len and content[i] == ':':
-      inc i
-      while i < content.len:
-        let c = content[i]
-        if c == '"': inStr = not inStr
-        elif not inStr and c == ' ': break
-        inc i
-      while i < content.len and content[i] in {' ', '\t'}: inc i
-    result = i >= content.len
-  else:
-    result = false
-
 proc firstCommandWord(content: string): string =
   ## First whitespace-delimited word, uppercased ("" if none).
   var i = 0

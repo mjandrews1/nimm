@@ -8,7 +8,6 @@ import json
 import strutils
 import tables
 import times
-import os
 
 type
   AuditEntry = object

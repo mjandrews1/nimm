@@ -1,7 +1,6 @@
 # bytecode.nim — Bytecode instruction types and bytecode array for NimM
 # Stack-based VM instructions compiled from M/MUMPS AST
 
-import strutils
 
 type
   Opcode* = enum

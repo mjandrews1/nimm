@@ -458,7 +458,6 @@ proc tcommit*(g: var Globals) =
         puts.add((name, subs, v))
       if puts.len > 0:
         g.globals.batchPut(puts)
-      var dels: seq[(string, seq[string])] = @[]
       for k in current.kills:
         let (name, subs) = decodeMakeKey(k)
         # Use deletePrefix to remove node and all descendants (M KILL §7.2.9)
@@ -755,7 +754,7 @@ proc listSubs*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[s
     let scope = g.scopes[^1]
     let base = makeKey(name, subs)
     let prefix = base & "\x00"
-    var result: seq[seq[string]] = @[]
+    var res: seq[seq[string]] = @[]
     for k in scope.keys:
       # Only keys strictly below the prefix enumerate as subscripts.
       # Including the scalar root key here would make the slice below
@@ -775,8 +774,8 @@ proc listSubs*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[s
         if current.len > 0:
           subSeq.add(current)
         if subSeq.len > 0:
-          result.add(subSeq)
-    return result
+          res.add(subSeq)
+    return res
 
 # --- NEW/QUIT scoping ---
 
