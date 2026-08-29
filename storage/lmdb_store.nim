@@ -561,6 +561,25 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
     # §9.9: backward from the null subscript returns nothing (the null
     # subscript precedes every other subscript). Matches orderGlobalMem.
     cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+  elif not forward and LEVEL == 0:
+    # $ORDER(^G, -1): no subscript, backward → the last level-0 subscript.
+    # Position one byte past the global's key range, then step back.
+    var endPrefix = global & "\x01"
+    mdbKey.mvSize = cast[uint](endPrefix.len)
+    mdbKey.mvData = cast[pointer](unsafeAddr endPrefix[0])
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
+    if rc == SUCCESS:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+    else:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, LAST)
+    if rc != SUCCESS:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    let k = newString(mdbKey.mvSize)
+    copyMem(addr k[0], mdbKey.mvData, mdbKey.mvSize)
+    let (gname, ksubs) = decodeKey(k)
+    cursorClose(cursor); store.abortIfNotBatch(readTxn)
+    if gname != global or ksubs.len == 0: return ""
+    return ksubs[0]
   else:
     mdbKey.mvSize = cast[uint](prefix.len)
     mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
@@ -673,22 +692,28 @@ proc query*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
   
   var mdbVal: Val
   rc = cursorGet(cursor, addr mdbKey, addr mdbVal, SET_RANGE)
-  
-  if rc != SUCCESS:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return @[]
-  
-  # Move to next/previous
+
   if forward:
-    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+    if rc != SUCCESS:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn); return @[]
+    # SET_RANGE lands on the reference node itself when it exists; $QUERY must
+    # return the node strictly AFTER it, so advance once more in that case.
+    let k = newString(mdbKey.mvSize)
+    copyMem(addr k[0], mdbKey.mvData, mdbKey.mvSize)
+    let d = decodeKey(k)
+    if d[0] == global and d[1] == subs:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+      if rc != SUCCESS:
+        cursorClose(cursor); store.abortIfNotBatch(readTxn); return @[]
   else:
-    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
-  
-  if rc != SUCCESS:
-    cursorClose(cursor)
-    store.abortIfNotBatch(readTxn)
-    return @[]
+    # Backward: step to the node strictly before the reference. If the
+    # reference is past the last node, the predecessor is simply LAST.
+    if rc == SUCCESS:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
+    else:
+      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, LAST)
+    if rc != SUCCESS:
+      cursorClose(cursor); store.abortIfNotBatch(readTxn); return @[]
   
   # Decode the key from mdbKey
   let key = newString(mdbKey.mvSize)

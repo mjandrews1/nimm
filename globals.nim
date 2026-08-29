@@ -474,30 +474,18 @@ proc trollback*(g: var Globals) =
   if g.txn.levels.len == 0: return
   discard g.txn.levels.pop()
 
+proc tupCollationCmp(a, b: seq[string]): int
+proc orderPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): string
+
 proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool): string =
-  ## $ORDER over the in-memory global store
-  let prefix = name & "\x00"
-  var keys: seq[string] = @[]
-  for k in g.memGlobals.keys:
-    if k.startsWith(prefix):
-      let rest = k[prefix.len..^1]
-      if '\0' notin rest:
-        keys.add(rest)
-  keys.sort(mCollationCmp)
-  if keys.len == 0: return ""
-  if subs.len == 0:
-    return if forward: keys[0] else: keys[^1]
-  let lastSub = subs[^1]
-  if lastSub.len == 0 and not forward:
-    # §9.9: backward from the null subscript there is nothing
-    return ""
-  if forward:
-    for k in keys:
-      if mCollationCmp(k, lastSub) > 0: return k
-    return ""
-  for i in countdown(keys.len - 1, 0):
-    if mCollationCmp(keys[i], lastSub) < 0: return keys[i]
-  return ""
+  ## $ORDER over the in-memory global store (multi-level, parity with LMDB).
+  var pairs: seq[(seq[string], string)] = @[]
+  for k, v in g.memGlobals:
+    if k == name or k.startsWith(name & "\x00"):
+      let (_, s) = decodeMakeKey(k)
+      pairs.add((s, v))
+  pairs.sort(proc(a, b: (seq[string], string)): int = tupCollationCmp(a[0], b[0]))
+  return orderPairs(pairs, subs, forward)
 
 # --- Transaction overlay read visibility (#396) ---
 # $DATA/$ORDER/$QUERY/listSubs/listNodes must see uncommitted writes (and
@@ -505,7 +493,6 @@ proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool):
 # global's keys during a transaction.
 
 proc txnSubs(g: var Globals, name: string): seq[(seq[string], string)]
-proc orderPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): string
 proc queryPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): seq[string]
 
 proc order*(g: var Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =

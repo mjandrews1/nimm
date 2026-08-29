@@ -13,6 +13,7 @@ NIMM="./bin/nimm"
 SHELL_SUITES=(
     test_zmisc test_scripting test_zwrite test_scoping
     test_key_encoding test_order_lmdb test_lint
+    test_store_parity
     test_bytecode_conformance test_bytecode_kill test_bytecode_control
     test_bytecode_subscripts test_bytecode_fallback
     test_zconvert test_ni_system test_zsave test_zallocate
