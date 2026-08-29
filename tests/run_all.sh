@@ -21,6 +21,7 @@ SHELL_SUITES=(
     test_mode_gates test_unwired_args test_for_zeof
     test_zinspect test_introspection test_source test_errorloc
     test_txn_reads test_mcp_introspection
+    test_etrap
 )
 
 echo "=== NimM Test Runner (fresh binary) ==="

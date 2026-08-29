@@ -43,6 +43,7 @@ type
     testValue*: bool
     quitAll*: bool  # Set by top-level QUIT: unwind everything and halt
     quitValue*: string  # Top-level QUIT value → process exit code (#368)
+    etrapDepth*: int  # $ETRAP nesting depth (caps trap recursion, #403)
     doDepth*: int   # DO/XECUTE/extrinsic frame depth (0 = top level)
     doScopeBase*: seq[int]  # scope depth at each frame entry (QUIT unwinds to top)
     channels: array[64, DeviceHandle]  # Channel 0-63 (0 = principal)
@@ -100,6 +101,7 @@ proc clearOutput*(eng: var Engine) =
   eng.output = ""
 
 const MaxRecursionDepth = 1000  # Prevent stack overflow
+const MaxEtrapDepth = 10        # Cap $ETRAP nesting (#403)
 
 proc parseLine*(code: string): Line
 proc cachedParseLine*(eng: var Engine, code: string): Line
@@ -1564,13 +1566,19 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       if eng.globals[].inTransaction():
         eng.globals[].trollback()
 
-      # Check if $ETRAP is set
+      # Check if $ETRAP is set (capped to prevent unbounded trap recursion, #403)
       let etrap = eng.globals[].getSpecialVar("$ETRAP")
-      if etrap.len > 0:
+      if etrap.len > 0 and eng.etrapDepth < MaxEtrapDepth:
+        eng.etrapDepth += 1
         try:
           discard eng.execute(eng.cachedParseLine(etrap), depth + 1)
         except:
           eng.output.add("Error in $ETRAP: " & getCurrentExceptionMsg() & "\n")
+        finally:
+          eng.etrapDepth -= 1
+      elif etrap.len > 0:
+        # Trap depth exceeded: report the original error instead of re-trapping.
+        eng.output.add("Error: $ETRAP recursion limit exceeded (" & errorMsg & ")\n")
       else:
         # Self-describing error with source position (#389 Phase E)
         let rtn = eng.runtime[].currentRoutine
