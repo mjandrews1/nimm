@@ -84,8 +84,10 @@ SET ^W("1")="a"
 SET ^W("10")="b"
 SET ^W("2")="c"
 SET R=""
-SET K=""
-FOR  SET K=$ORDER(^W(K),-1) QUIT:K=""  SET R=R_K_","
+SET K="",LAST=""
+FOR  SET K=$ORDER(^W(K)) QUIT:K=""  SET LAST=K
+SET K=LAST
+FOR  QUIT:K=""  SET R=R_K_","  SET K=$ORDER(^W(K),-1)
 WRITE R
 QUIT
 EOF
@@ -137,8 +139,10 @@ SET ^W(-100)="b"
 SET ^W(0)="d"
 SET ^W(5)="e"
 SET R=""
-SET K=""
-FOR  SET K=$ORDER(^W(K),-1) QUIT:K=""  SET R=R_K_","
+SET K="",LAST=""
+FOR  SET K=$ORDER(^W(K)) QUIT:K=""  SET LAST=K
+SET K=LAST
+FOR  QUIT:K=""  SET R=R_K_","  SET K=$ORDER(^W(K),-1)
 WRITE R
 QUIT
 EOF

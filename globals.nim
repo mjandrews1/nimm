@@ -53,6 +53,16 @@ proc makeKey(name: string, subs: seq[string]): string =
     result[pos..<pos+sub.len] = sub
     pos += sub.len
 
+proc decodeMakeKey(key: string): (string, seq[string]) =
+  ## Inverse of makeKey: split name\x00sub1\x00sub2... into (name, subs).
+  ## Used to decode the in-memory/transaction flat keys (NOT the LMDB
+  ## type-byte keys, which decodeKey handles).
+  let parts = key.split('\x00')
+  var subs: seq[string] = @[]
+  for i in 1 ..< parts.len:
+    subs.add(parts[i])
+  result = (parts[0], subs)
+
 proc newGlobals*(dbPath: string = ""): Globals =
   result.scopes = @[initTable[string, string]()]
   result.scopeShared = @[false]
@@ -444,13 +454,13 @@ proc tcommit*(g: var Globals) =
       # LMDB: batch all writes/kills in a single transaction for atomicity
       var puts: seq[(string, seq[string], string)] = @[]
       for k, v in current.writes:
-        let (name, subs) = decodeKey(k)
+        let (name, subs) = decodeMakeKey(k)
         puts.add((name, subs, v))
       if puts.len > 0:
         g.globals.batchPut(puts)
       var dels: seq[(string, seq[string])] = @[]
       for k in current.kills:
-        let (name, subs) = decodeKey(k)
+        let (name, subs) = decodeMakeKey(k)
         # Use deletePrefix to remove node and all descendants (M KILL §7.2.9)
         g.globals.deletePrefix(name, subs)
     else:

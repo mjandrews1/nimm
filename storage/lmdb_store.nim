@@ -558,23 +558,9 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
   var mdbVal: Val
 
   if not forward and LEVEL > 0 and startSub.len == 0:
-    # Backward from empty: find the last key in this global's subtree.
-    # Use a prefix that is one past the end of the global's key range.
-    var endPrefix = global & "\x01"  # byte after all subscript type bytes
-    var endKey: Val
-    endKey.mvSize = cast[uint](endPrefix.len)
-    endKey.mvData = cast[pointer](unsafeAddr endPrefix[0])
-    rc = cursorGet(cursor, addr endKey, addr mdbVal, SET_RANGE)
-    if rc != SUCCESS:
-      # No key >= endPrefix; try LAST
-      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, LAST)
-      if rc != SUCCESS:
-        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
-    else:
-      # SET_RANGE positioned at or past endPrefix; PREV gives the last key in global
-      rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
-      if rc != SUCCESS:
-        cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+    # §9.9: backward from the null subscript returns nothing (the null
+    # subscript precedes every other subscript). Matches orderGlobalMem.
+    cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
   else:
     mdbKey.mvSize = cast[uint](prefix.len)
     mdbKey.mvData = cast[pointer](unsafeAddr prefix[0])
