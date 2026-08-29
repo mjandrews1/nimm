@@ -890,8 +890,11 @@ proc staleLocks*(store: var LmdbStore): seq[tuple[name: string, pid: int]] =
     let val = newString(mdbVal.mvSize)
     if mdbVal.mvSize > 0:
       copyMem(addr val[0], mdbVal.mvData, mdbVal.mvSize)
-    # decode lock name from key: "^%LOCK\x00<name>\x00"
-    let namePart = key[prefix.len ..^ 1].strip(chars = {'\x00'})
+    # Decode the key properly: the lock name is the first subscript of ^%LOCK.
+    let (_, subs) = decodeKey(key)
+    var namePart = ""
+    if subs.len > 0:
+      namePart = subs[0]
     var pid = -1
     try:
       pid = parseInt(val)
