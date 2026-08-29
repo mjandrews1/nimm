@@ -156,7 +156,7 @@ proc writeVarTree(eng: var Engine, name: string, base: seq[string]) =
 
 proc execute*(eng: var Engine, line: Line, depth: int = 0): string
 
-proc ensureBytecode(eng: var Engine, routine: string) =
+proc ensureBytecode*(eng: var Engine, routine: string) =
   ## Compile a routine's lines to bytecode on first use (#342).
   if routine notin eng.runtime[].routines: return
   var rtRoutine = eng.runtime[].routines[routine]

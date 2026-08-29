@@ -28,6 +28,8 @@ import mcp_server
 import json
 import static_analysis
 import network
+import bytecode
+import algorithm
 
 type
   CliArgs = object
@@ -651,6 +653,65 @@ proc main() =
         except:
           return %*{"error": getCurrentExceptionMsg()}
       )
+
+    # Introspection tools (#389 Phase F) — reuse the A–C formatters/APIs.
+    mcp.registerTool("list_routines", "List loaded M routines (name, labels, lines)", %*{
+      "type": "object",
+      "properties": {}
+    }, proc(params: JsonNode): JsonNode =
+      var routines = newJArray()
+      var names: seq[string] = @[]
+      for n in rt.routines.keys: names.add(n)
+      names.sort()
+      for n in names:
+        let r = rt.routines[n]
+        routines.add(%*{"name": n, "labels": r.labels.len,
+                         "lines": r.lines.len, "file": r.filePath})
+      return %*{"routines": routines}
+    )
+
+    mcp.registerTool("list_variables", "List local variables in the current scope", %*{
+      "type": "object",
+      "properties": {}
+    }, proc(params: JsonNode): JsonNode =
+      var variables = newJArray()
+      for (name, subs) in eng.globals[].listLocals():
+        let kind = if name.startsWith("^"): "global" else: "local"
+        variables.add(%*{"name": name, "subscripts": subs,
+                          "value": eng.globals[].get(name, subs), "kind": kind})
+      return %*{"variables": variables}
+    )
+
+    mcp.registerTool("get_source", "Get the source of a loaded routine", %*{
+      "type": "object",
+      "properties": {"routine": {"type": "string", "description": "Routine name"}},
+      "required": ["routine"]
+    }, proc(params: JsonNode): JsonNode =
+      let name = params["routine"].getStr().toUpperAscii()
+      if name notin rt.routines:
+        return %*{"error": "Routine not found: " & name}
+      let r = rt.routines[name]
+      return %*{"name": name, "source": r.originalLines}
+    )
+
+    mcp.registerTool("disassemble", "Disassemble a routine's bytecode", %*{
+      "type": "object",
+      "properties": {"routine": {"type": "string", "description": "Routine name"}},
+      "required": ["routine"]
+    }, proc(params: JsonNode): JsonNode =
+      let name = params["routine"].getStr().toUpperAscii()
+      if name notin rt.routines:
+        return %*{"error": "Routine not found: " & name}
+      try:
+        eng.ensureBytecode(name)
+        var dump = ""
+        for bc in rt.routines[name].bytecodeCache:
+          if bc != nil:
+            dump.add(disassemble(bc))
+        return %*{"name": name, "bytecode": dump}
+      except:
+        return %*{"error": getCurrentExceptionMsg()}
+    )
 
     echo "Starting MCP server on port ", args.mcpPort
     mcp.start()

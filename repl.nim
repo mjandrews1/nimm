@@ -7,6 +7,7 @@ import tables
 import engine
 import runtime
 import globals
+import inspector
 
 type
   ReplState* = object
@@ -34,6 +35,7 @@ proc showHelp() =
   echo "  /clear          — Clear screen"
   echo "  /history        — Show command history"
   echo "  /vars           — Show local variables"
+  echo "  /stack          — Show call stack"
   echo "  /globals        — Show global variables"
   echo "  /help           — Show this help"
   echo ""
@@ -93,15 +95,31 @@ proc repl*(eng: var Engine, rt: var Runtime) =
       of "/history":
         showHistory(state)
       of "/vars":
-        # Show local variables
+        # Show local variables (structured, via listLocals — #389 Phase F)
         echo ""
         echo "Local variables:"
-        let scope = eng.globals[].scopes[^1]
-        if scope.len == 0:
+        let locals = eng.globals[].listLocals()
+        if locals.len == 0:
           echo "  (none)"
         else:
-          for k, v in scope:
-            echo "  " & k & " = " & v
+          for (name, subs) in locals:
+            var s = "  " & name
+            if subs.len > 0:
+              s.add("(")
+              for i, sub in subs:
+                if i > 0: s.add(",")
+                s.add("\"" & sub & "\"")
+              s.add(")")
+            s.add(" = \"" & eng.globals[].get(name, subs) & "\"")
+            echo s
+        echo ""
+      of "/stack":
+        # Show call stack (with per-frame locals — #389 Phase F)
+        echo ""
+        if eng.callStack.len == 0:
+          echo "  (empty)"
+        else:
+          echo formatStack(eng.callStack)
         echo ""
       of "/globals":
         # Show global variables (LMDB)
