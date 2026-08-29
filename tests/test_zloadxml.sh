@@ -5,7 +5,7 @@
 
 set -e
 
-NIMM="${1:-./bin/nimm}"
+NIMM="./bin/nimm"
 DATA_DIR="${1:-/Users/mark/_diary-data}"
 FIXTURE="/tmp/test_zloadxml_fixture_$$"
 
