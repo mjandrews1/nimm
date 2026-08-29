@@ -36,3 +36,17 @@ jobs:
 
       - name: Run unit suites
         run: ./run_all_tests
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dafny
+        run: |
+          curl -sL -o /tmp/dafny.zip https://github.com/dafny-lang/dafny/releases/download/v4.11.0/dafny-4.11.0-x64-ubuntu-22.04.zip
+          unzip -oq /tmp/dafny.zip -d /tmp/dafny
+          echo "/tmp/dafny/dafny" >> "$GITHUB_PATH"
+
+      - name: Verify formal models
+        run: ./formal/verify.sh
