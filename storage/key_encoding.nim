@@ -31,7 +31,7 @@
 import strutils
 import math
 
-proc isNumeric*(s: string): bool =
+func isNumeric*(s: string): bool =
   ## Check if string represents a number, including M-canonical fractional
   ## forms ".5" and "-.25" (formatNumber drops the redundant leading zero).
   if s.len == 0: return false
@@ -52,7 +52,7 @@ proc isNumeric*(s: string): bool =
     while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
   return i == s.len
 
-proc encodeNumeric*(num: float64): string =
+func encodeNumeric*(num: float64): string =
   ## Encode a number as order-preserving bytes
   ## Format: sign_byte + 18-digit zero-padded field
   ## Sign: \x00=negative, \x01=zero, \x02=positive
@@ -86,7 +86,7 @@ proc encodeNumeric*(num: float64): string =
   result.add(chr(signByte))
   result.add(padded)
 
-proc encodeKey*(global: string, subs: seq[string] = @[]): string =
+func encodeKey*(global: string, subs: seq[string] = @[]): string =
   ## Encode global[sub1,sub2,...] to LMDB key with M-collation order
   ## Format: global\x00(type+data)*
   ##
@@ -115,7 +115,7 @@ proc encodeKey*(global: string, subs: seq[string] = @[]): string =
       result.add(sub)
       result.add('\x00')
 
-proc decodeKey*(key: string): (string, seq[string]) =
+func decodeKey*(key: string): (string, seq[string]) =
   ## Decode LMDB key to (global, [sub1, sub2, ...])
   ## Inverse of encodeKey
   ##
@@ -196,7 +196,7 @@ proc decodeKey*(key: string): (string, seq[string]) =
   
   result = (globalName, parts)
 
-proc mCollationCmp*(a, b: string): int =
+func mCollationCmp*(a, b: string): int =
   ## M-collation comparison: numeric before string
   ## Empty string sorts first
   if a.len == 0 and b.len == 0: return 0
