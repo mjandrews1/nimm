@@ -3,6 +3,7 @@
 
 import strutils
 import tables
+import algorithm
 import os
 import osproc
 import streams
@@ -166,6 +167,7 @@ proc ensureBytecode(eng: var Engine, routine: string) =
     let parsed = eng.cachedParseLine(stripped)
     if parsed != nil:
       var bc = compileLine(parsed)
+      bc.sourceLine = stripped
       bc.optimize()
       rtRoutine.bytecodeCache.add(bc)
     else:
@@ -910,13 +912,56 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           setZsystemOutput(output.strip())
 
       of CmdKind.cZprint:
-        if cmd.zprintExpr != nil and cmd.zprintExpr.kind == eVar:
-          let label = cmd.zprintExpr.vname
-          let routine = eng.runtime[].currentRoutine
-          if routine.len > 0:
-            let line = eng.runtime[].getLine(routine, label, 0)
-            if line.len > 0:
-              eng.writeln(line)
+        # ZPRINT [label | ^routine | "routine"] — print source (#389 Phase C)
+        # Bare ZPRINT → whole current routine; ZPRINT LABEL → one label line;
+        # ZPRINT ^R / ZPRINT "R" → whole named routine; LABEL^R → one line.
+        if cmd.zprintExpr == nil:
+          let r = eng.runtime[].currentRoutine
+          if r.len > 0 and r in eng.runtime[].routines:
+            for ln in eng.runtime[].routines[r].originalLines:
+              eng.writeln(ln)
+        else:
+          case cmd.zprintExpr.kind
+          of eVar:
+            let name = cmd.zprintExpr.vname
+            if name.startsWith("^"):
+              let r = name[1..^1].toUpperAscii()
+              if r in eng.runtime[].routines:
+                for ln in eng.runtime[].routines[r].originalLines:
+                  eng.writeln(ln)
+              else:
+                eng.writeln("ZPRINT: routine not found: " & r)
+            else:
+              # ZPRINT LABEL — print from the label line to the end of routine
+              let r = eng.runtime[].currentRoutine
+              if r.len > 0 and r in eng.runtime[].routines:
+                let lbl = name.toUpperAscii()
+                var startIdx = -1
+                for i, ln in eng.runtime[].routines[r].originalLines:
+                  let s = ln.strip().toUpperAscii()
+                  if s.startsWith(lbl) and
+                     (s.len == lbl.len or s[lbl.len] in {' ', '\t', ';', '('}):
+                    startIdx = i
+                    break
+                if startIdx >= 0:
+                  for i in startIdx ..< eng.runtime[].routines[r].originalLines.len:
+                    eng.writeln(eng.runtime[].routines[r].originalLines[i])
+          of eStr:
+            let r = cmd.zprintExpr.sval.toUpperAscii()
+            if r in eng.runtime[].routines:
+              for ln in eng.runtime[].routines[r].originalLines:
+                eng.writeln(ln)
+            else:
+              eng.writeln("ZPRINT: routine not found: " & r)
+          of eEntryRef:
+            let r = cmd.zprintExpr.entryRoutine
+            let lbl = cmd.zprintExpr.entryLabel
+            if r.len > 0 and r in eng.runtime[].routines:
+              let line = eng.runtime[].getLine(r, lbl, 0)
+              if line.len > 0:
+                eng.writeln(line)
+          else:
+            discard
 
       of CmdKind.cZwrite:
         # ZWRITE [expr] — display variable(s) with structure (#386).
@@ -1307,6 +1352,65 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           eng.writeln(formatReport(report))
         else:
           eng.writeln("No routine loaded")
+
+      of CmdKind.cZroutines:
+        # ZROUTINES [routine] — list loaded routines (or one routine's labels)
+        if cmd.zroutinesExpr == nil:
+          if eng.runtime[].routines.len == 0:
+            eng.writeln("No routines loaded")
+          else:
+            var names: seq[string] = @[]
+            for n in eng.runtime[].routines.keys:
+              names.add(n)
+            names.sort()
+            eng.writeln("Routines:")
+            for n in names:
+              let r = eng.runtime[].routines[n]
+              eng.writeln("  " & n & " (" & $r.labels.len & " labels, " &
+                $r.lines.len & " lines)")
+        else:
+          var name = ""
+          if cmd.zroutinesExpr != nil:
+            case cmd.zroutinesExpr.kind
+            of eVar: name = cmd.zroutinesExpr.vname
+            of eStr: name = cmd.zroutinesExpr.sval
+            of eEntryRef: name = cmd.zroutinesExpr.entryRoutine
+            else: name = eng.evaluator[].eval(cmd.zroutinesExpr)
+          name = name.toUpperAscii()
+          if name notin eng.runtime[].routines:
+            eng.writeln("ZROUTINES: routine not found: " & name)
+          else:
+            let r = eng.runtime[].routines[name]
+            var pairs: seq[(string, int)] = @[]
+            for lbl, idx in r.labels:
+              pairs.add((lbl, idx))
+            pairs.sort(proc(a, b: (string, int)): int = cmp(a[1], b[1]))
+            eng.writeln(name & " labels:")
+            for (lbl, idx) in pairs:
+              eng.writeln("  " & lbl & " (line " & $idx & ")")
+
+      of CmdKind.cZdumpline:
+        # ZDUMP routine — disassemble a routine's bytecode (#389 Phase C)
+        var name = ""
+        if cmd.zdumplineExpr != nil:
+          case cmd.zdumplineExpr.kind
+          of eVar: name = cmd.zdumplineExpr.vname
+          of eStr: name = cmd.zdumplineExpr.sval
+          of eEntryRef: name = cmd.zdumplineExpr.entryRoutine
+          else: name = eng.evaluator[].eval(cmd.zdumplineExpr)
+        name = name.toUpperAscii()
+        if name notin eng.runtime[].routines:
+          eng.writeln("ZDUMP: routine not found: " & name)
+        else:
+          eng.ensureBytecode(name)
+          let r = eng.runtime[].routines[name]
+          if not r.bytecodeReady or r.bytecodeCache.len == 0:
+            eng.writeln("ZDUMP: no bytecode for " & name)
+          else:
+            eng.writeln("ZDUMP " & name & ":")
+            for bc in r.bytecodeCache:
+              if bc != nil:
+                eng.write(disassemble(bc))
 
       of CmdKind.cNiOpen:
         # NIOPEN protocol:host:port — Open network connection (#329)

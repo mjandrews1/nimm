@@ -398,6 +398,7 @@ type
     cZstack,
     cZstats, cZvhistory,
     cZanalyze,
+    cZroutines, cZdumpline,
     cZloadxml,
     cZverify,
     cNiOpen, cNiListen, cNiAccept, cNiRead, cNiWrite, cNiClose
@@ -535,6 +536,10 @@ type
       discard
     of cZanalyze:
       discard
+    of cZroutines:
+      zroutinesExpr*: Expr
+    of cZdumpline:
+      zdumplineExpr*: Expr
     of cZloadxml:
       zloadxmlFile*: Expr
       zloadxmlGlobal*: Expr

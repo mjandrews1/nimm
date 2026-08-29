@@ -99,6 +99,9 @@ proc parseLabels(routine: var Routine) =
           inc labelEnd
         if labelEnd > 0:
           let label = trimmed[0..<labelEnd].toUpperAscii()
+          # A command keyword at line start is not a label (matches stripLabel).
+          if isCommandKeyword(label):
+            continue
           routine.labels[label] = i
 
 proc stripLabel*(line: string): string =
@@ -322,7 +325,7 @@ proc loadRoutine*(rt: var Runtime, filepath: string): Routine =
   var line: string
   while f.readLine(line):
     # Remove trailing whitespace
-    routine.lines.add(line.strip(trailing = true))
+    routine.lines.add(line.strip(leading = false, trailing = true))
   
   # Preserve raw source for ZSAVE (before comment/blank filtering and
   # dot-continuation merging)
@@ -347,7 +350,7 @@ proc loadRoutineFromString*(rt: var Runtime, name: string, code: string): Routin
   var routine = Routine(name: name.toUpperAscii())
   
   for line in code.splitLines():
-    routine.lines.add(line.strip(trailing = true))
+    routine.lines.add(line.strip(leading = false, trailing = true))
   
   # Preserve raw source for ZSAVE
   routine.originalLines = routine.lines
