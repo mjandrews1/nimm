@@ -138,6 +138,36 @@ module KeyEncoding {
     }
   }
 
+  lemma CmpZeroMeansEqual(x: Sub, y: Sub)
+    requires Cmp(x, y) == 0
+    ensures x == y
+  {
+    reveal Cmp;
+    if x.Empty? {
+      assert y.Empty?;
+    } else if x.Num? {
+      assert y.Num? && x.scale == y.scale;
+    } else {
+      assert y.Str? && x.bytes == y.bytes;
+    }
+  }
+
+  // Strict transitivity: x < y && y <= z  ==>  x < z.
+  lemma CmpStrictTrans(x: Sub, y: Sub, z: Sub)
+    requires Cmp(x, y) < 0 && Cmp(y, z) <= 0
+    ensures Cmp(x, z) < 0
+  {
+    reveal Cmp;
+    CmpTransitive(x, y, z);
+    if Cmp(x, z) == 0 {
+      CmpZeroMeansEqual(x, z);
+      CmpAntisymmetric(x, y);
+      assert Cmp(y, x) > 0;
+      assert Cmp(y, z) <= 0;
+      assert false;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Framing (encode / decode)
   // ---------------------------------------------------------------------------
