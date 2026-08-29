@@ -40,7 +40,17 @@ issues; the criteria themselves should not drift.
 | H5 | **MCP security** — auth on every tool, write tools behind `--allow-write`, path allowlists, audit log, no secrets in output. | `test_mcp_introspection.sh` + a negative auth test. |
 | H6 | **Error-trap safety** — `$ETRAP`/`$ZTRAP` fire once and cannot recurse infinitely. | An etrap depth cap + test. |
 
-## 4. FST-specific
+## 4. Dogfooding — test NimM with NimM
+
+| # | Criterion | Verifier |
+|---|---|---|
+| D1 | **M-first tests** — maximize the use of NimM M code in test items and test scripts in place of other languages (Python, bash, zsh); M-routine fixtures are the default for exercising the interpreter. | Review of test scripts; new tests are written as `.m` routines / M `-x`/`-e` snippets unless another language is justified. |
+
+Exception: it is okay to use any other language or tool if that delivers
+correct, clear, or hardened results (e.g. the Python conformance harnesses, or
+bash + curl for MCP HTTP round-trips).
+
+## 5. FST-specific
 
 | # | Criterion | Verifier |
 |---|---|---|
@@ -73,6 +83,7 @@ Criterion → where it is (or will be) enforced:
 | H4 | unit asserts |
 | H5 | `test_mcp_introspection.sh` + new auth test |
 | H6 | new etrap-depth test |
+| D1 | code review of test scripts; M-routine fixtures are the default |
 | F1–F4 | FST test scripts + Utility-01 verification |
 
 ## Status / how to use
