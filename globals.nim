@@ -39,7 +39,7 @@ type
     heldLocks*: HashSet[string]           # Lock names held by this process (#278)
     txn*: TransactionState                # Transaction processing state (§11)
 
-proc makeKey(name: string, subs: seq[string]): string =
+proc makeKey*(name: string, subs: seq[string]): string =
   ## Create flat key for storage (pre-computed exact size)
   var size = name.len
   for sub in subs:
@@ -53,7 +53,7 @@ proc makeKey(name: string, subs: seq[string]): string =
     result[pos..<pos+sub.len] = sub
     pos += sub.len
 
-proc decodeMakeKey(key: string): (string, seq[string]) =
+proc decodeMakeKey*(key: string): (string, seq[string]) =
   ## Inverse of makeKey: split name\x00sub1\x00sub2... into (name, subs).
   ## Used to decode the in-memory/transaction flat keys (NOT the LMDB
   ## type-byte keys, which decodeKey handles).
