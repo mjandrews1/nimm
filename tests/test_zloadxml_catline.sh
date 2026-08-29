@@ -6,7 +6,7 @@ set -e
 
 DATA_DIR="${1:-/Users/mark/_diary-data}"
 DB="/tmp/test_catline_$$.lmdb"
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 
 echo "=== ZLOADXML CatLine Test Suite ==="
 echo "Database: $DB"

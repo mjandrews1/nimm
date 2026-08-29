@@ -3,7 +3,7 @@
 # Verifies TSTART/TCOMMIT/TROLLBACK persist correctly to LMDB.
 set -euo pipefail
 
-NIMM="${NIMM_BIN:-./nimm}"
+NIMM="${1:-./bin/nimm}"
 DB="/tmp/test_txn_lmdb_$$"
 PASS=0
 FAIL=0

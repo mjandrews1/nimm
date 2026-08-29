@@ -98,7 +98,7 @@ def make_engine(name):
         return RFCEngine("RFC", os.environ.get("RFC_BIN", "/Users/mark/_rfc/builddir/rfc"))
     if name == "nimm":
         base = os.environ.get("NIMM_DIR", "/Users/mark/_diary/ports/nimm-annotated")
-        return NimMEngine("NimM", os.environ.get("NIMM_BIN", os.path.join(base, "nimm")))
+        return NimMEngine("NimM", os.environ.get("NIMM_BIN", os.path.join(base, "bin", "nimm")))
     return None
 
 

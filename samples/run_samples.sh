@@ -20,7 +20,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 ENGINE="${1:?usage: run_samples.sh nimm|rsm|rfc}"
 RSM_BIN="${RSM_BIN:-/Users/mark/_rsm/rsm}"
 RFC_BIN="${RFC_BIN:-/Users/mark/_rfc/builddir/rfc}"
-NIMM_BIN="${NIMM_BIN:-$DIR/../nimm}"
+NIMM_BIN="${NIMM_BIN:-$DIR/../bin/nimm}"
 
 run_mfile() {
   local mfile="$1"

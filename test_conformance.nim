@@ -20,7 +20,7 @@ proc runMCode(code: string, expected: string, category: string = ""): TestResult
   result.category = category
   
   putEnv("DYLD_LIBRARY_PATH", "/usr/local/lib")
-  let output = execProcess("./nimm", args = @["-x", code], options = {poStdErrToStdOut})
+  let output = execProcess("./bin/nimm", args = @["-x", code], options = {poStdErrToStdOut})
   
   # Only strip trailing newline, not spaces
   var actual = output

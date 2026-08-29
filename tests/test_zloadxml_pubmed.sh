@@ -4,7 +4,7 @@
 
 set -e
 
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 FIX="/tmp/test_pubmed_fixture_$$.xml"
 FIXGZ="$FIX.gz"
 

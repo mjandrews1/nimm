@@ -42,7 +42,7 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
   fi
 
   # P2: Extended conformance
-  P2=$(NIMM_BIN=./nimm python3 tests/mumps_extended_conformance.py --impls nimm 2>&1 | tail -3)
+  P2=$(NIMM_BIN=./bin/nimm python3 tests/mumps_extended_conformance.py --impls nimm 2>&1 | tail -3)
   if echo "$P2" | grep -q "100.0%"; then
     log "P2 extended OK"
   else
@@ -51,7 +51,7 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
   fi
 
   # P3: ISO suite (179 tests including Transaction)
-  P3=$(NIMM_BIN=./nimm python3 tests/ansi_iso_m_conformance.py --impls nimm --runs 1 2>&1 | tail -3)
+  P3=$(NIMM_BIN=./bin/nimm python3 tests/ansi_iso_m_conformance.py --impls nimm --runs 1 2>&1 | tail -3)
   if echo "$P3" | grep -q "SuspectBugs"; then
     log "P3 iso OK"
   else
@@ -79,7 +79,7 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
 
   # P6: MCP server smoke test
   if [ -z "$MCP_PID" ] || ! kill -0 "$MCP_PID" 2>/dev/null; then
-    ./nimm --mcp --mcp-port $MCP_PORT --api-key "$MCP_KEY" --allow-write &
+    ./bin/nimm --mcp --mcp-port $MCP_PORT --api-key "$MCP_KEY" --allow-write &
     MCP_PID=$!
     sleep 2
   fi
@@ -96,7 +96,7 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
 
   # P7: Transaction stress test
   rm -f /tmp/soak_txn.lmdb /tmp/soak_txn.lmdb-lock
-  TXN_RESULT=$(./nimm -d /tmp/soak_txn.lmdb -x '
+  TXN_RESULT=$(./bin/nimm -d /tmp/soak_txn.lmdb -x '
     KILL ^Stress
     TSTART
     FOR I=1:1:100 SET ^Stress(I)=I*2
@@ -111,9 +111,9 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
   fi
 
   # P8: Cross-process LOCK test
-  LOCK_RESULT=$(./nimm -d /tmp/soak_txn.lmdb -x 'LOCK +^SoakLock W $DATA(^$LOCK("SoakLock"))' 2>&1)
+  LOCK_RESULT=$(./bin/nimm -d /tmp/soak_txn.lmdb -x 'LOCK +^SoakLock W $DATA(^$LOCK("SoakLock"))' 2>&1)
   if echo "$LOCK_RESULT" | grep -q "1"; then
-    LOCK_RESULT2=$(./nimm -d /tmp/soak_txn.lmdb -x 'W $DATA(^$LOCK("SoakLock"))' 2>&1)
+    LOCK_RESULT2=$(./bin/nimm -d /tmp/soak_txn.lmdb -x 'W $DATA(^$LOCK("SoakLock"))' 2>&1)
     if echo "$LOCK_RESULT2" | grep -q "1"; then
       log "P8 lock OK (cross-process)"
     else
@@ -126,7 +126,7 @@ while [ "$(date +%s)" -lt "$CUTOFF" ]; do
   fi
 
   # P9: Fuzz differential
-  FUZZ=$(python3 tests/m_fuzz.py --start $((RANDOM * 1000)) --count 200 --nimm ./nimm --rsm ~/rsm/rsm --dbfile /tmp/overnight_rsm.dat 2>/dev/null | grep FUZZSTATS)
+  FUZZ=$(python3 tests/m_fuzz.py --start $((RANDOM * 1000)) --count 200 --nimm ./bin/nimm --rsm ~/rsm/rsm --dbfile /tmp/overnight_rsm.dat 2>/dev/null | grep FUZZSTATS)
   if [ -n "$FUZZ" ]; then
     log "P9 fuzz $FUZZ"
   else

@@ -462,11 +462,11 @@ def main():
     
     for impl in impls:
         if impl == "nimm":
-            nimm_path = os.environ.get("NIMM_BIN", os.path.join(base_dir, "nimm"))
+            nimm_path = os.environ.get("NIMM_BIN", os.path.join(base_dir, "bin", "nimm"))
             if not os.path.exists(nimm_path):
                 # Build it
                 print(f"Building NimM...")
-                subprocess.run(["nim", "c", "-d:release", "-o:nimm", "main.nim"],
+                subprocess.run(["nim", "c", "-d:release", "-o:bin/nimm", "main.nim"],
                              cwd=base_dir, capture_output=True)
             engines.append(NimMEngine(nimm_path))
         elif impl == "rsm":

@@ -2,7 +2,7 @@
 # bench_bytecode.sh — Benchmark bytecode VM vs AST interpreter
 set -euo pipefail
 
-NIMM="${NIMM_BIN:-./nimm}"
+NIMM="${1:-./bin/nimm}"
 
 echo "=== Bytecode VM vs AST Interpreter Benchmark ==="
 echo ""

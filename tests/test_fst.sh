@@ -5,7 +5,7 @@
 set -e
 
 DB="/tmp/test_fst_$$"
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 LOADER="python3 future_search_tool/src/fst_load.py"
 DATA_DIR="/Users/mark/_diary-data"
 

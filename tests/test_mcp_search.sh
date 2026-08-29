@@ -5,7 +5,7 @@
 set -e
 
 DB="${1:-/tmp/test_fst_mcp_$$}"
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 LOADER="python3 future_search_tool/src/fst_load.py"
 SERVER="python3 future_search_tool/src/fst_mcp_server.py"
 CLIENT="python3 future_search_tool/src/mcp_search_client.py"

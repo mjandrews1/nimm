@@ -16,7 +16,7 @@ fi
 echo "Loading MeSH from $XML into $DB"
 
 # Parse XML using M string functions
-./nimm -d "$DB" -x "
+./bin/nimm -d "$DB" -x "
 K ^MESH,^FST,^TMP
 S ^FST(\"status\")=\"loading\"
 O 1:(\"$XML\":\"R\")

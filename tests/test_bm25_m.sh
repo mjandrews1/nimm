@@ -4,7 +4,7 @@
 
 set -e
 
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 RTN="future_search_tool/src/bm25idx.m"
 DB="/tmp/test_bm25_$$.lmdb"
 

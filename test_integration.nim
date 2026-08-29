@@ -15,7 +15,7 @@ proc runMCode(code: string, expected: string): TestResult =
   result.name = code[0..min(40, code.len-1)] & "..."
   result.passed = false
   
-  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./nimm -x '" & code & "'"
+  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./bin/nimm -x '" & code & "'"
   let (output, exitCode) = execCmdEx(cmd)
   
   let actual = output.strip()
@@ -29,7 +29,7 @@ proc runRoutine(routine: string, code: string, expected: string): TestResult =
   result.name = routine & ": " & code[0..min(30, code.len-1)] & "..."
   result.passed = false
   
-  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./nimm -r " & routine & " -x '" & code & "'"
+  let cmd = "DYLD_LIBRARY_PATH=/usr/local/lib ./bin/nimm -r " & routine & " -x '" & code & "'"
   let (output, exitCode) = execCmdEx(cmd)
   
   let actual = output.strip()

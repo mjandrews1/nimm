@@ -104,10 +104,10 @@ def make_engine(name):
         return RFCEngine("RFC", os.environ.get("RFC_BIN", "/Users/mark/_rfc/builddir/rfc"))
     if name == "nimm":
         base = os.environ.get("NIMM_DIR", "/Users/mark/_diary/ports/nimm-annotated")
-        path = os.environ.get("NIMM_BIN", os.path.join(base, "nimm"))
+        path = os.environ.get("NIMM_BIN", os.path.join(base, "bin", "nimm"))
         if not os.path.exists(path):
             print(f"Building NimM...")
-            subprocess.run(["nim", "c", "-d:release", "-o:nimm", "main.nim"],
+            subprocess.run(["nim", "c", "-d:release", "-o:bin/nimm", "main.nim"],
                            cwd=base, capture_output=True)
         return NimMEngine("NimM", path)
     return None

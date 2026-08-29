@@ -3,7 +3,7 @@
 # Compares bytecode output with AST output for key test cases
 set -euo pipefail
 
-NIMM="${NIMM_BIN:-./nimm}"
+NIMM="${1:-./bin/nimm}"
 PASS=0
 FAIL=0
 

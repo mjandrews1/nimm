@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-FST Data Loader — Parse NLM XML, generate M commands for NimM.
-Uses NimM's own LMDB via -x flag for compatibility.
+FST NLM Data Loader — Load NLM data via NimM -x commands.
+Uses NimM's own LMDB for compatibility.
 
 Usage:
-  python3 fst_load.py --db /path/to/fst.lmdb [--data-dir /path/to/data] [--max N]
+  python3 fst_loader.py --db /path/to/fst.lmdb [--data-dir /path/to/data]
 """
 
 import argparse
@@ -16,30 +16,21 @@ import xml.etree.ElementTree as ET
 
 
 def run_mcode(db, code):
-    """Execute M code via nimm -x."""
+    """Execute M code via nimm and return output."""
     result = subprocess.run(
         ["./bin/nimm", "-d", db, "-x", code],
         capture_output=True, text=True, timeout=30
     )
-    if result.returncode != 0:
-        print(f"ERROR: {result.stderr.strip()}", file=sys.stderr)
-        return False
-    return True
+    return result.stdout.strip()
 
 
-def escape_m(s):
-    """Escape string for M literal."""
-    return s.replace('"', '""')
-
-
-def load_mesh_descriptors(db, path, max_records=0):
+def load_mesh_descriptors(db, path):
     print(f"Loading MeSH descriptors from {path}...")
     count = 0
-    errors = 0
-    
     tree = ET.parse(path)
     root = tree.getroot()
     
+    # Batch writes: collect all SET commands, execute in chunks
     batch = []
     for record in root.findall(".//DescriptorRecord"):
         desc_ui = record.findtext("DescriptorUI", "")
@@ -49,39 +40,40 @@ def load_mesh_descriptors(db, path, max_records=0):
         if not desc_ui:
             continue
         
-        batch.append(f'SET ^MESH("{escape_m(desc_ui)}","name")="{escape_m(desc_name)}"')
+        # Escape quotes in values
+        desc_name = desc_name.replace('"', '""')
+        scope_note = scope_note.replace('"', '""')
+        
+        batch.append(f'SET ^MESH("{desc_ui}","name")="{desc_name}"')
         if scope_note:
-            batch.append(f'SET ^MESH("{escape_m(desc_ui)}","scopeNote")="{escape_m(scope_note[:500])}"')
+            batch.append(f'SET ^MESH("{desc_ui}","scopeNote")="{scope_note}"')
         
         for tree_num in record.findall(".//TreeNumber"):
             tn = tree_num.text
             if tn:
-                batch.append(f'SET ^MESH("{escape_m(desc_ui)}","treeNumber","{escape_m(tn)}")="1"')
+                batch.append(f'SET ^MESH("{desc_ui}","treeNumber","{tn}")="1"')
         
         for aq in record.findall(".//AllowableQualifier"):
             qual_ui = aq.findtext("QualifierReferredTo/QualifierUI", "")
             if qual_ui:
-                batch.append(f'SET ^MESH("{escape_m(desc_ui)}","qualifier","{escape_m(qual_ui)}")="1"')
+                batch.append(f'SET ^MESH("{desc_ui}","qualifier","{qual_ui}")="1"')
         
         count += 1
         
-        if len(batch) >= 200:
+        # Execute batch every 100 records
+        if len(batch) >= 500:
             code = " ".join(batch)
-            if not run_mcode(db, code):
-                errors += 1
+            run_mcode(db, code)
             batch = []
-            if count % 500 == 0:
+            if count % 1000 == 0:
                 print(f"  Loaded {count} descriptors...")
-        
-        if max_records > 0 and count >= max_records:
-            break
     
+    # Execute remaining batch
     if batch:
         code = " ".join(batch)
-        if not run_mcode(db, code):
-            errors += 1
+        run_mcode(db, code)
     
-    print(f"  Loaded {count} MeSH descriptors ({errors} errors)")
+    print(f"  Loaded {count} MeSH descriptors")
     return count
 
 
@@ -100,16 +92,67 @@ def load_mesh_qualifiers(db, path):
         if not qual_ui:
             continue
         
-        batch.append(f'SET ^QUAL("{escape_m(qual_ui)}","name")="{escape_m(qual_name)}"')
+        qual_name = qual_name.replace('"', '""')
+        abbrev = abbrev.replace('"', '""')
+        
+        batch.append(f'SET ^QUAL("{qual_ui}","name")="{qual_name}"')
         if abbrev:
-            batch.append(f'SET ^QUAL("{escape_m(qual_ui)}","abbreviation")="{escape_m(abbrev)}"')
+            batch.append(f'SET ^QUAL("{qual_ui}","abbreviation")="{abbrev}"')
         
         count += 1
     
     if batch:
-        run_mcode(db, " ".join(batch))
+        code = " ".join(batch)
+        run_mcode(db, code)
     
     print(f"  Loaded {count} MeSH qualifiers")
+    return count
+
+
+def load_mesh_supplements(db, path):
+    print(f"Loading MeSH supplements from {path}...")
+    count = 0
+    
+    if os.path.isdir(path):
+        files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.xml')]
+    else:
+        files = [path]
+    
+    for fpath in files:
+        tree = ET.parse(fpath)
+        root = tree.getroot()
+        
+        batch = []
+        for record in root.findall(".//SupplementalRecord"):
+            scr_id = record.findtext("SupplementalRecordUI", "")
+            scr_name = record.findtext("SupplementalRecordName/String", "")
+            
+            if not scr_id:
+                continue
+            
+            scr_name = scr_name.replace('"', '""')
+            batch.append(f'SET ^SUPPLEMENT("{scr_id}","name")="{scr_name}"')
+            
+            for mapped in record.findall(".//HeadingMappedTo"):
+                desc_ui = mapped.findtext("DescriptorUI", "")
+                if desc_ui:
+                    batch.append(f'SET ^SUPPLEMENT("{scr_id}","mappedTo")="{desc_ui}"')
+                    batch.append(f'SET ^LINK("SUPPLEMENT","{scr_id}","MESH","{desc_ui}")="mapped"')
+            
+            count += 1
+            
+            if len(batch) >= 500:
+                code = " ".join(batch)
+                run_mcode(db, code)
+                batch = []
+                if count % 1000 == 0:
+                    print(f"  Loaded {count} supplements...")
+        
+        if batch:
+            code = " ".join(batch)
+            run_mcode(db, code)
+    
+    print(f"  Loaded {count} MeSH supplements")
     return count
 
 
@@ -151,23 +194,29 @@ def load_catline(db, path):
                     if sf.get("code") == "b":
                         publisher = sf.text.strip() if sf.text else ""
         
+        title = title.replace('"', '""')
+        issn = issn.replace('"', '""')
+        publisher = publisher.replace('"', '""')
+        
         if title:
-            batch.append(f'SET ^CATLINE("{escape_m(nlm_id)}","title")="{escape_m(title)}"')
+            batch.append(f'SET ^CATLINE("{nlm_id}","title")="{title}"')
         if issn:
-            batch.append(f'SET ^CATLINE("{escape_m(nlm_id)}","issn")="{escape_m(issn)}"')
+            batch.append(f'SET ^CATLINE("{nlm_id}","issn")="{issn}"')
         if publisher:
-            batch.append(f'SET ^CATLINE("{escape_m(nlm_id)}","publisher")="{escape_m(publisher)}"')
+            batch.append(f'SET ^CATLINE("{nlm_id}","publisher")="{publisher}"')
         
         count += 1
         
-        if len(batch) >= 200:
-            run_mcode(db, " ".join(batch))
+        if len(batch) >= 500:
+            code = " ".join(batch)
+            run_mcode(db, code)
             batch = []
-            if count % 500 == 0:
+            if count % 1000 == 0:
                 print(f"  Loaded {count} CatLine records...")
     
     if batch:
-        run_mcode(db, " ".join(batch))
+        code = " ".join(batch)
+        run_mcode(db, code)
     
     print(f"  Loaded {count} CatLine records")
     return count
@@ -211,23 +260,29 @@ def load_serline(db, path):
                     if sf.get("code") == "a":
                         holdings = sf.text.strip() if sf.text else ""
         
+        title = title.replace('"', '""')
+        issn = issn.replace('"', '""')
+        holdings = holdings.replace('"', '""')
+        
         if title:
-            batch.append(f'SET ^SERLINE("{escape_m(nlm_id)}","title")="{escape_m(title)}"')
+            batch.append(f'SET ^SERLINE("{nlm_id}","title")="{title}"')
         if issn:
-            batch.append(f'SET ^SERLINE("{escape_m(nlm_id)}","issn")="{escape_m(issn)}"')
+            batch.append(f'SET ^SERLINE("{nlm_id}","issn")="{issn}"')
         if holdings:
-            batch.append(f'SET ^SERLINE("{escape_m(nlm_id)}","holdings")="{escape_m(holdings)}"')
+            batch.append(f'SET ^SERLINE("{nlm_id}","holdings")="{holdings}"')
         
         count += 1
         
-        if len(batch) >= 200:
-            run_mcode(db, " ".join(batch))
+        if len(batch) >= 500:
+            code = " ".join(batch)
+            run_mcode(db, code)
             batch = []
-            if count % 500 == 0:
+            if count % 1000 == 0:
                 print(f"  Loaded {count} SerLine records...")
     
     if batch:
-        run_mcode(db, " ".join(batch))
+        code = " ".join(batch)
+        run_mcode(db, code)
     
     print(f"  Loaded {count} SerLine records")
     return count
@@ -271,22 +326,29 @@ def load_pubmed(db, path, max_records=0):
                     if mesh.text:
                         mesh_terms.append(mesh.text)
                 
-                if title:
-                    batch.append(f'SET ^PUBMED("{escape_m(pmid)}","title")="{escape_m(title[:300])}"')
-                if authors:
-                    batch.append(f'SET ^PUBMED("{escape_m(pmid)}","authors")="{escape_m(",".join(authors[:5]))}"')
-                if journal:
-                    batch.append(f'SET ^PUBMED("{escape_m(pmid)}","journal")="{escape_m(journal[:200])}"')
-                if abstract:
-                    batch.append(f'SET ^PUBMED("{escape_m(pmid)}","abstract")="{escape_m(abstract[:500])}"')
+                title = title.replace('"', '""')
+                journal = journal.replace('"', '""')
+                abstract = abstract.replace('"', '""')
                 
-                for term in mesh_terms[:10]:
-                    batch.append(f'SET ^PUBMED("{escape_m(pmid)}","mesh","{escape_m(term)}")="1"')
+                if title:
+                    batch.append(f'SET ^PUBMED("{pmid}","title")="{title}"')
+                if authors:
+                    batch.append(f'SET ^PUBMED("{pmid}","authors")="{",".join(authors)}"')
+                if journal:
+                    batch.append(f'SET ^PUBMED("{pmid}","journal")="{journal}"')
+                if abstract:
+                    if len(abstract) > 500:
+                        abstract = abstract[:500] + "..."
+                    batch.append(f'SET ^PUBMED("{pmid}","abstract")="{abstract}"')
+                
+                for term in mesh_terms:
+                    batch.append(f'SET ^PUBMED("{pmid}","mesh","{term}")="1"')
                 
                 count += 1
                 
-                if len(batch) >= 200:
-                    run_mcode(db, " ".join(batch))
+                if len(batch) >= 500:
+                    code = " ".join(batch)
+                    run_mcode(db, code)
                     batch = []
                     if count % 1000 == 0:
                         print(f"    Loaded {count} citations...")
@@ -295,7 +357,8 @@ def load_pubmed(db, path, max_records=0):
                     break
         
         if batch:
-            run_mcode(db, " ".join(batch))
+            code = " ".join(batch)
+            run_mcode(db, code)
         
         if max_records > 0 and count >= max_records:
             break
@@ -319,6 +382,7 @@ def main():
     print(f"Data directory: {data_dir}")
     print()
 
+    # Initialize database
     run_mcode(db, 'SET ^FST("status")="loading"')
 
     total = 0
@@ -328,10 +392,13 @@ def main():
         if os.path.exists(mesh_dir):
             desc_path = os.path.join(mesh_dir, "desc2026.xml")
             qual_path = os.path.join(mesh_dir, "qual2026.xml")
+            supp_path = os.path.join(mesh_dir, "supp2026")
             if os.path.exists(desc_path):
-                total += load_mesh_descriptors(db, desc_path, args.max_records)
+                total += load_mesh_descriptors(db, desc_path)
             if os.path.exists(qual_path):
                 total += load_mesh_qualifiers(db, qual_path)
+            if os.path.exists(supp_path):
+                total += load_mesh_supplements(db, supp_path)
 
     if "catline" not in args.skip:
         catline_dir = os.path.join(data_dir, "nlm-staging", "catplus-marcxml")
@@ -352,31 +419,9 @@ def main():
         if os.path.exists(pubmed_dir):
             total += load_pubmed(db, pubmed_dir, args.max_records)
 
-    run_mcode(db, f'SET ^FST("status")="loaded"')
+    # Mark as loaded
+    run_mcode(db, 'SET ^FST("status")="loaded"')
     run_mcode(db, f'SET ^FST("records")="{total}"')
-
-    # Build index file for search (workaround for $ORDER bug #355)
-    import json
-    index = {}
-    if "mesh" not in args.skip:
-        mesh_dir = os.path.join(data_dir, "mesh-staging", "xml")
-        if os.path.exists(mesh_dir):
-            desc_path = os.path.join(mesh_dir, "desc2026.xml")
-            if os.path.exists(desc_path):
-                tree = ET.parse(desc_path)
-                root = tree.getroot()
-                mesh_index = {}
-                for record in root.findall(".//DescriptorRecord"):
-                    desc_ui = record.findtext("DescriptorUI", "")
-                    desc_name = record.findtext("DescriptorName/String", "")
-                    if desc_ui and desc_name:
-                        mesh_index[desc_ui] = desc_name
-                index["MESH"] = mesh_index
-    
-    index_file = db + ".index.json"
-    with open(index_file, "w") as f:
-        json.dump(index, f)
-    print(f"Index written to {index_file}")
 
     print()
     print(f"Total records loaded: {total}")

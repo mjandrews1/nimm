@@ -5,7 +5,7 @@
 
 set -e
 
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 
 echo "=== \$ORDER LMDB Test Suite ==="
 echo

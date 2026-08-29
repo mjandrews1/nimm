@@ -4,7 +4,7 @@
 
 set -e
 
-NIMM="./nimm"
+NIMM="${1:-./bin/nimm}"
 DB="/tmp/test_zverify_$$.lmdb"
 
 cleanup() {
