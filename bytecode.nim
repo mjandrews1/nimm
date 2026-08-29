@@ -13,6 +13,10 @@ type
     opSetVar        # Pop value, set local variable
     opSetGlobal     # Pop value, set global variable
     opSetSvar       # Pop value, set special variable
+    opPushVarSub    # Pop N subscripts, push local value (argInt = N)
+    opPushGlobalSub # Pop N subscripts, push global value (argInt = N)
+    opSetVarSub     # Pop value + N subscripts, set local (argInt = N)
+    opSetGlobalSub  # Pop value + N subscripts, set global (argInt = N)
     opPop           # Discard top of stack
     opDup           # Duplicate top of stack
 
@@ -127,6 +131,8 @@ proc disassemble*(bc: Bytecode): string =
       result.add(" " & instr.arg1)
       if instr.arg2.len > 0:
         result.add("(" & instr.arg2 & ")")
+    of opPushVarSub, opPushGlobalSub, opSetVarSub, opSetGlobalSub:
+      result.add(" " & instr.arg1 & " subs=" & $instr.argInt)
     of opJump, opJumpIfFalse, opJumpIfTrue:
       result.add(" " & $instr.argInt)
     of opCall:

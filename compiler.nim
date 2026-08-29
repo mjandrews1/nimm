@@ -26,8 +26,14 @@ proc compileExpr*(bc: Bytecode, expr: Expr) =
       else:
         bc.addInstr(opPushVar, arg1 = expr.vname)
     else:
-      # Subscripted variable — push name and subscripts
-      bc.addInstr(opPushGlobal, arg1 = expr.vname, arg2 = expr.subs[0].sval)
+      # Subscripted variable: compile subscripts (each evaluated), then an
+      # opPushVarSub/opPushGlobalSub pops them and pushes the value (#394).
+      for sub in expr.subs:
+        bc.compileExpr(sub)
+      if expr.vname.startsWith("^"):
+        bc.addInstr(opPushGlobalSub, arg1 = expr.vname, argInt = expr.subs.len)
+      else:
+        bc.addInstr(opPushVarSub, arg1 = expr.vname, argInt = expr.subs.len)
 
   of eFunc:
     # Compile arguments first (pushed onto stack in order)
@@ -102,12 +108,22 @@ proc compileSetTarget*(bc: Bytecode, target: SetTarget, valueExpr: Expr) =
   bc.compileExpr(valueExpr)
   case target.kind
   of stVar:
-    if target.tname.startsWith("$"):
-      bc.addInstr(opSetSvar, arg1 = target.tname[1..^1])
-    elif target.tname.startsWith("^"):
-      bc.addInstr(opSetGlobal, arg1 = target.tname)
+    if target.tsubs.len == 0:
+      if target.tname.startsWith("$"):
+        bc.addInstr(opSetSvar, arg1 = target.tname[1..^1])
+      elif target.tname.startsWith("^"):
+        bc.addInstr(opSetGlobal, arg1 = target.tname)
+      else:
+        bc.addInstr(opSetVar, arg1 = target.tname)
     else:
-      bc.addInstr(opSetVar, arg1 = target.tname)
+      # Subscripted target: compile subscripts, then opSetVarSub/opSetGlobalSub
+      # pops value + N subscripts and sets the node (#394).
+      for sub in target.tsubs:
+        bc.compileExpr(sub)
+      if target.tname.startsWith("^"):
+        bc.addInstr(opSetGlobalSub, arg1 = target.tname, argInt = target.tsubs.len)
+      else:
+        bc.addInstr(opSetVarSub, arg1 = target.tname, argInt = target.tsubs.len)
   of stPiece, stExtract, stIndirect:
     # SET $PIECE/$EXTRACT/@indirect — fall back to AST
     bc.addInstr(opPop)  # discard compiled value
@@ -123,21 +139,20 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
       bc.compileSetTarget(item.target, item.value)
 
   of cWrite:
-    var argc = 0
+    # Emit one opWrite per value so values and format controls keep source
+    # order (batching with a trailing opWrite reversed/with reordered newlines).
     for arg in cmd.writeArgs:
       case arg.kind
       of wrExpr:
         bc.compileExpr(arg.wexpr)
-        argc += 1
+        bc.addInstr(opWrite, argInt = 1)
       of wrNewline:
         bc.addInstr(opWriteNl)
       of wrFormFeed:
         bc.addInstr(opWriteFf)
       of wrColumn:
         bc.addPushConst(" ")
-        argc += 1
-    if argc > 0:
-      bc.addInstr(opWrite, argInt = argc)
+        bc.addInstr(opWrite, argInt = 1)
 
   of cIf:
     if cmd.ifBody != nil:
@@ -273,13 +288,24 @@ proc compileCommand*(bc: Bytecode, cmd: Cmd) =
     # (#389 Phase B — ZSTACK/ZINSPECT/ZWRITE/etc. were opNop'd before.)
     bc.needsAst = true
 
+proc compileCommandNode*(bc: Bytecode, node: CommandNode) =
+  ## Compile a command node, wrapping it in a postconditional guard (#394).
+  if node.postcond != nil:
+    bc.compileExpr(node.postcond)
+    let jumpIdx = bc.instructions.len
+    bc.addInstr(opJumpIfFalse, argInt = 0)  # placeholder
+    bc.compileCommand(node.cmd)
+    bc.instructions[jumpIdx].argInt = bc.instructions.len
+  else:
+    bc.compileCommand(node.cmd)
+
 proc compileLine*(line: Line): Bytecode =
   ## Compile a parsed line to bytecode
   result = newBytecode()
   if line == nil: return
   for cmdNode in line.cmds:
     if cmdNode != nil and cmdNode.cmd != nil:
-      result.compileCommand(cmdNode.cmd)
+      result.compileCommandNode(cmdNode)
 
 # --- Optimization passes (#343) ---
 

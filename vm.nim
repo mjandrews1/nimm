@@ -3,6 +3,7 @@
 
 import strutils
 import math
+import algorithm
 import bytecode
 import globals
 import value
@@ -108,6 +109,37 @@ proc execute*(vm: VM, bc: Bytecode): string =
       let val = vm.pop()
       if vm.globalsRef != nil:
         vm.globalsRef[].setSpecialVar("$" & name, val)
+
+    of opPushVarSub, opPushGlobalSub:
+      # Pop N subscripts (reverse order), push the node's value (#394)
+      let name = instr.arg1
+      let n = instr.argInt
+      var subs: seq[string] = @[]
+      for i in 0 ..< n:
+        subs.add(vm.pop())
+      subs.reverse()
+      if vm.globalsRef != nil:
+        if instr.opcode == opPushGlobalSub:
+          vm.push(vm.globalsRef[].get(name, subs))
+        else:
+          vm.push(vm.globalsRef[].getLocal(name, subs))
+      else:
+        vm.push("")
+
+    of opSetVarSub, opSetGlobalSub:
+      # Pop N subscripts + value, set the node (#394)
+      let name = instr.arg1
+      let n = instr.argInt
+      var subs: seq[string] = @[]
+      for i in 0 ..< n:
+        subs.add(vm.pop())
+      subs.reverse()
+      let val = vm.pop()
+      if vm.globalsRef != nil:
+        if instr.opcode == opSetGlobalSub:
+          vm.globalsRef[].set(name, subs, val)
+        else:
+          vm.globalsRef[].setLocal(name, subs, val)
 
     of opPop:
       discard vm.pop()
