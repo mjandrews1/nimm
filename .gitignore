@@ -2,6 +2,7 @@
 main
 nimm
 engine
+bin/
 bench/bench
 run_all_tests
 test_conformance
@@ -26,6 +27,8 @@ tests/test_network
 tests/test_ni_functions
 tests/test_static_analysis
 tests/test_unicode
+tests/test_bytecode
+tests/test_encoding_roundtrip
 
 # LMDB database files
 *.mdb
