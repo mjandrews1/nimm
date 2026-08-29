@@ -500,9 +500,20 @@ proc orderGlobalMem(g: Globals, name: string, subs: seq[string], forward: bool):
     if mCollationCmp(keys[i], lastSub) < 0: return keys[i]
   return ""
 
+# --- Transaction overlay read visibility (#396) ---
+# $DATA/$ORDER/$QUERY/listSubs/listNodes must see uncommitted writes (and
+# kills) the same way `get` does. These helpers build a merged view of a
+# global's keys during a transaction.
+
+proc txnSubs(g: var Globals, name: string): seq[(seq[string], string)]
+proc orderPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): string
+proc queryPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): seq[string]
+
 proc order*(g: var Globals, name: string, subs: seq[string] = @[], forward: bool = true): string =
   ## $ORDER (auto-detect local vs global)
   if name.len > 0 and name[0] == '^':
+    if g.inTransaction():
+      return orderPairs(txnSubs(g, name), subs, forward)
     # For globals, use LMDB cursor (or in-memory store when no -db)
     if g.dbPath.len == 0: return orderGlobalMem(g, name, subs, forward)
     return g.globals.order(name, subs, forward)
@@ -517,10 +528,94 @@ proc tupCollationCmp(a, b: seq[string]): int =
     if c != 0: return c
   return system.cmp(a.len, b.len)
 
+proc isDescendantSub(s: seq[string], prefix: seq[string]): bool =
+  s.len > prefix.len and s[0 ..< prefix.len] == prefix
+
+proc txnSubs(g: var Globals, name: string): seq[(seq[string], string)] =
+  ## Effective (subs, value) pairs for global `name`, merging the store with
+  ## the transaction overlay. Writes add/override; kills remove node + descendants.
+  var base = initTable[string, string]()
+  if g.dbPath.len == 0:
+    for k, v in g.memGlobals:
+      if k == name or k.startsWith(name & "\x00"):
+        base[k] = v
+  else:
+    let rootVal = g.globals.get(name, @[])
+    if rootVal.len > 0:
+      base[name] = rootVal
+    for s in g.globals.listSubs(name, @[]):
+      base[makeKey(name, s)] = g.globals.get(name, s)
+  # overlay innermost-out (outer levels win)
+  for i in 0 ..< g.txn.levels.len:
+    for k, v in g.txn.levels[i].writes:
+      if k == name or k.startsWith(name & "\x00"):
+        base[k] = v
+    for k in g.txn.levels[i].kills:
+      if k == name or k.startsWith(name & "\x00"):
+        var toDel: seq[string] = @[]
+        for bk in base.keys:
+          if bk == k or bk.startsWith(k & "\x00"):
+            toDel.add(bk)
+        for bk in toDel:
+          base.del(bk)
+  result = @[]
+  for k, v in base:
+    let (_, s) = decodeMakeKey(k)
+    result.add((s, v))
+  result.sort(proc(a, b: (seq[string], string)): int = tupCollationCmp(a[0], b[0]))
+
+proc orderPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): string =
+  ## $ORDER over a merged (subs, value) list. Mirrors the LMDB order walk:
+  ## the candidate subscript is at level len(subs)-1 (or 0), under the parent
+  ## path, and strictly past subs[^1] in the given direction.
+  let level = subs.len
+  let candLevel = if level == 0: 0 else: level - 1
+  let startSub = if level > 0: subs[^1] else: ""
+  if not forward and level > 0 and startSub.len == 0:
+    return ""  # §9.9: backward from the null subscript returns nothing
+  var cands: seq[string] = @[]
+  var seen = initTable[string, bool]()
+  for (s, _) in pairs:
+    if s.len <= candLevel: continue
+    if level >= 2:
+      var ok = true
+      for i in 0 ..< (level - 1):
+        if s[i] != subs[i]: ok = false; break
+      if not ok: continue
+    let c = s[candLevel]
+    if c notin seen:
+      seen[c] = true
+      cands.add(c)
+  if level == 0:
+    if cands.len == 0: return ""
+    return if forward: cands[0] else: cands[^1]
+  if forward:
+    for c in cands:
+      if mCollationCmp(c, startSub) > 0: return c
+    return ""
+  for i in countdown(cands.len - 1, 0):
+    if mCollationCmp(cands[i], startSub) < 0: return cands[i]
+  return ""
+
+proc queryPairs(pairs: seq[(seq[string], string)], subs: seq[string], forward: bool): seq[string] =
+  ## $QUERY over a merged (subs, value) list: next node in DFS pre-order.
+  if forward:
+    for (s, _) in pairs:
+      if tupCollationCmp(s, subs) > 0: return s
+    return @[]
+  for i in countdown(pairs.len - 1, 0):
+    if tupCollationCmp(pairs[i][0], subs) < 0: return pairs[i][0]
+  return @[]
+
 proc listNodes*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[string]] =
   ## All strict descendants of name[subs] in DFS pre-order (for ZWRITE).
   ## Includes every node with a value or children below the given node.
   if name.len > 0 and name[0] == '^':
+    if g.inTransaction():
+      for (s, _) in txnSubs(g, name):
+        if isDescendantSub(s, subs):
+          result.add(s)
+      return result
     if g.dbPath.len == 0:
       let prefix = makeKey(name, subs) & "\x00"
       for k in g.memGlobals.keys:
@@ -557,6 +652,8 @@ proc query*(g: var Globals, name: string, subs: seq[string] = @[], forward: bool
   ## $QUERY (auto-detect local vs global)
   ## Returns all subscripts of the next node (any depth)
   if name.len > 0 and name[0] == '^':
+    if g.inTransaction():
+      return queryPairs(txnSubs(g, name), subs, forward)
     # For globals: LMDB cursor when persistent; mem store otherwise
     if g.dbPath.len == 0: return queryGlobalMem(g, name, subs, forward)
     return g.globals.query(name, subs, forward)
@@ -597,6 +694,18 @@ proc data*(g: var Globals, name: string, subs: seq[string] = @[]): int =
   if name.len > 0 and name[0] == '^':
     if name.startsWith("^$"):
       return g.ssvData(name, subs)
+    if g.inTransaction():
+      var hasValue = false
+      var hasChildren = false
+      for (s, v) in txnSubs(g, name):
+        if s == subs:
+          hasValue = (v.len > 0)
+        elif isDescendantSub(s, subs):
+          hasChildren = true
+      if hasValue and hasChildren: return 11
+      if hasValue: return 1
+      if hasChildren: return 10
+      return 0
     if g.dbPath.len == 0:
       return dataGlobalMem(g, name, subs)
     let val = g.globals.get(name, subs)
@@ -613,6 +722,11 @@ proc listSubs*(g: var Globals, name: string, subs: seq[string] = @[]): seq[seq[s
   ## List all subscripts under a given variable
   ## Returns a sequence of subscript sequences
   if name.len > 0 and name[0] == '^':
+    if g.inTransaction():
+      for (s, _) in txnSubs(g, name):
+        if isDescendantSub(s, subs):
+          result.add(s)
+      return result
     # For globals: LMDB cursor when persistent; scan memGlobals otherwise
     if g.dbPath.len == 0:
       let prefix = makeKey(name, subs) & "\x00"
