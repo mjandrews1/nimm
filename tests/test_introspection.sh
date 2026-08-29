@@ -101,10 +101,34 @@ run_routine "\$ZROUTINE returns routine name" /tmp/test_zroutine.m "DO ENTRY" "T
 printf 'ENTRY\n W $ZSOURCE\n Q\n' > /tmp/test_zsource.m
 run_routine "\$ZSOURCE returns source file" /tmp/test_zsource.m "DO ENTRY" "test_zsource.m"
 
+# Phase D: ZAPROPOS symbol search
+printf 'MAIN\n D HELPER\n Q\nHELPER\n W "x"\n Q\n' > /tmp/test_apropos_a.m
+printf 'UTIL\n Q\n' > /tmp/test_apropos_b.m
+AP=$($NIMM -r /tmp/test_apropos_a.m -r /tmp/test_apropos_b.m -x 'ZAPROPOS "HEL"' 2>&1)
+if echo "$AP" | grep -q "TEST_APROPOS_A:HELPER"; then
+  echo "  ✓ ZAPROPOS finds a label"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ ZAPROPOS finds a label — got: $AP"
+  FAIL=$((FAIL + 1))
+fi
+
+# Phase D: ZCALLERS who-calls
+printf 'CALLER\n D TARGET^CALLEE\n Q\n' > /tmp/test_callers_a.m
+printf 'CALLEE\n TARGET\n Q\n' > /tmp/test_callers_b.m
+CL=$($NIMM -r /tmp/test_callers_a.m -r /tmp/test_callers_b.m -x 'ZCALLERS CALLEE' 2>&1)
+if echo "$CL" | grep -q "TEST_CALLERS_A"; then
+  echo "  ✓ ZCALLERS finds a reference"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ ZCALLERS finds a reference — got: $CL"
+  FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 
 # Cleanup
-rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m /tmp/test_zpos.m /tmp/test_zroutine.m /tmp/test_zsource.m /tmp/test_zstack_locals.m
+rm -f /tmp/test_zstack.m /tmp/test_estack.m /tmp/test_zbreak.m /tmp/test_zpos.m /tmp/test_zroutine.m /tmp/test_zsource.m /tmp/test_zstack_locals.m /tmp/test_apropos_a.m /tmp/test_apropos_b.m /tmp/test_callers_a.m /tmp/test_callers_b.m
 
 [ "$FAIL" -eq 0 ]

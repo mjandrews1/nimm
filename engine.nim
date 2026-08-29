@@ -191,6 +191,61 @@ proc snapshotLocals(eng: Engine): seq[string] =
     result.add(formatVariable(inspectVariableWithSubs(name, subs,
       eng.globals[].get(name, subs), kind)))
 
+proc lineReferences(line: string, target: string): bool =
+  ## True if `line` contains a DO/GOTO whose label or ^routine equals target
+  ## (#389 Phase D). Word-boundary scan over the raw source line. Handles the
+  ## full keywords (DO/GOTO) and single-letter abbreviations (D/G).
+  let tgt = target.toUpperAscii()
+  var i = 0
+  while i < line.len:
+    var kwLen = 0
+    if line[i] in {'D', 'd'}:
+      if i + 2 <= line.len and line[i..i+1].toUpperAscii() == "DO": kwLen = 2
+      else: kwLen = 1
+    elif line[i] in {'G', 'g'}:
+      if i + 4 <= line.len and line[i..i+3].toUpperAscii() == "GOTO": kwLen = 4
+      else: kwLen = 1
+    if kwLen == 0:
+      inc i
+      continue
+    let before = if i > 0: line[i-1] else: ' '
+    let after = if i + kwLen < line.len: line[i+kwLen] else: ' '
+    if before in {' ', '\t', '('} and after in {' ', '\t'}:
+      var k = i + kwLen
+      while k < line.len and line[k] in {' ', '\t'}: inc k
+      var label = ""
+      while k < line.len and line[k] in {'A'..'Z', 'a'..'z', '%', '0'..'9', '_'}:
+        label.add(line[k]); inc k
+      var rtn = ""
+      if k < line.len and line[k] == '^':
+        inc k
+        while k < line.len and line[k] in {'A'..'Z', 'a'..'z', '%', '0'..'9', '_'}:
+          rtn.add(line[k]); inc k
+      if label.toUpperAscii() == tgt or rtn.toUpperAscii() == tgt:
+        return true
+    inc i
+  return false
+
+proc apropos(rt: Runtime, substr: string): seq[string] =
+  ## Return routine/label names containing `substr` (case-insensitive),
+  ## as "ROUTINE" or "ROUTINE:LABEL (line N)" strings (#389 Phase D).
+  let s = substr.toUpperAscii()
+  var names: seq[string] = @[]
+  for n in rt.routines.keys:
+    names.add(n)
+  names.sort()
+  for n in names:
+    if s.len > 0 and n.contains(s):
+      result.add(n)
+    let r = rt.routines[n]
+    var pairs: seq[(string, int)] = @[]
+    for lbl, idx in r.labels:
+      pairs.add((lbl, idx))
+    pairs.sort(proc(a, b: (string, int)): int = cmp(a[1], b[1]))
+    for (lbl, idx) in pairs:
+      if s.len > 0 and lbl.contains(s):
+        result.add(n & ":" & lbl & " (line " & $idx & ")")
+
 proc runRoutineBytecode(eng: var Engine, routine, label: string, depth: int): string =
   ## Execute a routine from `label` line-by-line, honoring bytecode control
   ## signals (opGoto/opCallLabel/opQuit) and falling back to the AST
@@ -1411,6 +1466,48 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             for bc in r.bytecodeCache:
               if bc != nil:
                 eng.write(disassemble(bc))
+
+      of CmdKind.cZapropos:
+        # ZAPROPOS "substring" — search routine/label names (#389 Phase D)
+        let substr = if cmd.zaproposExpr != nil:
+                       eng.evaluator[].eval(cmd.zaproposExpr) else: ""
+        let matches = apropos(eng.runtime[], substr)
+        if matches.len == 0:
+          eng.writeln("No matches for \"" & substr & "\"")
+        else:
+          eng.writeln("Matches for \"" & substr & "\":")
+          for m in matches:
+            eng.writeln("  " & m)
+
+      of CmdKind.cZcallers:
+        # ZCALLERS target — who DO/GOTO's a label or routine (#389 Phase D)
+        var tgt = ""
+        if cmd.zcallersExpr != nil:
+          case cmd.zcallersExpr.kind
+          of eVar: tgt = cmd.zcallersExpr.vname
+          of eStr: tgt = cmd.zcallersExpr.sval
+          of eEntryRef: tgt = cmd.zcallersExpr.entryRoutine
+          else: tgt = eng.evaluator[].eval(cmd.zcallersExpr)
+        tgt = tgt.toUpperAscii().strip(chars = {'^'})
+        if tgt.len == 0:
+          eng.writeln("ZCALLERS: usage ZCALLERS label|^routine")
+        else:
+          var hits: seq[string] = @[]
+          var names: seq[string] = @[]
+          for n in eng.runtime[].routines.keys:
+            names.add(n)
+          names.sort()
+          for n in names:
+            let routine = eng.runtime[].routines[n]
+            for i, line in routine.originalLines:
+              if lineReferences(line, tgt):
+                hits.add(n & " (line " & $(i + 1) & "): " & line.strip())
+          if hits.len == 0:
+            eng.writeln("No references to " & tgt)
+          else:
+            eng.writeln("References to " & tgt & ":")
+            for h in hits:
+              eng.writeln("  " & h)
 
       of CmdKind.cNiOpen:
         # NIOPEN protocol:host:port — Open network connection (#329)

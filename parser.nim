@@ -210,6 +210,7 @@ proc isCommandKeyword*(w: string): bool =
     equiWord(w, "ZDEALLOCATE") or equiWord(w, "ZD") or equiWord(w, "ZSTACK") or
     equiWord(w, "ZSTATS") or equiWord(w, "ZVHISTORY") or equiWord(w, "ZANALYZE") or
     equiWord(w, "ZROUTINES") or equiWord(w, "ZDUMP") or
+    equiWord(w, "ZAPROPOS") or equiWord(w, "ZCALLERS") or
     equiWord(w, "ZLOADXML") or equiWord(w, "ZVERIFY") or equiWord(w, "ZHALT") or
     equiWord(w, "ZSAVE") or equiWord(w, "ZSYSTEM")
   of 'y': equiWord(w, "YOPEN") or equiWord(w, "YLISTEN") or equiWord(w, "YREAD") or equiWord(w, "YWRITE") or equiWord(w, "YCLOSE")
@@ -1226,6 +1227,16 @@ proc parseCommand(p: var Parser): CommandNode =
     if isExprStart(p) and not p.atCommandPos():
       e = p.parseExpr()
     cmd = Cmd(kind: cZdumpline, zdumplineExpr: e)
+  of "ZAPROPOS":
+    var e: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      e = p.parseExpr()
+    cmd = Cmd(kind: cZapropos, zaproposExpr: e)
+  of "ZCALLERS":
+    var e: Expr = nil
+    if isExprStart(p) and not p.atCommandPos():
+      e = p.parseExpr()
+    cmd = Cmd(kind: cZcallers, zcallersExpr: e)
   of "NIOPEN":
     let protocol = p.parseExpr()
     var host = Expr(kind: eStr, sval: "")
