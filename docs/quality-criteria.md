@@ -7,6 +7,29 @@ issues; the criteria themselves should not drift.
 
 ## 1. Correctness — no silent divergence from M/ANSI-ISO or between code paths
 
+**How do we know NimM is performing correctly?** We never assume it — we
+establish it, in this order of authority:
+
+1. **Documented sources of truth** — the ANSI/ISO M standards and the best
+   available computer-engineering / computer-science literature, peer products
+   (GT.M, YottaDB, InterSystems IRIS/Caché), and industry best practice. Where a
+   source is ambiguous (e.g. `$ORDER(x(""),-1)`), the conformance suite is the
+   recorded decision.
+2. **Conformance suites** — `ansi_iso_m_conformance.py` and
+   `mumps_extended_conformance.py` are the executable form of the standard; they
+   are the authority (C5).
+3. **Differential validation** — it is okay (and encouraged) to express NimM's
+   data structures and algorithms in another language or tool, as a reference
+   implementation or oracle, and diff results against it. This is how subtle
+   behavior (collation, key encoding, numeric formatting) earns trust.
+
+Two hard rules:
+
+- **Never adjust a test to accept a possibly-incorrect result.** A failing test
+  means the code (or the test's source-of-truth) is wrong — fix the code or file
+  an issue; do not weaken the expected value.
+- **A divergence from a source of truth is a bug**, not an accepted behavior.
+
 | # | Criterion | Verifier |
 |---|---|---|
 | C1 | **Store parity** — `memGlobals` and LMDB give identical results for every operation (get/set/kill, `$ORDER`, `$QUERY`, `$DATA`, `listSubs`, `listNodes`, transactions). | Run the same script with and without `-d` and diff output. (Would have caught the `$ORDER` backward-from-null and txn `decodeKey` bugs.) |
@@ -17,6 +40,7 @@ issues; the criteria themselves should not drift.
 | C6 | **Determinism** — table-iteration order never leaks into output. | Sort before emitting (as `listLocals`, `ZROUTINES` now do). |
 | C7 | **Error correctness** — stable `M<code>`, `$ECODE`/`$ZSTATUS`/`$TEST`/`$ZEOF` per spec, with position + source snippet. | `test_errorloc.sh`. |
 | C8 | **No silent failure** — parse errors surface; the compiler's `else` never silently drops a command (now `needsAst`; keep auditing). | A lint that fails on any silent fallback. |
+| C9 | **Differential oracle** — for subtle behavior, verify against a reference implementation in another language/tool and keep the golden outputs in the repo. | Reference oracle + golden files checked into `tests/`. |
 
 ## 2. Clarity — one source of truth, invariants explicit
 
@@ -73,6 +97,7 @@ Criterion → where it is (or will be) enforced:
 | C6 | code review + existing sorted-emit patterns |
 | C7 | existing `tests/test_errorloc.sh` |
 | C8 | new lint pass |
+| C9 | reference oracle + golden files in `tests/` |
 | L1 | new `tests/test_encoding_roundtrip.nim` |
 | L2 | CI: `nim c` hint-clean gate |
 | L3–L5 | code review; L5 via `test_errorloc.sh` |
