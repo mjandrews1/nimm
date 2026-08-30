@@ -83,6 +83,28 @@ run_compare "Unary plus canonical" 'S X="01.50" W +X'
 run_compare "IF/ELSE true" 'IF 1 W "yes" ELSE W "no"'
 run_compare "IF/ELSE false" 'IF 0 W "yes" ELSE W "no"'
 
+# KILL (specific var) / MERGE (store mutations, command_bisim.dfy)
+run_compare "KILL var" 'S A=1 S B=2 KILL A W B'
+run_compare "MERGE dst=src" 'S A=7 MERGE B=A W B'
+
+# Control transfer (DO/GOTO/QUIT) — needs a routine file.
+CTRL_M="tests/test_ctrl_transfer.m"
+run_compare_routine() {
+  local desc="$1" entry="$2"
+  local ast_out bc_out
+  ast_out=$("$NIMM" -r "$CTRL_M" -x "DO $entry" 2>&1)
+  bc_out=$("$NIMM" --bytecode -r "$CTRL_M" -x "DO $entry" 2>&1)
+  if [ "$ast_out" = "$bc_out" ]; then
+    echo "  ✓ $desc"
+    PASS=$((PASS + 1))
+  else
+    echo "  ✗ $desc — AST='$ast_out' BC='$bc_out'"
+    FAIL=$((FAIL + 1))
+  fi
+}
+run_compare_routine "GOTO skip" "GO"
+run_compare_routine "DO subroutine" "DOIT"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

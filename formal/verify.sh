@@ -21,6 +21,7 @@ dafny verify bm25.dfy
 dafny verify bytecode_bisim.dfy
 dafny verify bytecode_stack.dfy
 dafny verify collation.dfy
+dafny verify command_bisim.dfy
 dafny verify control_flow_bisim.dfy
 dafny verify data_structures.dfy
 dafny verify entry_term_expansion.dfy
