@@ -107,4 +107,96 @@ module GlobalsOrder {
     }
   }
 
+  // TupCmp is reflexive.
+  lemma TupCmpReflexive(a: seq<Sub>)
+    ensures TupCmp(a, a) == 0
+    decreases |a|
+  {
+    reveal TupCmp;
+    if a == [] {
+    } else {
+      CmpAntisymmetric(a[0], a[0]);
+      assert Cmp(a[0], a[0]) == 0;
+      TupCmpReflexive(a[1..]);
+    }
+  }
+
+  // Completeness: the successor is *minimal* among nodes strictly after `subs`
+  // — no node is skipped (the walk has no gaps).
+  lemma SuccessorMinimal(nodes: seq<seq<Sub>>, subs: seq<Sub>)
+    requires Sorted(nodes)
+    ensures Successor(nodes, subs) != [] ==>
+      forall i | 0 <= i < |nodes| :: TupCmp(nodes[i], subs) > 0 ==>
+        TupCmp(Successor(nodes, subs), nodes[i]) <= 0
+    decreases |nodes|
+  {
+    if nodes == [] {
+    } else if TupCmp(nodes[0], subs) > 0 {
+      assert Successor(nodes, subs) == nodes[0];
+      TupCmpReflexive(nodes[0]);
+      forall i | 0 <= i < |nodes|
+        ensures TupCmp(nodes[i], subs) > 0 ==> TupCmp(Successor(nodes, subs), nodes[i]) <= 0
+      {
+        if i > 0 {
+          assert TupCmp(nodes[0], nodes[i]) <= 0;
+        }
+      }
+    } else {
+      SuccessorMinimal(nodes[1..], subs);
+      assert Successor(nodes, subs) == Successor(nodes[1..], subs);
+      assert TupCmp(nodes[0], subs) <= 0;
+    }
+  }
+
+  // Strictly sorted: every pair is strictly increasing (distinct).
+  predicate StrictSorted(nodes: seq<seq<Sub>>)
+  {
+    forall i, j | 0 <= i < j < |nodes| :: TupCmp(nodes[i], nodes[j]) < 0
+  }
+
+  // A prefix of nodes all <= subs does not affect the successor.
+  lemma SuccessorSkipPrefix(nodes: seq<seq<Sub>>, subs: seq<Sub>, k: nat)
+    requires k <= |nodes|
+    requires forall j | 0 <= j < k :: TupCmp(nodes[j], subs) <= 0
+    ensures Successor(nodes, subs) == Successor(nodes[k..], subs)
+    decreases k
+  {
+    reveal Successor;
+    if k == 0 {
+    } else {
+      assert TupCmp(nodes[0], subs) <= 0;
+      SuccessorSkipPrefix(nodes[1..], subs, k - 1);
+      assert nodes[1..][k - 1 ..] == nodes[k..];
+    }
+  }
+
+  // The successor of an element is the next element (and [] after the last):
+  // the walk visits every element exactly once, in order.
+  lemma SuccessorNext(nodes: seq<seq<Sub>>, i: nat)
+    requires StrictSorted(nodes)
+    requires i < |nodes|
+    ensures Successor(nodes, nodes[i]) == (if i + 1 < |nodes| then nodes[i + 1] else [])
+  {
+    reveal Successor;
+    // Every j <= i has nodes[j] <= nodes[i].
+    forall j | 0 <= j < i + 1
+      ensures TupCmp(nodes[j], nodes[i]) <= 0
+    {
+      if j < i {
+        assert TupCmp(nodes[j], nodes[i]) < 0;
+      } else {
+        TupCmpReflexive(nodes[i]);
+      }
+    }
+    SuccessorSkipPrefix(nodes, nodes[i], i + 1);
+    assert Successor(nodes, nodes[i]) == Successor(nodes[i + 1 ..], nodes[i]);
+    if i + 1 >= |nodes| {
+      assert nodes[i + 1 ..] == [];
+    } else {
+      assert TupCmp(nodes[i], nodes[i + 1]) < 0;
+      TupCmpAntisymmetric(nodes[i], nodes[i + 1]);
+      assert TupCmp(nodes[i + 1], nodes[i]) > 0;
+    }
+  }
+
 }
