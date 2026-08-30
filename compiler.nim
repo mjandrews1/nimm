@@ -44,12 +44,16 @@ proc compileExpr*(bc: Bytecode, expr: Expr) =
     bc.addInstr(opPushSvar, arg1 = expr.sname)
 
   of eNeg:
-    bc.compileExpr(expr.operand)
+    # 0 - operand = -operand (push 0 first so opSub computes 0 - x).
     bc.addPushConst("0")
+    bc.compileExpr(expr.operand)
     bc.addInstr(opSub)
 
   of ePos:
+    # Unary plus = numeric coercion: x + 0 canonicalizes via numPrefix.
     bc.compileExpr(expr.operand)
+    bc.addPushConst("0")
+    bc.addInstr(opAdd)
 
   of eNot:
     bc.compileExpr(expr.operand)

@@ -70,6 +70,12 @@ run_compare "Postconditional SET" 'S X=0 S:X=0 X=9 W X'
 # Multiple statements in one line (statement sequencing)
 run_compare "Statement sequence" 'S A=1 S B=2 W A+B'
 
+# Unary operators (eNeg/ePos regression: stack-order bug in #431)
+run_compare "Unary minus" 'S X=3 W -X'
+run_compare "Unary minus expr" 'W -(2+3)'
+run_compare "Unary plus coercion" 'S X="2E3" W +X'
+run_compare "Unary plus canonical" 'S X="01.50" W +X'
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
