@@ -280,3 +280,14 @@ m_programs.dfy|JobChildSetsGlobal|support|-
 m_programs.dfy|Bm25IndexScoreNonNeg|test|tests/test_bm25_m.sh
 m_programs.dfy|EricLoaderPieceLeadingField|test|tests/test_string_functions.sh
 m_programs.dfy|EricLoaderMapGetAfterSet|support|-
+hnsw.dfy|DotSymmetric|test|tests/test_hnsw_invariants.nim
+hnsw.dfy|SqrtSquared|support|-
+hnsw.dfy|CosineSymmetric|test|tests/test_hnsw_invariants.nim
+hnsw.dfy|CosineSelfIsOne|test|tests/test_hnsw_invariants.nim
+hnsw.dfy|ConnectPreservesSymmetric|test|tests/test_hnsw_invariants.nim
+hnsw.dfy|RemoveEdgePreservesSymmetric|test|tests/test_hnsw_invariants.nim
+hnsw.dfy|TwoNodeGraphSymmetric|support|-
+hnsw.dfy|OneSidedRemoveBreaksSymmetric|test|tests/test_hnsw_invariants.nim
+search_engine.dfy|DfAppend|test|tests/test_fst_consistency.nim
+search_engine.dfy|DfCountsDocumentsNotOccurrences|test|tests/test_fst_consistency.nim
+search_engine.dfy|AssignFreshPreservesInjective|test|tests/test_fst_consistency.nim

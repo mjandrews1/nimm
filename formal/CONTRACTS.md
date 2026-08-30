@@ -33,6 +33,8 @@ listed, no stale rows, every mirror present).
 | `for_loop_bisim.dfy` | FOR loop bytecode ≡ AST (body + step + back-edge) | `tests/test_bytecode_conformance.sh` |
 | `bm25.dfy` | BM25 idf/tfNorm + `SEARCH` top-K | `tests/test_bm25_m.sh` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
+| `hnsw.dfy` | HNSW neighbor symmetry + bounded degree + cosine | `tests/test_hnsw_invariants.nim` |
+| `search_engine.dfy` | FST index consistency + docId↔vecId bijection | `tests/test_fst_consistency.nim` |
 | `lock_semantics.dfy` | `heldLocks` acquire/release/release-all | `tests/test_locks.nim` |
 | `m_programs.dfy` | M scripts (`samples/*.m`, `tests/*.m`, FST, ERIC) meet their specs | `tests/test_m_programs.sh` |
 | `vm_opcodes.dfy` | concrete opcode Pops/Pushes table + compiler safety | `tests/test_vm_table.nim` |

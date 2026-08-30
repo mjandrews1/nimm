@@ -39,6 +39,8 @@ tests/test_truthy
 tests/test_locks
 tests/test_data_structures_invariants
 tests/test_fst_engine
+tests/test_hnsw_invariants
+tests/test_fst_consistency
 future_search_tool/src/fst_load_nim
 
 # LMDB database files

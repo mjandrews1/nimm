@@ -102,59 +102,48 @@ proc insert*(index: var HNSWIndex, id: int, vector: seq[float]) =
   ## Insert a vector into the index
   if vector.len != index.dim:
     raise newException(ValueError, "Vector dimension mismatch")
-  
+
   index.vectors[id] = vector
-  
+
   if index.entryPoint == -1:
     index.entryPoint = id
     index.neighbors[id] = @[]
     return
-  
-  let level = index.randomLevel()
-  var currentLevel = index.maxLevel
-  var entryId = index.entryPoint
-  
-  # Search from top level to level+1
-  while currentLevel > level:
-    let results = index.searchLevel(vector, entryId, 1, currentLevel)
-    if results.len > 0:
-      entryId = results[0][0]
-    dec currentLevel
-  
-  # Search from level to 0
-  while currentLevel >= 0:
-    let results = index.searchLevel(vector, entryId, index.efConstruction, currentLevel)
-    
-    # Select M nearest neighbors
-    var neighbors: seq[int] = @[]
-    for i in 0..<min(index.M, results.len):
+
+  # The graph is flat (single layer), so connect once: find the M nearest
+  # existing nodes and link bidirectionally.
+  let results = index.searchLevel(vector, index.entryPoint, index.efConstruction, 0)
+
+  var neighbors: seq[int] = @[]
+  for i in 0 ..< min(index.M, results.len):
+    if results[i][0] != id:
       neighbors.add(results[i][0])
-    
-    # Add bidirectional connections
-    index.neighbors[id] = neighbors
-    for nId in neighbors:
-      if nId in index.neighbors:
-        index.neighbors[nId].add(id)
-        if index.neighbors[nId].len > index.M:
-          # Remove weakest connection
-          var weakestIdx = 0
-          var weakestDist = cosineSimilarity(vector, index.vectors[index.neighbors[nId][0]])
-          for i in 1..<index.neighbors[nId].len:
-            let dist = cosineSimilarity(vector, index.vectors[index.neighbors[nId][i]])
-            if dist < weakestDist:
-              weakestDist = dist
-              weakestIdx = i
-          index.neighbors[nId].delete(weakestIdx)
-      else:
-        index.neighbors[nId] = @[id]
-    
-    if results.len > 0:
-      entryId = results[0][0]
-    dec currentLevel
-  
-  if level > index.maxLevel:
-    index.maxLevel = level
-    index.entryPoint = id
+
+  # Connect bidirectionally, trimming symmetrically to keep each node at <= M.
+  index.neighbors[id] = neighbors
+  for nId in neighbors:
+    if nId in index.neighbors:
+      index.neighbors[nId].add(id)
+      if index.neighbors[nId].len > index.M:
+        # Drop the weakest connection bidirectionally (dropping x from nId's
+        # list also drops nId from x's list, preserving symmetry).
+        var weakestIdx = 0
+        var weakestDist = cosineSimilarity(vector, index.vectors[index.neighbors[nId][0]])
+        for i in 1 ..< index.neighbors[nId].len:
+          let dist = cosineSimilarity(vector, index.vectors[index.neighbors[nId][i]])
+          if dist < weakestDist:
+            weakestDist = dist
+            weakestIdx = i
+        let weakest = index.neighbors[nId][weakestIdx]
+        index.neighbors[nId].delete(weakestIdx)
+        if weakest in index.neighbors:
+          let revIdx = index.neighbors[weakest].find(nId)
+          if revIdx >= 0:
+            index.neighbors[weakest].delete(revIdx)
+    else:
+      index.neighbors[nId] = @[id]
+
+  index.entryPoint = id
 
 proc search*(index: HNSWIndex, query: seq[float], topK: int = 10): seq[(int, float)] =
   ## Search for nearest neighbors

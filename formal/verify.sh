@@ -27,11 +27,13 @@ dafny verify data_structures.dfy
 dafny verify entry_term_expansion.dfy
 dafny verify engine_execution.dfy
 dafny verify for_loop_bisim.dfy
+dafny verify hnsw.dfy
 dafny verify hybrid_merge.dfy
 dafny verify lock_semantics.dfy
 dafny verify m_programs.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
+dafny verify search_engine.dfy
 dafny verify special_vars.dfy
 dafny verify string_functions.dfy
 dafny verify subscript_bisim.dfy
