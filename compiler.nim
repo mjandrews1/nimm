@@ -307,9 +307,35 @@ proc compileLine*(line: Line): Bytecode =
   ## Compile a parsed line to bytecode
   result = newBytecode()
   if line == nil: return
-  for cmdNode in line.cmds:
-    if cmdNode != nil and cmdNode.cmd != nil:
-      result.compileCommandNode(cmdNode)
+  var i = 0
+  while i < line.cmds.len:
+    let node = line.cmds[i]
+    # IF ... ELSE on the same line: compile the pair together so the then body
+    # jumps past the else body (the AST interpreter does this via $TEST).
+    if node != nil and node.cmd != nil and node.cmd.kind == cIf and node.postcond == nil and
+       i + 1 < line.cmds.len and line.cmds[i + 1] != nil and
+       line.cmds[i + 1].cmd != nil and line.cmds[i + 1].cmd.kind == cElse and
+       line.cmds[i + 1].postcond == nil:
+      let ifCmd = node.cmd
+      let elseCmd = line.cmds[i + 1].cmd
+      result.compileExpr(ifCmd.ifCond)
+      let jumpElse = result.instructions.len
+      result.addInstr(opJumpIfFalse, argInt = 0)  # placeholder
+      if ifCmd.ifBody != nil:
+        for child in ifCmd.ifBody.cmds:
+          result.compileCommandNode(child)
+      let jumpEnd = result.instructions.len
+      result.addInstr(opJump, argInt = 0)  # placeholder (skip the else)
+      result.instructions[jumpElse].argInt = result.instructions.len
+      if elseCmd.elseBody != nil:
+        for child in elseCmd.elseBody.cmds:
+          result.compileCommandNode(child)
+      result.instructions[jumpEnd].argInt = result.instructions.len
+      i += 2
+      continue
+    if node != nil and node.cmd != nil:
+      result.compileCommandNode(node)
+    i += 1
 
 # --- Optimization passes (#343) ---
 

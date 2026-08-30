@@ -76,6 +76,10 @@ run_compare "Unary minus expr" 'W -(2+3)'
 run_compare "Unary plus coercion" 'S X="2E3" W +X'
 run_compare "Unary plus canonical" 'S X="01.50" W +X'
 
+# IF/ELSE (else-body skip regression: was running else even when true)
+run_compare "IF/ELSE true" 'IF 1 W "yes" ELSE W "no"'
+run_compare "IF/ELSE false" 'IF 0 W "yes" ELSE W "no"'
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
