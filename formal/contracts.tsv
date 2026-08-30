@@ -65,6 +65,11 @@ globals_order.dfy|TupCmpReflexive|support|-
 globals_order.dfy|SuccessorMinimal|test|tests/test_order_lmdb.sh
 globals_order.dfy|SuccessorSkipPrefix|support|-
 globals_order.dfy|SuccessorNext|test|tests/test_order_lmdb.sh
+globals_order.dfy|PredecessorIsBefore|support|-
+globals_order.dfy|PredecessorSkipSuffix|support|-
+globals_order.dfy|PredecessorMaximal|test|tests/test_order_lmdb.sh
+globals_order.dfy|PredecessorPrev|test|tests/test_order_lmdb.sh
+globals_order.dfy|DescendantsComplete|test|tests/test_zwrite.sh
 hybrid_merge.dfy|RRFPositive|test|tests/test_hybrid_rrf.nim
 hybrid_merge.dfy|RecipDecreasing|support|-
 hybrid_merge.dfy|RRFDecreasing|test|tests/test_hybrid_rrf.nim

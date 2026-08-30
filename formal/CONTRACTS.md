@@ -15,7 +15,7 @@ listed, no stale rows, every mirror present).
 | `key_encoding.dfy` | type-byte framing + `decode∘encode == id` | `tests/test_encoding_roundtrip.nim`, `tests/test_key_encoding.sh` |
 | `numeric_encoding.dfy` | 9's-complement order + inverse | `tests/test_encoding_roundtrip.nim` |
 | `numeric_prefix.dfy` | `numPrefix`/`truthy` prefix grammar + truth table | `tests/test_truthy.nim` |
-| `globals_order.dfy` | `$ORDER` successor minimal + next-element | `tests/test_order_lmdb.sh` |
+| `globals_order.dfy` | `$ORDER` successor/predecessor minimal + next-element, `$QUERY` DFS | `tests/test_order_lmdb.sh`, `tests/test_zwrite.sh` |
 | `order_pairs.dfy` | multi-level `$ORDER` candidate order | `tests/test_order_lmdb.sh` |
 | `txn_overlay.dfy` | overlay write/kill + nested `$TLEVEL`/rollback | `tests/test_txn_lmdb.sh`, `tests/test_txn_reads.sh` |
 | `pattern.dfy` | pattern alternation match semantics | `tests/test_pattern.nim`, `tests/ansi_iso_m_conformance.py` |

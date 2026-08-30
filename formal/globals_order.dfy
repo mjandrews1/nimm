@@ -199,4 +199,138 @@ module GlobalsOrder {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Backward predecessor ($QUERY/$ORDER backward)
+  // ---------------------------------------------------------------------------
+  // The backward predecessor of `subs`: the largest node strictly before it
+  // (the first node < subs when scanning from the end of the sorted list).
+
+  function Predecessor(nodes: seq<seq<Sub>>, subs: seq<Sub>): seq<Sub>
+    decreases |nodes|
+  {
+    if nodes == [] then []
+    else if TupCmp(nodes[|nodes| - 1], subs) < 0 then nodes[|nodes| - 1]
+    else Predecessor(nodes[..|nodes| - 1], subs)
+  }
+
+  lemma PredecessorIsBefore(nodes: seq<seq<Sub>>, subs: seq<Sub>)
+    requires Sorted(nodes)
+    ensures Predecessor(nodes, subs) == [] || TupCmp(Predecessor(nodes, subs), subs) < 0
+    decreases |nodes|
+  {
+    if nodes == [] {
+    } else if TupCmp(nodes[|nodes| - 1], subs) < 0 {
+    } else {
+      PredecessorIsBefore(nodes[..|nodes| - 1], subs);
+    }
+  }
+
+  // A suffix of nodes all >= subs does not affect the predecessor.
+  lemma PredecessorSkipSuffix(nodes: seq<seq<Sub>>, subs: seq<Sub>, k: nat)
+    requires k <= |nodes|
+    requires forall j | k <= j < |nodes| :: TupCmp(nodes[j], subs) >= 0
+    ensures Predecessor(nodes, subs) == Predecessor(nodes[..k], subs)
+    decreases |nodes| - k
+  {
+    reveal Predecessor;
+    if k == |nodes| {
+      assert nodes[..k] == nodes;
+    } else {
+      assert TupCmp(nodes[|nodes| - 1], subs) >= 0;
+      PredecessorSkipSuffix(nodes[..|nodes| - 1], subs, k);
+      assert (nodes[..|nodes| - 1])[..k] == nodes[..k];
+      assert Predecessor(nodes, subs) == Predecessor(nodes[..|nodes| - 1], subs);
+    }
+  }
+
+  // The predecessor is *maximal*: no node strictly before subs is skipped.
+  lemma PredecessorMaximal(nodes: seq<seq<Sub>>, subs: seq<Sub>)
+    requires Sorted(nodes)
+    ensures Predecessor(nodes, subs) != [] ==>
+      forall i | 0 <= i < |nodes| :: TupCmp(nodes[i], subs) < 0 ==>
+        TupCmp(nodes[i], Predecessor(nodes, subs)) <= 0
+    decreases |nodes|
+  {
+    if nodes == [] {
+    } else if TupCmp(nodes[|nodes| - 1], subs) < 0 {
+      assert Predecessor(nodes, subs) == nodes[|nodes| - 1];
+      forall i | 0 <= i < |nodes|
+        ensures TupCmp(nodes[i], subs) < 0 ==> TupCmp(nodes[i], nodes[|nodes| - 1]) <= 0
+      {
+        if TupCmp(nodes[i], subs) < 0 {
+          if i == |nodes| - 1 {
+            TupCmpReflexive(nodes[|nodes| - 1]);
+          } else {
+            assert TupCmp(nodes[i], nodes[|nodes| - 1]) <= 0;
+          }
+        }
+      }
+    } else {
+      PredecessorMaximal(nodes[..|nodes| - 1], subs);
+      assert Predecessor(nodes, subs) == Predecessor(nodes[..|nodes| - 1], subs);
+    }
+  }
+
+  // The predecessor of an element is the previous element ([] before the first).
+  lemma PredecessorPrev(nodes: seq<seq<Sub>>, i: nat)
+    requires StrictSorted(nodes)
+    requires i < |nodes|
+    ensures Predecessor(nodes, nodes[i]) == (if i > 0 then nodes[i - 1] else [])
+  {
+    // The suffix j >= i is all >= nodes[i], so it does not affect the result.
+    forall j | i <= j < |nodes|
+      ensures TupCmp(nodes[j], nodes[i]) >= 0
+    {
+      if j == i {
+        TupCmpReflexive(nodes[i]);
+      } else {
+        assert TupCmp(nodes[i], nodes[j]) < 0;
+        TupCmpAntisymmetric(nodes[i], nodes[j]);
+      }
+    }
+    PredecessorSkipSuffix(nodes, nodes[i], i);
+    if i == 0 {
+      assert nodes[..0] == [];
+    } else {
+      assert TupCmp(nodes[i - 1], nodes[i]) < 0;
+      assert Predecessor(nodes[..i], nodes[i]) == nodes[i - 1];
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Full DFS: listNodes returns every strict descendant in pre-order
+  // ---------------------------------------------------------------------------
+
+  function IsDescendant(s: seq<Sub>, prefix: seq<Sub>): bool
+  {
+    |s| > |prefix| && s[..|prefix|] == prefix
+  }
+
+  // Filter nodes to those strictly below `prefix` (listNodes).
+  function Descendants(nodes: seq<seq<Sub>>, prefix: seq<Sub>): seq<seq<Sub>>
+  {
+    if nodes == [] then []
+    else if IsDescendant(nodes[0], prefix) then [nodes[0]] + Descendants(nodes[1..], prefix)
+    else Descendants(nodes[1..], prefix)
+  }
+
+  // Completeness: every descendant in the list is returned, and every returned
+  // node is a descendant of prefix.
+  lemma DescendantsComplete(nodes: seq<seq<Sub>>, prefix: seq<Sub>)
+    ensures forall i | 0 <= i < |nodes| :: IsDescendant(nodes[i], prefix) ==>
+              nodes[i] in Descendants(nodes, prefix)
+    decreases |nodes|
+  {
+    if nodes == [] {
+    } else if IsDescendant(nodes[0], prefix) {
+      DescendantsComplete(nodes[1..], prefix);
+      forall i | 1 <= i < |nodes|
+        ensures IsDescendant(nodes[i], prefix) ==> nodes[i] in Descendants(nodes, prefix)
+      {
+      }
+    } else {
+      DescendantsComplete(nodes[1..], prefix);
+    }
+  }
+
 }

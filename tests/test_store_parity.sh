@@ -36,6 +36,7 @@ run_parity "\$ORDER backward" 'KILL ^G SET ^G(1)=1,^G(2)=2,^G(10)=3 WRITE $ORDER
 run_parity "\$ORDER multi-level" 'KILL ^G SET ^G(1,10)=1,^G(1,20)=2,^G(2,5)=3 WRITE $ORDER(^G(1,10)),"|",$ORDER(^G(1,"")),"|",$ORDER(^G(""))'
 run_parity "\$ORDER negative/fractional" 'KILL ^G SET ^G(-1)=1,^G(0.5)=2 WRITE $ORDER(^G(-1)),"|",$ORDER(^G(0.5))'
 run_parity "\$QUERY" 'KILL ^G SET ^G(1)=1,^G(1,2)=2 WRITE $QUERY(^G("")),"|",$QUERY(^G(1))'
+run_parity "\$QUERY backward" 'KILL ^G SET ^G(1)=1,^G(2)=2,^G(10)=3 WRITE $QUERY(^G(10),-1),"|",$QUERY(^G(""),-1)'
 run_parity "KILL node + descendants" 'KILL ^G SET ^G(1)=1,^G(1,2)=2 KILL ^G(1) WRITE $DATA(^G(1)),"|",$DATA(^G(1,2)),"|",$DATA(^G)'
 run_parity "ZKILL keeps descendants" 'KILL ^G SET ^G(1)=1,^G(1,2)=2 ZKILL ^G(1) WRITE $DATA(^G(1)),"|",$DATA(^G(1,2))'
 run_parity "MERGE" 'KILL ^A,^B SET ^A(1)=1,^A(2)=2 MERGE ^B=^A WRITE ^B(1),"|",^B(2)'
