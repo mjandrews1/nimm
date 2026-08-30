@@ -45,6 +45,9 @@ run_compare "IF false" 'IF 0 W "no"'
 
 # FOR loop
 run_compare "FOR 1:1:3" 'FOR I=1:1:3 W I'
+run_compare "FOR step>1" 'FOR I=1:2:7 W I'
+run_compare "FOR body mutates var" 'S S=0 FOR I=1:1:3 S S=S+I W S'
+run_compare "FOR body assigns const" 'S Y=0 FOR I=1:1:3 S Y=42 W Y'
 
 # Transactions
 run_compare "TSTART/TCOMMIT" 'KILL ^Tx TSTART SET ^Tx=1 TCOMMIT W ^Tx'

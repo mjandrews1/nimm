@@ -205,5 +205,6 @@ data_structures.dfy|DequeueFront|test|tests/test_data_structures_invariants.nim
 data_structures.dfy|AncestorLe|support|-
 data_structures.dfy|PeekIsMin|test|tests/test_data_structures_invariants.nim
 for_loop_bisim.dfy|RunStep|support|-
+for_loop_bisim.dfy|RunBody|support|-
 for_loop_bisim.dfy|LoopFrom|support|-
 for_loop_bisim.dfy|ForBisim|conformance|tests/test_bytecode_conformance.sh
