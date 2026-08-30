@@ -96,6 +96,35 @@ proc main() =
     assert n2 == "^G" and s2 == subs
   echo "  key round-trip: ok"
 
+  # --- randomized scope-stack fuzz (mirrors formal/scope_stack.dfy) ---
+  var gFuzz = newGlobals()
+  for _ in 1 .. 20000:
+    case randInt(0, 2)
+    of 0: gFuzz.pushScope()
+    of 1: gFuzz.popScope()
+    else:
+      let name = "V" & $randInt(0, 4)
+      gFuzz.markNewed(name)
+      gFuzz.setLocalDirect(name, $randInt(0, 99))
+    assert gFuzz.scopes.len >= 1
+    assert gFuzz.scopes.len == gFuzz.scopeShared.len
+    assert gFuzz.scopes.len == gFuzz.scopeNewedVars.len + 1
+    assert gFuzz.scopes.len == gFuzz.scopeWrittenVars.len + 1
+  echo "  scope-stack fuzz (20k ops): ok"
+
+  # --- randomized $DATA fuzz (mirrors formal/data_tristate.dfy) ---
+  var gData = newGlobals()
+  for _ in 1 .. 10000:
+    let name = "D" & $randInt(0, 3)
+    var subs: seq[string] = @[]
+    for _ in 0 ..< randInt(0, 2):
+      subs.add($randInt(0, 3))
+    if randInt(0, 1) == 0:
+      gData.setLocal(name, subs, "v")
+    let d = gData.data(name, subs)
+    assert d == 0 or d == 1 or d == 10 or d == 11, "bad $DATA: " & $d
+  echo "  $DATA fuzz (10k): ok"
+
   echo ""
   echo "All contracts exercised!"
 

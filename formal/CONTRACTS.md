@@ -1,9 +1,10 @@
 # Contracts — Dafny models ↔ Nim runtime mirrors
 
 Every `formal/*.dfy` model states a property that the NimM source must satisfy.
-Each is *mirrored* by a Nim test/contract that asserts the same property on the
-real code at runtime. `check_contracts.sh` enforces this mapping in CI (every
-model listed; every mirror present).
+Each *lemma* is mirrored by a Nim test/contract that asserts the same property
+on the real code at runtime. The machine-readable, per-lemma manifest is
+`formal/contracts.tsv`; `check_contracts.sh` enforces it in CI (every lemma
+listed, no stale rows, every mirror present).
 
 | Model | Proves | Nim mirror (runtime) |
 |---|---|---|
