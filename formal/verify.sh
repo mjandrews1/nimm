@@ -22,5 +22,6 @@ dafny verify scope_stack.dfy
 dafny verify bytecode_stack.dfy
 dafny verify bytecode_bisim.dfy
 dafny verify entry_term_expansion.dfy
+dafny verify hybrid_merge.dfy
 dafny verify bm25.dfy
 echo "formal models verified."
