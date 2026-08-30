@@ -75,6 +75,8 @@ check "\$PIECE beyond" '' 'W $P("a^b^c","^",4)'
 check "\$PIECE no delim" 'abc' 'W $P("abc","^",1)'
 check "\$PIECE multi" 'b^c' 'W $P("a^b^c","^",2,3)'
 check "\$PIECE multi full" 'a^b^c' 'W $P("a^b^c","^",1,3)'
+check "\$PIECE multi-char delim" 'a::b::c' 'W $P("a::b::c","::",1,3)'
+check "\$PIECE multi-char 2" 'b::c' 'W $P("a::b::c","::",2,3)'
 
 # $JUSTIFY (width align)
 check "\$JUSTIFY pad" '  abc' 'W $J("abc",5)'

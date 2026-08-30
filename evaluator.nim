@@ -613,15 +613,18 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       let pieceEnd = s.find(d, pieceStart)
       if pieceEnd < 0: return s[pieceStart..^1]
       return s[pieceStart..<pieceEnd]
-    # Multi-piece: split and join
+    # Multi-piece: split on the full delimiter d, then join pieces start..stop
     var pieces: seq[string] = @[]
     var current = ""
-    for ch in s:
-      if ch == d[0]:
+    var i = 0
+    while i < s.len:
+      if i + d.len <= s.len and s[i ..< i + d.len] == d:
         pieces.add(current)
         current = ""
+        i += d.len
       else:
-        current.add(ch)
+        current.add(s[i])
+        i += 1
     pieces.add(current)
     var res = ""
     for i in start..stop:

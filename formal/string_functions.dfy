@@ -226,27 +226,28 @@ module StringFunctions {
   }
 
   // ================= $PIECE multi-piece (split + join) =================
-  // The multi-piece path (start != stop) splits on the delimiter's *first*
-  // character, then joins pieces start..stop with the delimiter.
+  // The multi-piece path (start != stop) splits on the full delimiter, then
+  // joins pieces start..stop with the delimiter.
 
-  // Number of occurrences of c in s.
-  function Count(s: seq<char>, c: char): nat
+  // Split s at each (non-overlapping) occurrence of delimiter d.
+  function Split(s: seq<char>, d: seq<char>): seq<seq<char>>
     decreases |s|
   {
-    if |s| == 0 then 0
-    else (if s[0] == c then 1 else 0) + Count(s[1..], c)
+    if d == [] then [s]
+    else
+      var p := FirstMatch(s, d, 0);
+      if p == |s| then [s]
+      else [s[..p]] + Split(s[p + |d| ..], d)
   }
 
-  // Split s at each occurrence of character c.
-  function SplitChar(s: seq<char>, c: char): seq<seq<char>>
+  // Number of (non-overlapping) occurrences of d in s.
+  function CountDelim(s: seq<char>, d: seq<char>): nat
+    requires d != []
     decreases |s|
   {
-    if |s| == 0 then [[]]
-    else if s[0] == c then [[]] + SplitChar(s[1..], c)
-    else
-      var rest := SplitChar(s[1..], c);
-      if |rest| == 0 then [[s[0]]]
-      else [[s[0]] + rest[0]] + rest[1..]
+    var p := FirstMatch(s, d, 0);
+    if p == |s| then 0
+    else 1 + CountDelim(s[p + |d| ..], d)
   }
 
   // Join pieces with delimiter d between them.
@@ -258,70 +259,67 @@ module StringFunctions {
     else pieces[0] + d + Join(pieces[1..], d)
   }
 
+  // FirstMatch returns a position where d actually matches (or |s|).
+  lemma FirstMatchFound(s: seq<char>, d: seq<char>, i: nat)
+    requires d != [] && i <= |s|
+    ensures var p := FirstMatch(s, d, i); p < |s| ==> s[p .. p + |d|] == d
+    decreases |s| - i
+  {
+    reveal FirstMatch;
+    if i + |d| <= |s| && s[i .. i + |d|] == d {
+    } else if i < |s| {
+      FirstMatchFound(s, d, i + 1);
+    }
+  }
+
   // Split always yields at least one piece.
-  lemma SplitCharNonEmpty(s: seq<char>, c: char)
-    ensures |SplitChar(s, c)| >= 1
+  lemma SplitNonEmpty(s: seq<char>, d: seq<char>)
+    ensures |Split(s, d)| >= 1
     decreases |s|
   {
-    reveal SplitChar;
-    if |s| == 0 {
-    } else if s[0] == c {
-      SplitCharNonEmpty(s[1..], c);
+    reveal Split;
+    if d == [] {
     } else {
-      SplitCharNonEmpty(s[1..], c);
+      var p := FirstMatch(s, d, 0);
+      if p != |s| {
+        SplitNonEmpty(s[p + |d| ..], d);
+      }
     }
   }
 
   // The number of pieces is one more than the number of delimiters.
-  lemma PieceCount(s: seq<char>, c: char)
-    ensures |SplitChar(s, c)| == Count(s, c) + 1
+  lemma PieceCount(s: seq<char>, d: seq<char>)
+    requires d != []
+    ensures |Split(s, d)| == CountDelim(s, d) + 1
     decreases |s|
   {
-    reveal SplitChar;
-    reveal Count;
-    if |s| == 0 {
-    } else if s[0] == c {
-      PieceCount(s[1..], c);
-      assert |SplitChar(s, c)| == 1 + |SplitChar(s[1..], c)|;
-    } else {
-      PieceCount(s[1..], c);
-      SplitCharNonEmpty(s[1..], c);
-      assert SplitChar(s, c) == [[s[0]] + SplitChar(s[1..], c)[0]] + SplitChar(s[1..], c)[1..];
-      assert |SplitChar(s, c)| == 1 + |SplitChar(s[1..], c)[1..]|;
-      assert |SplitChar(s, c)| == |SplitChar(s[1..], c)|;
+    reveal Split;
+    reveal CountDelim;
+    var p := FirstMatch(s, d, 0);
+    if p != |s| {
+      PieceCount(s[p + |d| ..], d);
     }
   }
 
-  // Splitting by c and joining with [c] recovers the original string: the
+  // Splitting on d and joining with d recovers the original string: the
   // multi-piece $PIECE over the full range (start=1, stop=count) is the whole.
-  lemma SplitJoinRoundTrip(s: seq<char>, c: char)
-    ensures Join(SplitChar(s, c), [c]) == s
+  lemma SplitJoinRoundTrip(s: seq<char>, d: seq<char>)
+    requires d != []
+    ensures Join(Split(s, d), d) == s
     decreases |s|
   {
-    reveal SplitChar;
+    reveal Split;
     reveal Join;
-    if |s| == 0 {
-    } else if s[0] == c {
-      SplitJoinRoundTrip(s[1..], c);
-      assert SplitChar(s, c) == [[]] + SplitChar(s[1..], c);
-      assert Join(SplitChar(s, c), [c]) == [c] + Join(SplitChar(s[1..], c), [c]);
+    var p := FirstMatch(s, d, 0);
+    if p == |s| {
     } else {
-      SplitJoinRoundTrip(s[1..], c);
-      SplitCharNonEmpty(s[1..], c);
-      var rest := SplitChar(s[1..], c);
-      assert SplitChar(s, c) == [[s[0]] + rest[0]] + rest[1..];
-      if |rest| == 1 {
-        assert rest[1..] == [];
-        assert Join(SplitChar(s, c), [c]) == [s[0]] + rest[0];
-        assert Join(rest, [c]) == rest[0];
-        assert rest[0] == s[1..];
-      } else {
-        assert Join(SplitChar(s, c), [c]) == ([s[0]] + rest[0]) + [c] + Join(rest[1..], [c]);
-        assert Join(rest, [c]) == rest[0] + [c] + Join(rest[1..], [c]);
-        assert rest[0] + [c] + Join(rest[1..], [c]) == s[1..];
-        assert ([s[0]] + rest[0]) + [c] + Join(rest[1..], [c]) ==
-               [s[0]] + (rest[0] + [c] + Join(rest[1..], [c]));
-      }
+      SplitJoinRoundTrip(s[p + |d| ..], d);
+      SplitNonEmpty(s[p + |d| ..], d);
+      FirstMatchFound(s, d, 0);
+      assert s[p .. p + |d|] == d;
+      assert Split(s, d) == [s[..p]] + Split(s[p + |d| ..], d);
+      assert Join(Split(s, d), d) == s[..p] + d + Join(Split(s[p + |d| ..], d), d);
+      assert s[..p] + d + s[p + |d| ..] == s;
     }
   }
 

@@ -201,7 +201,8 @@ string_functions.dfy|PieceSecond|test|tests/test_string_functions.sh
 string_functions.dfy|PieceThird|test|tests/test_string_functions.sh
 string_functions.dfy|PieceBeyond|test|tests/test_string_functions.sh
 string_functions.dfy|PieceNoDelim|test|tests/test_string_functions.sh
-string_functions.dfy|SplitCharNonEmpty|support|-
+string_functions.dfy|FirstMatchFound|support|-
+string_functions.dfy|SplitNonEmpty|support|-
 string_functions.dfy|PieceCount|test|tests/test_string_functions.sh
 string_functions.dfy|SplitJoinRoundTrip|test|tests/test_string_functions.sh
 string_functions.dfy|SpacesLength|support|-
