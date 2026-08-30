@@ -177,3 +177,12 @@ subscript_bisim.dfy|ExecCodeConcat|support|-
 subscript_bisim.dfy|SubsBisim|support|-
 subscript_bisim.dfy|ExprBisim|conformance|tests/test_bytecode_conformance.sh
 subscript_bisim.dfy|StmtBisim|conformance|tests/test_bytecode_conformance.sh
+string_functions.dfy|FirstMatchCaretAbc|support|-
+string_functions.dfy|FirstMatchCaretBc|support|-
+string_functions.dfy|FirstMatchCaretC|support|-
+string_functions.dfy|FirstMatchCaretPlain|support|-
+string_functions.dfy|PieceFirst|test|tests/test_string_functions.sh
+string_functions.dfy|PieceSecond|test|tests/test_string_functions.sh
+string_functions.dfy|PieceThird|test|tests/test_string_functions.sh
+string_functions.dfy|PieceBeyond|test|tests/test_string_functions.sh
+string_functions.dfy|PieceNoDelim|test|tests/test_string_functions.sh

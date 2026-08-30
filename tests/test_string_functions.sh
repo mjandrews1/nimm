@@ -63,5 +63,12 @@ check "\$QLENGTH" '3' 'W $QL("X(a,b,c)")'
 check "\$REVERSE" 'cba' 'W $REVERSE("abc")'
 check "\$REVERSE empty" '' 'W $REVERSE("")'
 
+# $PIECE (delimiter split)
+check "\$PIECE 1" 'a' 'W $P("a^b^c","^",1)'
+check "\$PIECE 2" 'b' 'W $P("a^b^c","^",2)'
+check "\$PIECE 3" 'c' 'W $P("a^b^c","^",3)'
+check "\$PIECE beyond" '' 'W $P("a^b^c","^",4)'
+check "\$PIECE no delim" 'abc' 'W $P("abc","^",1)'
+
 echo "  $PASS checks passed"
 echo "String function tests passed!"
