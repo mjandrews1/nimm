@@ -52,6 +52,8 @@ overload before extending them.
 
 ## Git / issues
 
-- Manage issues with `gh issue create/edit/close`; keep #380 (critical path)
+- Remotes: **GitHub** (`origin`) and **Utility-01** (`/home/mark/nimm`, synced
+  via pull). **GitLab is deprecated** — do not add or push to it.
+- Manage issues with `gh issue create/edit/close`; keep #450 (critical path)
   current when phase status changes.
 - Commit only intended files; never commit `bin/` or scratch artifacts.
