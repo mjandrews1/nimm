@@ -25,6 +25,7 @@ SHELL_SUITES=(
     test_introspection
     test_key_encoding
     test_lint
+    test_m_programs
     test_mcp_auth
     test_mcp_introspection
     test_mode_gates
