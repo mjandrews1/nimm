@@ -22,6 +22,7 @@ dafny verify bytecode_stack.dfy
 dafny verify collation.dfy
 dafny verify entry_term_expansion.dfy
 dafny verify hybrid_merge.dfy
+dafny verify numeric_prefix.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
 dafny verify value_format.dfy

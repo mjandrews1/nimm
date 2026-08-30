@@ -11,6 +11,7 @@ listed, no stale rows, every mirror present).
 | `collation.dfy` | `mCollationCmp` reflexive/skew/transitive | `tests/test_collation.nim` |
 | `key_encoding.dfy` | type-byte framing + `decode∘encode == id` | `tests/test_encoding_roundtrip.nim`, `tests/test_key_encoding.sh` |
 | `numeric_encoding.dfy` | 9's-complement order + inverse | `tests/test_encoding_roundtrip.nim` |
+| `numeric_prefix.dfy` | `numPrefix`/`truthy` prefix grammar + truth table | `tests/test_truthy.nim` |
 | `globals_order.dfy` | `$ORDER` successor minimal + next-element | `tests/test_order_lmdb.sh` |
 | `order_pairs.dfy` | multi-level `$ORDER` candidate order | `tests/test_order_lmdb.sh` |
 | `txn_overlay.dfy` | overlay write/kill + nested `$TLEVEL`/rollback | `tests/test_txn_lmdb.sh`, `tests/test_txn_reads.sh` |
