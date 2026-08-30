@@ -186,3 +186,10 @@ string_functions.dfy|PieceSecond|test|tests/test_string_functions.sh
 string_functions.dfy|PieceThird|test|tests/test_string_functions.sh
 string_functions.dfy|PieceBeyond|test|tests/test_string_functions.sh
 string_functions.dfy|PieceNoDelim|test|tests/test_string_functions.sh
+special_vars.dfy|PopPush|test|tests/test_special_vars.sh
+special_vars.dfy|PopUnderflow|test|tests/test_special_vars.sh
+special_vars.dfy|PushIncreases|test|tests/test_special_vars.sh
+special_vars.dfy|ResetZero|test|tests/test_special_vars.sh
+special_vars.dfy|TruthFlagIsBit|support|-
+special_vars.dfy|TruthFlagZero|support|-
+special_vars.dfy|TruthFlagOne|support|-

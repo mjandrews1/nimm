@@ -35,6 +35,7 @@ SHELL_SUITES=(
     test_scoping
     test_scripting
     test_source
+    test_special_vars
     test_store_parity
     test_string_functions
     test_tcommit_scope

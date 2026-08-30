@@ -26,6 +26,7 @@ dafny verify entry_term_expansion.dfy
 dafny verify hybrid_merge.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
+dafny verify special_vars.dfy
 dafny verify string_functions.dfy
 dafny verify subscript_bisim.dfy
 dafny verify value_format.dfy
