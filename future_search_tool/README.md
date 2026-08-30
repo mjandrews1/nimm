@@ -16,6 +16,8 @@ Search and vector index infrastructure for NimM. Extracted from the nimm codebas
 
 Extracted from nimm — not yet wired to any application. These modules were developed as infrastructure for a search tool (formerly YakSearch) and are preserved here for future development.
 
+They compile under Nim 2.2 (fixes applied: `log`→`ln`, `import std/random`/`algorithm`, missing `new(result)` in the constructors). The RRF fusion path is exercised by `tests/test_hybrid_rrf.nim`.
+
 ## Dependencies
 
 - Nim >= 2.2.0

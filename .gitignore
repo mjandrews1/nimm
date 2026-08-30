@@ -35,6 +35,7 @@ tests/test_collation
 tests/test_vm_table
 tests/test_pattern
 tests/test_hybrid_rrf
+future_search_tool/src/fst_load_nim
 
 # LMDB database files
 *.mdb
