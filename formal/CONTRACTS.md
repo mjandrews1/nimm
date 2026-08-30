@@ -23,7 +23,7 @@ listed, no stale rows, every mirror present).
 | `data_tristate.dfy` | `$DATA` 0/1/10/11 tri-state | `tests/test_contracts.nim` |
 | `scope_stack.dfy` | NEW/QUIT discipline + multi-level propagate | `tests/test_contracts.nim`, `globals.nim` (inline assert) |
 | `special_vars.dfy` | `$STACK`/`$ZLEVEL` depth + `$TEST` truth flag | `tests/test_special_vars.sh` |
-| `string_functions.dfy` | `$LENGTH`/`$EXTRACT`/`$FIND`/`$TRANSLATE` | `tests/test_string_functions.sh` |
+| `string_functions.dfy` | `$LENGTH`/`$EXTRACT`/`$FIND`/`$PIECE` (single+multi)/`$TRANSLATE`/`$JUSTIFY`/`$FNUMBER` | `tests/test_string_functions.sh` |
 | `functions_more.dfy` | `$GET`/`$CASE`/`$SELECT`/`$QLENGTH`/`$REVERSE` | `tests/test_string_functions.sh` |
 | `subscript_bisim.dfy` | subscripted read/write (`opPushVarSub`/`opSetVarSub`) ≡ AST | `tests/test_bytecode_conformance.sh` |
 | `bytecode_stack.dfy` | operand-stack discipline (expr/stmt invariants) | `tests/test_vm_table.nim` |

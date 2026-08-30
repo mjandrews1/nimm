@@ -225,4 +225,164 @@ module StringFunctions {
     }
   }
 
+  // ================= $PIECE multi-piece (split + join) =================
+  // The multi-piece path (start != stop) splits on the delimiter's *first*
+  // character, then joins pieces start..stop with the delimiter.
+
+  // Number of occurrences of c in s.
+  function Count(s: seq<char>, c: char): nat
+    decreases |s|
+  {
+    if |s| == 0 then 0
+    else (if s[0] == c then 1 else 0) + Count(s[1..], c)
+  }
+
+  // Split s at each occurrence of character c.
+  function SplitChar(s: seq<char>, c: char): seq<seq<char>>
+    decreases |s|
+  {
+    if |s| == 0 then [[]]
+    else if s[0] == c then [[]] + SplitChar(s[1..], c)
+    else
+      var rest := SplitChar(s[1..], c);
+      if |rest| == 0 then [[s[0]]]
+      else [[s[0]] + rest[0]] + rest[1..]
+  }
+
+  // Join pieces with delimiter d between them.
+  function Join(pieces: seq<seq<char>>, d: seq<char>): seq<char>
+    decreases |pieces|
+  {
+    if |pieces| == 0 then []
+    else if |pieces| == 1 then pieces[0]
+    else pieces[0] + d + Join(pieces[1..], d)
+  }
+
+  // Split always yields at least one piece.
+  lemma SplitCharNonEmpty(s: seq<char>, c: char)
+    ensures |SplitChar(s, c)| >= 1
+    decreases |s|
+  {
+    reveal SplitChar;
+    if |s| == 0 {
+    } else if s[0] == c {
+      SplitCharNonEmpty(s[1..], c);
+    } else {
+      SplitCharNonEmpty(s[1..], c);
+    }
+  }
+
+  // The number of pieces is one more than the number of delimiters.
+  lemma PieceCount(s: seq<char>, c: char)
+    ensures |SplitChar(s, c)| == Count(s, c) + 1
+    decreases |s|
+  {
+    reveal SplitChar;
+    reveal Count;
+    if |s| == 0 {
+    } else if s[0] == c {
+      PieceCount(s[1..], c);
+      assert |SplitChar(s, c)| == 1 + |SplitChar(s[1..], c)|;
+    } else {
+      PieceCount(s[1..], c);
+      SplitCharNonEmpty(s[1..], c);
+      assert SplitChar(s, c) == [[s[0]] + SplitChar(s[1..], c)[0]] + SplitChar(s[1..], c)[1..];
+      assert |SplitChar(s, c)| == 1 + |SplitChar(s[1..], c)[1..]|;
+      assert |SplitChar(s, c)| == |SplitChar(s[1..], c)|;
+    }
+  }
+
+  // Splitting by c and joining with [c] recovers the original string: the
+  // multi-piece $PIECE over the full range (start=1, stop=count) is the whole.
+  lemma SplitJoinRoundTrip(s: seq<char>, c: char)
+    ensures Join(SplitChar(s, c), [c]) == s
+    decreases |s|
+  {
+    reveal SplitChar;
+    reveal Join;
+    if |s| == 0 {
+    } else if s[0] == c {
+      SplitJoinRoundTrip(s[1..], c);
+      assert SplitChar(s, c) == [[]] + SplitChar(s[1..], c);
+      assert Join(SplitChar(s, c), [c]) == [c] + Join(SplitChar(s[1..], c), [c]);
+    } else {
+      SplitJoinRoundTrip(s[1..], c);
+      SplitCharNonEmpty(s[1..], c);
+      var rest := SplitChar(s[1..], c);
+      assert SplitChar(s, c) == [[s[0]] + rest[0]] + rest[1..];
+      if |rest| == 1 {
+        assert rest[1..] == [];
+        assert Join(SplitChar(s, c), [c]) == [s[0]] + rest[0];
+        assert Join(rest, [c]) == rest[0];
+        assert rest[0] == s[1..];
+      } else {
+        assert Join(SplitChar(s, c), [c]) == ([s[0]] + rest[0]) + [c] + Join(rest[1..], [c]);
+        assert Join(rest, [c]) == rest[0] + [c] + Join(rest[1..], [c]);
+        assert rest[0] + [c] + Join(rest[1..], [c]) == s[1..];
+        assert ([s[0]] + rest[0]) + [c] + Join(rest[1..], [c]) ==
+               [s[0]] + (rest[0] + [c] + Join(rest[1..], [c]));
+      }
+    }
+  }
+
+  // ================= $JUSTIFY (width align) =================
+  // Right-justify s to width by left-padding with spaces; a non-positive width
+  // (or width <= |s|) leaves s unchanged.
+
+  function Spaces(n: nat): seq<char>
+    decreases n
+  {
+    if n == 0 then [] else [' '] + Spaces(n - 1)
+  }
+
+  lemma SpacesLength(n: nat)
+    ensures |Spaces(n)| == n
+    decreases n
+  {
+    if n == 0 {
+    } else {
+      SpacesLength(n - 1);
+    }
+  }
+
+  function Justify(s: seq<char>, width: int): seq<char>
+  {
+    if width <= |s| then s else Spaces(width - |s|) + s
+  }
+
+  lemma JustifyLength(s: seq<char>, width: int)
+    ensures |Justify(s, width)| == (if width > |s| then width else |s|)
+  {
+    if width > |s| {
+      SpacesLength(width - |s|);
+    }
+  }
+
+  lemma JustifyNegative(s: seq<char>, width: int)
+    requires width <= |s|
+    ensures Justify(s, width) == s
+  {
+  }
+
+  // ================= $FNUMBER (sign decoration) =================
+  // '+' in the format forces a leading '+' on non-negative numbers; 'P'
+  // parenthesizes negative numbers.
+
+  function FNumberSign(s: string, hasPlus: bool, hasParen: bool, negative: bool): string
+  {
+    if hasParen && negative then "(" + s + ")"
+    else if hasPlus && !negative then "+" + s
+    else s
+  }
+
+  lemma FNumberPlus(s: string)
+    ensures FNumberSign(s, true, false, false) == "+" + s
+  {
+  }
+
+  lemma FNumberParen(s: string)
+    ensures FNumberSign(s, false, true, true) == "(" + s + ")"
+  {
+  }
+
 }

@@ -73,6 +73,17 @@ check "\$PIECE 2" 'b' 'W $P("a^b^c","^",2)'
 check "\$PIECE 3" 'c' 'W $P("a^b^c","^",3)'
 check "\$PIECE beyond" '' 'W $P("a^b^c","^",4)'
 check "\$PIECE no delim" 'abc' 'W $P("abc","^",1)'
+check "\$PIECE multi" 'b^c' 'W $P("a^b^c","^",2,3)'
+check "\$PIECE multi full" 'a^b^c' 'W $P("a^b^c","^",1,3)'
+
+# $JUSTIFY (width align)
+check "\$JUSTIFY pad" '  abc' 'W $J("abc",5)'
+check "\$JUSTIFY no-op" 'abc' 'W $J("abc",3)'
+check "\$JUSTIFY negative" 'abc' 'W $J("abc",-5)'
+
+# $FNUMBER (sign decoration)
+check "\$FNUMBER plus" '+5' 'W $FN(5,"+")'
+check "\$FNUMBER paren" '(5)' 'W $FN(-5,"P")'
 
 echo "  $PASS checks passed"
 echo "String function tests passed!"
