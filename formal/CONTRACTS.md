@@ -29,6 +29,7 @@ listed, no stale rows, every mirror present).
 | `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_bm25_m.sh` |
 | `bm25.dfy` | BM25 idf/tfNorm + `SEARCH` top-K | `tests/test_bm25_m.sh` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
+| `lock_semantics.dfy` | `heldLocks` acquire/release/release-all | `tests/test_locks.nim` |
 | `vm_opcodes.dfy` | concrete opcode Pops/Pushes table + compiler safety | `tests/test_vm_table.nim` |
 
 ## Runtime-mirror kinds

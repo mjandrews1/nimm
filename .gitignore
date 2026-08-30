@@ -36,6 +36,7 @@ tests/test_vm_table
 tests/test_pattern
 tests/test_hybrid_rrf
 tests/test_truthy
+tests/test_locks
 future_search_tool/src/fst_load_nim
 
 # LMDB database files

@@ -193,3 +193,8 @@ special_vars.dfy|ResetZero|test|tests/test_special_vars.sh
 special_vars.dfy|TruthFlagIsBit|support|-
 special_vars.dfy|TruthFlagZero|support|-
 special_vars.dfy|TruthFlagOne|support|-
+lock_semantics.dfy|AcquireIdempotent|test|tests/test_locks.nim
+lock_semantics.dfy|ReleaseRemoves|test|tests/test_locks.nim
+lock_semantics.dfy|ReleaseAllEmpty|test|tests/test_locks.nim
+lock_semantics.dfy|AcquireReleaseNoop|test|tests/test_locks.nim
+lock_semantics.dfy|ReleaseAbsentNoop|test|tests/test_locks.nim
