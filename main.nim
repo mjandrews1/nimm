@@ -29,6 +29,8 @@ import static_analysis
 import network
 import bytecode
 import algorithm
+import future_search_tool/src/fst_core
+import future_search_tool/src/fst_mcp
 
 type
   CliArgs = object
@@ -711,6 +713,10 @@ proc main() =
       except:
         return %*{"error": getCurrentExceptionMsg()}
     )
+
+    # FST search tools (#453): keyword/vector/hybrid search over indexed docs.
+    var searchEngine = newSearchEngine()
+    registerSearchTools(mcp, searchEngine)
 
     echo "Starting MCP server on port ", args.mcpPort
     mcp.start()
