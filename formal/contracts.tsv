@@ -198,3 +198,9 @@ lock_semantics.dfy|ReleaseRemoves|test|tests/test_locks.nim
 lock_semantics.dfy|ReleaseAllEmpty|test|tests/test_locks.nim
 lock_semantics.dfy|AcquireReleaseNoop|test|tests/test_locks.nim
 lock_semantics.dfy|ReleaseAbsentNoop|test|tests/test_locks.nim
+data_structures.dfy|TopAfterPush|test|tests/test_data_structures_invariants.nim
+data_structures.dfy|PopPush|test|tests/test_data_structures_invariants.nim
+data_structures.dfy|FrontAfterEnqueue|test|tests/test_data_structures_invariants.nim
+data_structures.dfy|DequeueFront|test|tests/test_data_structures_invariants.nim
+data_structures.dfy|AncestorLe|support|-
+data_structures.dfy|PeekIsMin|test|tests/test_data_structures_invariants.nim
