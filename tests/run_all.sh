@@ -36,6 +36,7 @@ SHELL_SUITES=(
     test_scripting
     test_source
     test_store_parity
+    test_string_functions
     test_tcommit_scope
     test_txn_lmdb
     test_txn_reads

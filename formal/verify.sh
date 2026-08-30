@@ -25,6 +25,7 @@ dafny verify hybrid_merge.dfy
 dafny verify numeric_prefix.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
+dafny verify string_functions.dfy
 dafny verify value_format.dfy
 dafny verify vm_opcodes.dfy
 echo "formal models verified."
