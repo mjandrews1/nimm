@@ -4,8 +4,8 @@
 // and the compiler's emission invariants for the real instruction set:
 // every compiled expression leaves one value and never underflows, every
 // compiled statement leaves the stack unchanged and never underflows. Covers
-// subscripts (opPushVarSub/opSetVarSub), calls/args (opCall/opWrite), and
-// control flow. Complements bytecode_stack.dfy (abstract subset) and
+// subscripts (opPushVarSub/opSetVarSub) and writes/args (opWrite). Complements
+// bytecode_stack.dfy (abstract subset) and
 // bytecode_bisim.dfy (core-language compiler correctness).
 //
 // Verify with:  dafny verify formal/vm_opcodes.dfy
@@ -18,13 +18,12 @@ module VMOpcodes {
     | PushVarSub(n: int) | PushGlobalSub(n: int) | SetVarSub(n: int) | SetGlobalSub(n: int)
     | Binop | Cmp | Concat | Piece | Extract | Length
     | Jump | JumpIfFalse | JumpIfTrue
-    | Call(argc: int)
     | Return | Quit
     | Write(argc: int) | WriteNl | WriteFf
-    | ForInit | ForNext | NewScope | PopScope
+    | NewScope | PopScope
     | LockAcquire | LockRelease | LockReleaseAll
     | Tstart | Tcommit | Trollback
-    | Xecute | Zloadxml | Kill | Break | Goto | CallLabel | Merge | Nop
+    | Zloadxml | Kill | Break | Goto | CallLabel | Merge | Nop
 
   function Pops(op: Op): int
   {
@@ -51,14 +50,11 @@ module VMOpcodes {
     case Jump => 0
     case JumpIfFalse => 1
     case JumpIfTrue => 1
-    case Call(argc) => argc
     case Return => 0
     case Quit => 0
     case Write(argc) => argc
     case WriteNl => 0
     case WriteFf => 0
-    case ForInit => 0
-    case ForNext => 2
     case NewScope => 0
     case PopScope => 0
     case LockAcquire => 0
@@ -67,7 +63,6 @@ module VMOpcodes {
     case Tstart => 0
     case Tcommit => 0
     case Trollback => 0
-    case Xecute => 0
     case Zloadxml => 3
     case Kill => 0
     case Break => 0
@@ -102,14 +97,11 @@ module VMOpcodes {
     case Jump => 0
     case JumpIfFalse => 0
     case JumpIfTrue => 0
-    case Call(argc) => 1
     case Return => 0
     case Quit => 0
     case Write(argc) => 0
     case WriteNl => 0
     case WriteFf => 0
-    case ForInit => 2
-    case ForNext => 2
     case NewScope => 0
     case PopScope => 0
     case LockAcquire => 0
@@ -118,7 +110,6 @@ module VMOpcodes {
     case Tstart => 0
     case Tcommit => 0
     case Trollback => 0
-    case Xecute => 1
     case Zloadxml => 1
     case Kill => 0
     case Break => 0
@@ -271,18 +262,6 @@ module VMOpcodes {
     SingleOpSafe(Write(argc));
     ConcatNoUnderflow(args, [Write(argc)]);
     NetConcat(args, [Write(argc)]);
-  }
-
-  // Function call: argc argument expressions ++ [Call(argc)] leaves the result.
-  function CompileCall(argc: int, args: seq<Op>): seq<Op> { args + [Call(argc)] }
-
-  lemma CallIsExpr(args: seq<Op>, argc: int)
-    requires argc >= 0 && Net(args) == argc && NoUnderflow(args)
-    ensures IsExpr(CompileCall(argc, args))
-  {
-    SingleOpSafe(Call(argc));
-    ConcatNoUnderflow(args, [Call(argc)]);
-    NetConcat(args, [Call(argc)]);
   }
 
   // Sequencing two statements.

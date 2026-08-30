@@ -48,7 +48,6 @@ type
     opJump          # Unconditional jump
     opJumpIfFalse   # Pop, jump if false
     opJumpIfTrue    # Pop, jump if true
-    opCall          # Call function
     opReturn        # Return from bytecode
     opQuit          # Quit execution
 
@@ -58,8 +57,6 @@ type
     opWriteFf       # Write form feed
 
     # M-specific
-    opForInit       # Initialize FOR loop
-    opForNext       # Increment, jump if not done
     opNewScope      # Push new scope
     opPopScope      # Pop scope
     opLockAcquire   # LOCK +name
@@ -68,7 +65,6 @@ type
     opTstart        # Begin transaction
     opTcommit       # Commit transaction
     opTrollback     # Rollback transaction
-    opXecute        # Fall back to AST for dynamic code
     opZloadxml      # ZLOADXML file, global, format
     opKill          # KILL var (arg1 = name, "" = kill all locals)
     opBreak         # BREAK (halt in bytecode VM)
@@ -134,14 +130,8 @@ proc disassemble*(bc: Bytecode): string =
       result.add(" " & instr.arg1 & " subs=" & $instr.argInt)
     of opJump, opJumpIfFalse, opJumpIfTrue:
       result.add(" " & $instr.argInt)
-    of opCall:
-      result.add(" " & instr.arg1 & " argc=" & $instr.argInt)
     of opWrite:
       result.add(" argc=" & $instr.argInt)
-    of opForInit:
-      result.add(" " & instr.arg1 & " limit=" & instr.arg2 & " step=" & $instr.argInt)
-    of opForNext:
-      result.add(" " & instr.arg1 & " offset=" & $instr.argInt)
     of opNewScope:
       result.add(" " & instr.arg1)
     else:

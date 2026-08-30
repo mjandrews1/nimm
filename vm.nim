@@ -296,22 +296,6 @@ proc execute*(vm: VM, bc: Bytecode): string =
       if truthy(cond):
         vm.pc = instr.argInt
 
-    of opCall:
-      # Function call — args already on stack (opCall is currently unused:
-      # the compiler falls back to AST for $ functions).
-      let argc = instr.argInt
-      var args: seq[string] = @[]
-      for i in 0..<argc:
-        args.add(vm.pop())
-      # Reverse args since stack is LIFO
-      var reversed: seq[string] = @[]
-      for i in countdown(args.len - 1, 0):
-        reversed.add(args[i])
-      args = reversed
-      # Fall back to evaluator for function calls
-      # For now, push empty result
-      vm.push("")
-
     of opReturn:
       vm.halted = true
 
@@ -333,32 +317,6 @@ proc execute*(vm: VM, bc: Bytecode): string =
       vm.writeOut("\f")
 
     # M-specific
-    of opForInit:
-      let varName = instr.arg1
-      let limit = parseInt(instr.arg2)
-      let step = instr.argInt
-      if vm.globalsRef != nil:
-        vm.globalsRef[].setLocalDirect(varName, "1")
-      vm.push($limit)
-      vm.push($step)
-
-    of opForNext:
-      let varName = instr.arg1
-      let offset = instr.argInt
-      if vm.globalsRef != nil:
-        let current = parseInt(vm.globalsRef[].get(varName, @[]))
-        let step = parseInt(vm.pop())
-        let limit = parseInt(vm.pop())
-        let next = current + step
-        vm.globalsRef[].setLocalDirect(varName, $next)
-        if next <= limit:
-          vm.push($limit)
-          vm.push($step)
-          vm.pc = offset
-        else:
-          vm.push($limit)
-          vm.push($step)
-
     of opNewScope:
       if vm.globalsRef != nil:
         vm.globalsRef[].pushScope()
@@ -392,11 +350,6 @@ proc execute*(vm: VM, bc: Bytecode): string =
     of opTrollback:
       if vm.globalsRef != nil:
         vm.globalsRef[].trollback()
-
-    of opXecute:
-      # Dynamic code — fall back to AST interpreter
-      # For now, just push empty result
-      vm.push("")
 
     of opZloadxml:
       # ZLOADXML file, global, format
