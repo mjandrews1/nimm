@@ -15,6 +15,7 @@ dafny verify key_encoding.dfy globals_order.dfy order_pairs.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy data_tristate.dfy
 dafny verify key_encoding.dfy numeric_encoding.dfy
+dafny verify collation.dfy
 dafny verify pattern.dfy
 dafny verify value_format.dfy
 dafny verify scope_stack.dfy
