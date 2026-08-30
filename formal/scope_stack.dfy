@@ -106,4 +106,63 @@ module ScopeStack {
   {
   }
 
+  // --- Multi-level: a scope frame + the write-propagation chain (#415) ---
+
+  // A frame records which vars are NEW'd and written at that level.
+  datatype Frame = Frame(newed: set<string>, written: set<string>)
+
+  // One QUIT: restore NEW'd vars, propagate written non-NEW'd vars upward, and
+  // mark those propagated vars written in the parent — so an outer QUIT
+  // propagates them again (the `scopeWrittenVars[^2].incl(name)` in popScope).
+  function PopFrame(parent: Env, parentF: Frame, child: Env, childF: Frame): (Env, Frame)
+  {
+    ( (x: string) => if x in childF.newed then parent(x)
+                     else if x in childF.written then child(x)
+                     else parent(x),
+      Frame(parentF.newed, parentF.written + (childF.written - childF.newed)) )
+  }
+
+  // A NEW'd var is restored to the parent value.
+  lemma NewedRestores(parent: Env, parentF: Frame, child: Env, childF: Frame, x: string)
+    requires x in childF.newed
+    ensures (PopFrame(parent, parentF, child, childF).0)(x) == parent(x)
+  {
+  }
+
+  // A written non-NEW'd var propagates, and is marked written in the parent.
+  lemma WritePropagates(parent: Env, parentF: Frame, child: Env, childF: Frame, x: string)
+    requires x in childF.written && x !in childF.newed
+    ensures (PopFrame(parent, parentF, child, childF).0)(x) == child(x)
+    ensures x in PopFrame(parent, parentF, child, childF).1.written
+  {
+  }
+
+  // A write at the top propagates all the way to the base through a chain of
+  // non-NEW'd intermediate scopes (the write is re-propagated by each QUIT).
+  lemma TwoLevelPropagate(base: Env, baseF: Frame, mid: Env, midF: Frame,
+                          top: Env, topF: Frame, x: string)
+    requires x in topF.written && x !in topF.newed
+    requires x !in midF.newed
+    ensures
+      var (mEnv, mF) := PopFrame(mid, midF, top, topF);
+      (PopFrame(base, baseF, mEnv, mF).0)(x) == top(x)
+  {
+    WritePropagates(mid, midF, top, topF, x);
+  }
+
+  // A write at the top is discarded when an outer scope NEW'd the var: it
+  // propagates only up to the NEW boundary, then restores to the base value.
+  lemma TwoLevelRestore(base: Env, baseF: Frame, mid: Env, midF: Frame,
+                        top: Env, topF: Frame, x: string)
+    requires x in topF.written && x !in topF.newed
+    requires x in midF.newed
+    ensures
+      var (mEnv, mF) := PopFrame(mid, midF, top, topF);
+      (PopFrame(base, baseF, mEnv, mF).0)(x) == base(x)
+  {
+    WritePropagates(mid, midF, top, topF, x);
+    var (mEnv, mF) := PopFrame(mid, midF, top, topF);
+    NewedRestores(base, baseF, mEnv, mF, x);
+  }
+
 }

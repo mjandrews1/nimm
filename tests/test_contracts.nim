@@ -52,6 +52,28 @@ proc main() =
   assert g2.getLocalDirect("Y") == "plain-write", "written non-NEW'd var should propagate"
   echo "  NEW/QUIT restore/propagate: ok"
 
+  # NEW/QUIT multi-level propagation (formal/scope_stack.dfy, #415)
+  var gN = newGlobals()
+  gN.setLocalDirect("A", "base")
+  gN.pushScope()                       # depth 1
+  gN.pushScope()                       # depth 2
+  gN.setLocalDirect("A", "deep-write") # write at depth 2, not NEW'd
+  gN.popScope()
+  gN.popScope()
+  assert gN.getLocalDirect("A") == "deep-write", "write should propagate to base"
+  echo "  NEW/QUIT nested propagation: ok"
+
+  var gR = newGlobals()
+  gR.setLocalDirect("B", "base")
+  gR.pushScope()                       # depth 1
+  gR.markNewed("B")                    # NEW at depth 1
+  gR.pushScope()                       # depth 2
+  gR.setLocalDirect("B", "deep-write")
+  gR.popScope()
+  gR.popScope()
+  assert gR.getLocalDirect("B") == "base", "write should be discarded at NEW boundary"
+  echo "  NEW/QUIT nested restore: ok"
+
   # --- $DATA tri-state (formal/data_tristate.dfy) ---
   var g3 = newGlobals()
   assert g3.data("A") == 0                    # undefined
