@@ -631,8 +631,12 @@ proc parseFuncArgs(p: var Parser, name: string): seq[Expr] =
     args.add parseExpr(p)
     if p.peek() == tokComma:
       discard p.advance()
-    # Remaining args are val:result pairs
+    # Remaining args are val:result pairs; a leading ':' marks the default.
     while true:
+      if p.peek() == tokColon:
+        discard p.advance()
+        args.add parseExpr(p)   # the default (single trailing arg)
+        break
       let val = parseExpr(p)
       if p.peek() == tokColon:
         discard p.advance()

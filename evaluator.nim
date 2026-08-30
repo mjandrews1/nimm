@@ -181,6 +181,9 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
         varName = ev.eval(varExpr.indirectExpr)
         for sub in varExpr.indirectSubs:
           subs.add(ev.eval(sub))
+      elif varExpr.kind == eStr:
+        # $GET("^G", default) — a string literal names the variable.
+        varName = varExpr.sval
       else:
         return ""
       let val = ev.globals[].get(varName, subs)
@@ -201,6 +204,8 @@ proc eval*(ev: var Evaluator, expr: Expr): string =
         varName = ev.eval(varExpr.indirectExpr)
         for sub in varExpr.indirectSubs:
           subs.add(ev.eval(sub))
+      elif varExpr.kind == eStr:
+        varName = varExpr.sval
       else:
         return ""
       return $ev.globals[].data(varName, subs)

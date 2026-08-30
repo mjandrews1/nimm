@@ -48,9 +48,13 @@ check "\$TRANSLATE repeated" 'heLLo' 'W $TR("hello","l","L")'
 check "\$GET default" 'd' 'K ^G W $GET(^G,"d")'
 check "\$GET value" 'hi' 'K ^G S ^G="hi" W $GET(^G,"d")'
 
-# $CASE (first matching value; the :default form is a known parser gap)
+# $CASE (first matching value; :default is the trailing arg)
 check "\$CASE match" '2' 'W $CASE("b","a":"1","b":"2",:"z")'
+check "\$CASE default" 'z' 'W $CASE("c","a":"1","b":"2",:"z")'
 check "\$CASE no match" '' 'W $CASE("c","a":"1","b":"2")'
+
+# $GET string-name (parser/eval fix: eStr now names the variable)
+check "\$GET string name" 'd' 'K ^G W $GET("^G","d")'
 
 # $SELECT (first truthy condition)
 check "\$SELECT first truthy" 'yes' 'W $SELECT(0:"no",1:"yes")'
