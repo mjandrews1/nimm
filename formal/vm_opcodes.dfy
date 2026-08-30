@@ -58,7 +58,7 @@ module VMOpcodes {
     case WriteNl => 0
     case WriteFf => 0
     case ForInit => 0
-    case ForNext => 0
+    case ForNext => 2
     case NewScope => 0
     case PopScope => 0
     case LockAcquire => 0
@@ -108,8 +108,8 @@ module VMOpcodes {
     case Write(argc) => 0
     case WriteNl => 0
     case WriteFf => 0
-    case ForInit => 0
-    case ForNext => 0
+    case ForInit => 2
+    case ForNext => 2
     case NewScope => 0
     case PopScope => 0
     case LockAcquire => 0
@@ -118,8 +118,8 @@ module VMOpcodes {
     case Tstart => 0
     case Tcommit => 0
     case Trollback => 0
-    case Xecute => 0
-    case Zloadxml => 0
+    case Xecute => 1
+    case Zloadxml => 1
     case Kill => 0
     case Break => 0
     case Goto => 0

@@ -50,3 +50,6 @@ jobs:
 
       - name: Verify formal models
         run: ./formal/verify.sh
+
+      - name: Enforce model↔mirror checklist
+        run: ./formal/check_contracts.sh

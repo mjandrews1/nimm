@@ -9,9 +9,10 @@ build:
 test: build
 	bash tests/run_all.sh
 
-# Formal verification (Dafny models).
+# Formal verification (Dafny models) + contract-checklist enforcement.
 formal:
 	./formal/verify.sh
+	./formal/check_contracts.sh
 
 # Everything: tests + formal verification.
 verify: test formal

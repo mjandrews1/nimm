@@ -32,6 +32,7 @@ tests/test_encoding_roundtrip
 tests/test_property_fuzz
 tests/test_contracts
 tests/test_collation
+tests/test_vm_table
 
 # LMDB database files
 *.mdb
