@@ -10,18 +10,42 @@ cd "$(dirname "$0")/.."
 NIMM="./bin/nimm"
 
 # Fast, self-contained shell suites (each takes the binary as $1).
+# Kept alphabetically sorted so the run order doubles as a progress indicator.
 SHELL_SUITES=(
-    test_zmisc test_scripting test_zwrite test_scoping
-    test_key_encoding test_order_lmdb test_lint
+    test_bytecode_conformance
+    test_bytecode_control
+    test_bytecode_fallback
+    test_bytecode_kill
+    test_bytecode_subscripts
+    test_crash_recovery
+    test_errorloc
+    test_etrap
+    test_for_zeof
+    test_fst_integrity
+    test_introspection
+    test_key_encoding
+    test_lint
+    test_mcp_auth
+    test_mcp_introspection
+    test_mode_gates
+    test_ni_structures
+    test_ni_system
+    test_order_lmdb
+    test_pemdas
+    test_scoping
+    test_scripting
+    test_source
     test_store_parity
-    test_bytecode_conformance test_bytecode_kill test_bytecode_control
-    test_bytecode_subscripts test_bytecode_fallback
-    test_zconvert test_ni_system test_zsave test_zallocate
-    test_pemdas test_txn_lmdb test_tcommit_scope test_ni_structures
-    test_mode_gates test_unwired_args test_for_zeof
-    test_zinspect test_introspection test_source test_errorloc
-    test_txn_reads test_mcp_introspection test_mcp_auth
-    test_etrap test_crash_recovery test_fst_integrity
+    test_tcommit_scope
+    test_txn_lmdb
+    test_txn_reads
+    test_unwired_args
+    test_zallocate
+    test_zconvert
+    test_zinspect
+    test_zmisc
+    test_zsave
+    test_zwrite
 )
 
 echo "=== NimM Test Runner (fresh binary) ==="

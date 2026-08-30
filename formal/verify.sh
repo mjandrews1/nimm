@@ -12,17 +12,18 @@ fi
 # key_encoding is a dependency of the others, so verify it together with each.
 dafny verify key_encoding.dfy globals_order.dfy
 dafny verify key_encoding.dfy globals_order.dfy order_pairs.dfy
+dafny verify key_encoding.dfy numeric_encoding.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy data_tristate.dfy
-dafny verify key_encoding.dfy numeric_encoding.dfy
-dafny verify collation.dfy
-dafny verify pattern.dfy
-dafny verify value_format.dfy
-dafny verify scope_stack.dfy
-dafny verify bytecode_stack.dfy
-dafny verify vm_opcodes.dfy
+# Standalone models, alphabetically sorted (progress indicator).
+dafny verify bm25.dfy
 dafny verify bytecode_bisim.dfy
+dafny verify bytecode_stack.dfy
+dafny verify collation.dfy
 dafny verify entry_term_expansion.dfy
 dafny verify hybrid_merge.dfy
-dafny verify bm25.dfy
+dafny verify pattern.dfy
+dafny verify scope_stack.dfy
+dafny verify value_format.dfy
+dafny verify vm_opcodes.dfy
 echo "formal models verified."
