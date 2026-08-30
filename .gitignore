@@ -30,6 +30,7 @@ tests/test_unicode
 tests/test_bytecode
 tests/test_encoding_roundtrip
 tests/test_property_fuzz
+tests/test_contracts
 
 # LMDB database files
 *.mdb

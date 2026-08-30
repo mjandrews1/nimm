@@ -159,7 +159,7 @@ proc parseNum*(s: string): Option[float] =
 ##   - Called by: runtime.nim (execFor loop variable update)
 ##   - Called by: runtime.nim (evalFunc for $INCREMENT, $JUSTIFY)
 ##   - Inverse of: parseNum
-proc formatNumber*(v: float): string =
+proc formatNumberImpl(v: float): string =
   if v == trunc(v) and abs(v) < 9007199254740992.0:
     return $int64(v)
   var buf = newStringOfCap(24)
@@ -195,7 +195,17 @@ proc formatNumber*(v: float): string =
     buf = "-" & buf[2 ..^ 1]
   elif buf.startsWith("0.") and buf.len > 2:
     buf = buf[1 ..^ 1]
-  buf
+  return buf
+
+proc formatNumber*(v: float): string =
+  ## (public wrapper — see formatNumberImpl for the algorithm)
+  result = formatNumberImpl(v)
+  when not defined(release):
+    # Contract (mirrors formal/value_format.dfy):
+    #   ensures  canonical form: no redundant integer zero on a fraction
+    #            ("0.5" -> ".5", "-0.25" -> "-.25").
+    assert not result.startsWith("0.") and not result.startsWith("-0."),
+      "formatNumber: non-canonical leading-zero form: " & result
 
 ## truthy — M's Truth Value Test
 ##

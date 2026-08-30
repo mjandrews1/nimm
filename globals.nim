@@ -677,6 +677,7 @@ proc dataGlobalMem(g: Globals, name: string, subs: seq[string]): int =
 
 proc data*(g: var Globals, name: string, subs: seq[string] = @[]): int =
   ## $DATA (auto-detect local vs global, tri-state per ANSI/ISO 8.5)
+  ## Contract (mirrors formal/data_tristate.dfy): result in {0, 1, 10, 11}.
   if name.len > 0 and name[0] == '^':
     if name.startsWith("^$"):
       return g.ssvData(name, subs)
@@ -772,6 +773,14 @@ proc pushScope*(g: var Globals) =
   g.scopeShared.add(true)     # Mark as shared
   g.scopeNewedVars.add(initHashSet[string]())  # No NEW'd vars yet
   g.scopeWrittenVars.add(initHashSet[string]())  # No written vars yet
+  when not defined(release):
+    # Contract (mirrors formal/scope_stack.dfy): scopes/scopeShared grow in
+    # lock-step; scopeNewedVars/scopeWrittenVars track every scope below the
+    # base frame (hence off by one).
+    assert g.scopes.len == g.scopeShared.len and
+           g.scopes.len == g.scopeNewedVars.len + 1 and
+           g.scopes.len == g.scopeWrittenVars.len + 1,
+      "pushScope: scope arrays out of sync"
 
 proc markNewed*(g: var Globals, name: string) =
   ## Mark a variable as NEW'd in the current scope (#371)
@@ -805,6 +814,14 @@ proc popScope*(g: var Globals) =
     g.scopeShared.setLen(g.scopeShared.len - 1)
     g.scopeNewedVars.setLen(g.scopeNewedVars.len - 1)
     g.scopeWrittenVars.setLen(g.scopeWrittenVars.len - 1)
+  when not defined(release):
+    # Contract (mirrors formal/scope_stack.dfy): never pop the base frame and
+    # keep the parallel arrays in lock-step.
+    assert g.scopes.len >= 1 and
+           g.scopes.len == g.scopeShared.len and
+           g.scopes.len == g.scopeNewedVars.len + 1 and
+           g.scopes.len == g.scopeWrittenVars.len + 1,
+      "popScope: depth underflow or scope arrays out of sync"
 
 proc scopeDepth*(g: Globals): int =
   return g.scopes.len
