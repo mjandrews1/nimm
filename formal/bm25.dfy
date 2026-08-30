@@ -194,4 +194,85 @@ module BM25 {
     MulNonNegNonNeg(Idf(n, df), TfNorm(tf, k1, b, docLen, avgDocLen));
   }
 
+  // Multiplying an inequality by a non-negative constant preserves it.
+  lemma MulMonotoneNonNeg(c: real, x: real, y: real)
+    requires c >= 0.0 && x <= y
+    ensures c * x <= c * y
+  {
+  }
+
+  // Per-term contribution is monotone in tf (a higher term frequency raises
+  // the contribution, holding idf fixed).
+  lemma TermScoreMonotone(n: int, df: int, tf1: int, tf2: int, k1: real, b: real, docLen: real, avgDocLen: real)
+    requires 0 <= df <= n && 0 <= tf1 <= tf2
+    requires ValidParams(tf1, k1, b, docLen, avgDocLen)
+    requires ValidParams(tf2, k1, b, docLen, avgDocLen)
+    ensures Idf(n, df) * TfNorm(tf1, k1, b, docLen, avgDocLen) <=
+            Idf(n, df) * TfNorm(tf2, k1, b, docLen, avgDocLen)
+  {
+    IdfNonNeg(n, df);
+    TfNormMonotone(tf1, tf2, k1, b, docLen, avgDocLen);
+    MulMonotoneNonNeg(Idf(n, df), TfNorm(tf1, k1, b, docLen, avgDocLen), TfNorm(tf2, k1, b, docLen, avgDocLen));
+  }
+
+  // --- Summation over query terms (full document score) ---
+
+  function SumTerms(s: seq<real>): real
+  {
+    if |s| == 0 then 0.0 else s[0] + SumTerms(s[1..])
+  }
+
+  lemma SumNonNeg(s: seq<real>)
+    requires forall i | 0 <= i < |s| :: s[i] >= 0.0
+    ensures SumTerms(s) >= 0.0
+  {
+    if |s| > 0 {
+      SumNonNeg(s[1..]);
+    }
+  }
+
+  lemma SumMonotone(a: seq<real>, b: seq<real>)
+    requires |a| == |b|
+    requires forall i | 0 <= i < |a| :: a[i] <= b[i]
+    ensures SumTerms(a) <= SumTerms(b)
+  {
+    if |a| > 0 {
+      SumMonotone(a[1..], b[1..]);
+    }
+  }
+
+  // --- Ranking: -score sort key + top-K truncation ---
+
+  // Negating a sort key reverses the order (ascending -score == descending
+  // score), which is how ^TMP("RANK", -score, id) orders results.
+  lemma NegReverses(x: real, y: real)
+    ensures -x < -y <==> y < x
+  {
+  }
+
+  predicate SortedDesc(scores: seq<real>)
+  {
+    forall i, j | 0 <= i < j < |scores| :: scores[i] >= scores[j]
+  }
+
+  function TopK(scores: seq<real>, k: int): seq<real>
+  {
+    if k <= 0 || |scores| == 0 then [] else [scores[0]] + TopK(scores[1..], k - 1)
+  }
+
+  // Truncating a descending-sorted list keeps the K highest: every kept score
+  // is >= every dropped score, and the result stays descending.
+  lemma TopKKeepsHighest(scores: seq<real>, k: int)
+    requires SortedDesc(scores)
+    ensures SortedDesc(TopK(scores, k))
+    ensures forall i | 0 <= i < |TopK(scores, k)| ::
+              forall j | |TopK(scores, k)| <= j < |scores| :: scores[i] >= scores[j]
+    decreases |scores|
+  {
+    if k <= 0 || |scores| == 0 {
+    } else {
+      TopKKeepsHighest(scores[1..], k - 1);
+    }
+  }
+
 }
