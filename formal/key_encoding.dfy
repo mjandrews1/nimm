@@ -190,13 +190,121 @@ module KeyEncoding {
   }
 
   // Encode a global + subscripts into a framed byte sequence.
-  function Encode(global: seq<int>, subs: seq<Sub>): seq<int>
+  // Layout:  global ++ [0] ++ (type+data)*   (the 0 is the global terminator).
+  function EncodeSubs(subs: seq<Sub>): seq<int>
     decreases |subs|
   {
-    if subs == [] then global + [0]
-    else if subs[0].Empty? then Encode(global + [0, 0], subs[1..])
-    else if subs[0].Num? then Encode(global + [1] + EncodeNum(subs[0].scale), subs[1..])
-    else Encode(global + [2] + subs[0].bytes + [0], subs[1..])
+    if subs == [] then []
+    else if subs[0].Empty? then [0] + EncodeSubs(subs[1..])
+    else if subs[0].Num? then [1] + EncodeNum(subs[0].scale) + EncodeSubs(subs[1..])
+    else [2] + subs[0].bytes + [0] + EncodeSubs(subs[1..])
+  }
+
+  function Encode(global: seq<int>, subs: seq<Sub>): seq<int>
+  {
+    global + [0] + EncodeSubs(subs)
+  }
+
+  // --- Decode (inverse of Encode) ---
+
+  // Well-formed subscripts: Str bytes never contain the 0 terminator (M global
+  // and string subscripts cannot contain NUL).
+  predicate WellFormedSubs(subs: seq<Sub>)
+  {
+    forall i | 0 <= i < |subs| :: subs[i].Str? ==> 0 !in subs[i].bytes
+  }
+
+  // Longest prefix of key containing no 0 (the Str body, and also the global
+  // name in a full key).
+  function StrBody(key: seq<int>): seq<int>
+    decreases |key|
+  {
+    if |key| == 0 then []
+    else if key[0] == 0 then []
+    else [key[0]] + StrBody(key[1..])
+  }
+
+  function DecodeSubs(key: seq<int>): seq<Sub>
+    decreases |key|
+  {
+    if |key| == 0 then []
+    else if key[0] == 0 then [Empty] + DecodeSubs(key[1..])
+    else if key[0] == 1 then
+      if |key| >= 2 then [Num(DecodeNum(key[1..]))] + DecodeSubs(key[2..]) else [Num(0)]
+    else
+      var body := StrBody(key[1..]);
+      [Str(body)] + (if |key| >= 1 + |body| + 1 then DecodeSubs(key[1 + |body| + 1 ..]) else [])
+  }
+
+  function Decode(key: seq<int>): (seq<int>, seq<Sub>)
+  {
+    var g := StrBody(key);
+    (g, if |g| < |key| then DecodeSubs(key[|g| + 1 ..]) else [])
+  }
+
+  // The body of a Str subscript is everything up to its 0 terminator.
+  lemma StrBodyNoZero(bytes: seq<int>, rest: seq<int>)
+    requires 0 !in bytes
+    ensures StrBody(bytes + [0] + rest) == bytes
+    decreases |bytes|
+  {
+    reveal StrBody;
+    if |bytes| == 0 {
+      assert bytes == [];
+      assert StrBody([] + [0] + rest) == [];
+    } else {
+      assert bytes[0] != 0;
+      StrBodyNoZero(bytes[1..], rest);
+      assert bytes == [bytes[0]] + bytes[1..];
+      assert bytes + [0] + rest == [bytes[0]] + (bytes[1..] + [0] + rest);
+      assert (bytes + [0] + rest)[1..] == bytes[1..] + [0] + rest;
+      assert StrBody(bytes + [0] + rest) == [bytes[0]] + StrBody(bytes[1..] + [0] + rest);
+    }
+  }
+
+  // Decode inverts EncodeSubs for well-formed subscripts.
+  lemma DecodeSubsRoundTrip(subs: seq<Sub>)
+    requires WellFormedSubs(subs)
+    ensures DecodeSubs(EncodeSubs(subs)) == subs
+    decreases |subs|
+  {
+    reveal DecodeSubs;
+    reveal EncodeSubs;
+    if subs == [] {
+    } else if subs[0].Empty? {
+      DecodeSubsRoundTrip(subs[1..]);
+      assert EncodeSubs(subs) == [0] + EncodeSubs(subs[1..]);
+      assert DecodeSubs(EncodeSubs(subs)) == [Empty] + DecodeSubs(EncodeSubs(subs[1..]));
+    } else if subs[0].Num? {
+      DecodeSubsRoundTrip(subs[1..]);
+      NumCodecRoundTrip(subs[0].scale);
+      assert EncodeSubs(subs) == [1, subs[0].scale] + EncodeSubs(subs[1..]);
+      assert DecodeSubs(EncodeSubs(subs)) == [Num(subs[0].scale)] + DecodeSubs(EncodeSubs(subs[1..]));
+    } else {
+      assert 0 !in subs[0].bytes;
+      DecodeSubsRoundTrip(subs[1..]);
+      StrBodyNoZero(subs[0].bytes, EncodeSubs(subs[1..]));
+      var rest := EncodeSubs(subs[1..]);
+      var key := [2] + subs[0].bytes + [0] + rest;
+      assert EncodeSubs(subs) == key;
+      assert key[1..] == subs[0].bytes + [0] + rest;
+      assert StrBody(key[1..]) == subs[0].bytes;
+      assert 1 + |subs[0].bytes| + 1 <= |key|;
+      assert key[1 + |subs[0].bytes| + 1 ..] == rest;
+      assert DecodeSubs(key) == [Str(subs[0].bytes)] + DecodeSubs(rest);
+    }
+  }
+
+  // Full round-trip: decode(encode(global, subs)) == (global, subs).
+  lemma EncodeDecodeRoundTrip(global: seq<int>, subs: seq<Sub>)
+    requires 0 !in global
+    requires WellFormedSubs(subs)
+    ensures Decode(Encode(global, subs)) == (global, subs)
+  {
+    StrBodyNoZero(global, EncodeSubs(subs));
+    assert StrBody(global + [0] + EncodeSubs(subs)) == global;
+    DecodeSubsRoundTrip(subs);
+    assert Decode(Encode(global, subs)) == (global, subs);
   }
 
 }

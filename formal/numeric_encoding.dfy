@@ -68,4 +68,31 @@ module NumericEncoding {
     }
   }
 
+  // --- Round-trip (decode is the inverse of encode) ---
+
+  // Decode [sign, field] back to a scale. The 9's-complement of the field
+  // recovers the magnitude for negatives.
+  function DecodeNumeric(enc: seq<int>): int
+    requires |enc| == 2 && 0 <= enc[1] <= MAX_FIELD
+  {
+    if enc[0] == 0 then -(MAX_FIELD - enc[1])
+    else if enc[0] == 1 then 0
+    else enc[1]
+  }
+
+  // decodeNumeric(encodeNumeric(scale)) == scale, for the whole range.
+  lemma NumericRoundTrip(scale: int)
+    requires -MAX_FIELD <= scale <= MAX_FIELD
+    ensures DecodeNumeric(EncodeNumeric(scale)) == scale
+  {
+    reveal EncodeNumeric;
+    reveal SignByte;
+    reveal Field;
+    if scale < 0 {
+      assert Field(scale) == MAX_FIELD + scale;
+    } else if scale == 0 {
+    } else {
+    }
+  }
+
 }
