@@ -97,4 +97,141 @@ module TxnOverlay {
     KillRemovesDescendants(ApplyWrite(base, node, value), node, node);
   }
 
+  // ---------------------------------------------------------------------------
+  // Nested transaction levels ($TLEVEL) + TCOMMIT / TROLLBACK (#416)
+  // ---------------------------------------------------------------------------
+
+  // A transaction stack: a durable base store plus pending levels of ops,
+  // innermost last.
+  datatype Txn = Txn(base: Store, levels: seq<seq<Op>>)
+
+  // Flatten all levels outer-to-inner.
+  function Flatten(levels: seq<seq<Op>>): seq<Op>
+    decreases |levels|
+  {
+    if |levels| == 0 then [] else levels[0] + Flatten(levels[1..])
+  }
+
+  // The store a reader sees (base + all pending ops, outer-to-inner).
+  function Effective(t: Txn): Store {
+    ApplyOps(t.base, Flatten(t.levels))
+  }
+
+  // $TLEVEL.
+  function Tlevel(t: Txn): int { |t.levels| }
+
+  // TSTART pushes a fresh (empty) level.
+  function Tstart(t: Txn): Txn { Txn(t.base, t.levels + [[]]) }
+
+  // A write goes into the top level.
+  function Twrite(t: Txn, node: Node, value: Value): Txn
+    requires |t.levels| > 0
+  {
+    Txn(t.base, t.levels[..|t.levels| - 1] + [t.levels[|t.levels| - 1] + [Write(node, value)]])
+  }
+
+  // A kill goes into the top level.
+  function Tkill(t: Txn, node: Node): Txn
+    requires |t.levels| > 0
+  {
+    Txn(t.base, t.levels[..|t.levels| - 1] + [t.levels[|t.levels| - 1] + [Kill(node)]])
+  }
+
+  // TCOMMIT: merge the top level into its parent; the outermost level commits
+  // to the durable base store.
+  function Tcommit(t: Txn): Txn
+    requires |t.levels| > 0
+  {
+    if |t.levels| == 1 then Txn(ApplyOps(t.base, t.levels[0]), [])
+    else Txn(t.base, t.levels[..|t.levels| - 2] + [t.levels[|t.levels| - 2] + t.levels[|t.levels| - 1]])
+  }
+
+  // TROLLBACK discards the top level.
+  function Trollback(t: Txn): Txn
+    requires |t.levels| > 0
+  {
+    Txn(t.base, t.levels[..|t.levels| - 1])
+  }
+
+  // Flatten of merging the last two levels equals flatten of the original.
+  lemma FlattenMergeLevels(prefix: seq<seq<Op>>, a: seq<Op>, b: seq<Op>)
+    ensures Flatten(prefix + [a + b]) == Flatten(prefix + [a, b])
+    decreases |prefix|
+  {
+    reveal Flatten;
+    if |prefix| == 0 {
+      assert prefix == [];
+      assert prefix + [a + b] == [a + b];
+      assert prefix + [a, b] == [a, b];
+      assert Flatten([]) == [];
+      assert b + [] == b;
+      assert Flatten([b]) == b + [];
+      assert Flatten([a, b]) == a + (b + []);
+      assert Flatten([a + b]) == (a + b) + [];
+      assert a + (b + []) == a + b;
+      assert (a + b) + [] == a + b;
+      assert Flatten([a + b]) == Flatten([a, b]);
+    } else {
+      assert (prefix + [a + b])[0] == prefix[0];
+      assert (prefix + [a + b])[1..] == prefix[1..] + [a + b];
+      assert (prefix + [a, b])[1..] == prefix[1..] + [a, b];
+      FlattenMergeLevels(prefix[1..], a, b);
+    }
+  }
+
+  // $TLEVEL tracks nesting: start increments, commit/rollback decrement.
+  lemma TlevelTstart(t: Txn)
+    ensures Tlevel(Tstart(t)) == Tlevel(t) + 1
+  {
+  }
+
+  lemma TlevelTcommit(t: Txn)
+    requires |t.levels| > 0
+    ensures Tlevel(Tcommit(t)) == Tlevel(t) - 1
+  {
+  }
+
+  lemma TlevelTrollback(t: Txn)
+    requires |t.levels| > 0
+    ensures Tlevel(Trollback(t)) == Tlevel(t) - 1
+  {
+  }
+
+  // Commit preserves what readers see: merging the top level into the parent
+  // reorders nothing and loses nothing.
+  lemma CommitPreservesEffective(t: Txn)
+    requires |t.levels| > 0
+    ensures Effective(Tcommit(t)) == Effective(t)
+  {
+    reveal Flatten;
+    reveal ApplyOps;
+    if |t.levels| == 1 {
+      assert Flatten(t.levels) == t.levels[0];
+      assert ApplyOps(ApplyOps(t.base, t.levels[0]), []) == ApplyOps(t.base, t.levels[0]);
+    } else {
+      FlattenMergeLevels(t.levels[..|t.levels| - 2], t.levels[|t.levels| - 2], t.levels[|t.levels| - 1]);
+      assert t.levels[..|t.levels| - 2] + [t.levels[|t.levels| - 2], t.levels[|t.levels| - 1]] == t.levels;
+    }
+  }
+
+  // Rollback discards the top level: the effective store is exactly the base
+  // plus the remaining (outer) levels.
+  lemma RollbackDiscardsTopLevel(t: Txn)
+    requires |t.levels| > 0
+    ensures Effective(Trollback(t)) == ApplyOps(t.base, Flatten(t.levels[..|t.levels| - 1]))
+  {
+  }
+
+  // Read-your-own-writes across levels: a write at an inner level after a kill
+  // at an outer level wins.
+  lemma NestedKillThenWriteWins(base: Store, node: Node, value: Value)
+    ensures Lookup(Effective(Txn(base, [[Kill(node)], [Write(node, value)]])), node) == value
+  {
+    reveal Flatten;
+    reveal ApplyOps;
+    assert Flatten([[Write(node, value)]]) == [Write(node, value)];
+    assert Flatten([[Kill(node)], [Write(node, value)]]) == [Kill(node)] + [Write(node, value)];
+    KillThenWriteWins(base, node, value);
+  }
+
 }
