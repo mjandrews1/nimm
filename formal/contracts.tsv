@@ -172,3 +172,8 @@ functions_more.dfy|CaseFirstMatch|support|-
 functions_more.dfy|CaseReturnsAResult|support|-
 functions_more.dfy|ReverseConcat|support|-
 functions_more.dfy|ReverseInvolution|support|-
+subscript_bisim.dfy|EvalSubsLength|support|-
+subscript_bisim.dfy|ExecCodeConcat|support|-
+subscript_bisim.dfy|SubsBisim|support|-
+subscript_bisim.dfy|ExprBisim|conformance|tests/test_bytecode_conformance.sh
+subscript_bisim.dfy|StmtBisim|conformance|tests/test_bytecode_conformance.sh
