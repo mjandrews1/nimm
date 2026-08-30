@@ -19,7 +19,7 @@
 
 module BytecodeBisim {
 
-  datatype BinOp = Add | Sub | Mul
+  datatype BinOp = Add | Sub | Mul | Eq | Lt
 
   function ApplyBin(op: BinOp, a: int, b: int): int
   {
@@ -27,6 +27,8 @@ module BytecodeBisim {
     case Add => a + b
     case Sub => a - b
     case Mul => a * b
+    case Eq => if a == b then 1 else 0
+    case Lt => if a < b then 1 else 0
   }
 
   datatype Op =
@@ -39,6 +41,9 @@ module BytecodeBisim {
     | Const(n: int)
     | Var(x: string)
     | Bin(op: BinOp, a: Expr, b: Expr)
+    | Neg(e: Expr)
+    | Not(e: Expr)
+    | Pos(e: Expr)
 
   datatype Stmt =
     | Assign(x: string, e: Expr)
@@ -60,6 +65,9 @@ module BytecodeBisim {
     case Const(n) => n
     case Var(x) => env(x)
     case Bin(op, a, b) => ApplyBin(op, EvalExpr(a, env), EvalExpr(b, env))
+    case Neg(x) => -EvalExpr(x, env)
+    case Not(x) => if EvalExpr(x, env) == 0 then 1 else 0
+    case Pos(x) => EvalExpr(x, env)
   }
 
   function ExecStmt(s: Stmt, env: Env): Env
@@ -77,6 +85,9 @@ module BytecodeBisim {
     case Const(n) => [PushConst(n)]
     case Var(x) => [PushVar(x)]
     case Bin(op, a, b) => CompileExpr(a) + CompileExpr(b) + [BinopOp(op)]
+    case Neg(x) => [PushConst(0)] + CompileExpr(x) + [BinopOp(Sub)]
+    case Not(x) => CompileExpr(x) + [PushConst(0), BinopOp(Eq)]
+    case Pos(x) => CompileExpr(x) + [PushConst(0), BinopOp(Add)]
   }
 
   function CompileStmt(s: Stmt): seq<Op>
@@ -164,6 +175,53 @@ module BytecodeBisim {
         assert (stack + [va] + [vb])[|stack| + 1] == vb;
         assert ExecCode([BinopOp(op)], stack + [va] + [vb], env) ==
                (stack + [ApplyBin(op, va, vb)], env);
+      }
+      case Neg(x) => {
+        var vx := EvalExpr(x, env);
+        ExprBisim(x, env, stack + [0]);
+        ExecCodeConcat([PushConst(0)], CompileExpr(x) + [BinopOp(Sub)], stack, env);
+        ExecCodeConcat(CompileExpr(x), [BinopOp(Sub)], stack + [0], env);
+        assert [PushConst(0)] + CompileExpr(x) + [BinopOp(Sub)] ==
+               [PushConst(0)] + (CompileExpr(x) + [BinopOp(Sub)]);
+        assert ExecCode([PushConst(0)] + CompileExpr(x) + [BinopOp(Sub)], stack, env) ==
+               ExecCode([BinopOp(Sub)], stack + [0] + [vx], env);
+        assert (stack + [0] + [vx])[..|stack|] == stack;
+        assert (stack + [0] + [vx])[|stack|] == 0;
+        assert (stack + [0] + [vx])[|stack| + 1] == vx;
+        assert ExecCode([BinopOp(Sub)], stack + [0] + [vx], env) ==
+               (stack + [ApplyBin(Sub, 0, vx)], env);
+        assert ApplyBin(Sub, 0, vx) == -vx;
+      }
+      case Not(x) => {
+        var vx := EvalExpr(x, env);
+        ExprBisim(x, env, stack);
+        ExecCodeConcat(CompileExpr(x), [PushConst(0), BinopOp(Eq)], stack, env);
+        assert ExecCode(CompileExpr(x) + [PushConst(0), BinopOp(Eq)], stack, env) ==
+               ExecCode([PushConst(0), BinopOp(Eq)], stack + [vx], env);
+        ExecCodeConcat([PushConst(0)], [BinopOp(Eq)], stack + [vx], env);
+        assert ExecCode([PushConst(0), BinopOp(Eq)], stack + [vx], env) ==
+               ExecCode([BinopOp(Eq)], stack + [vx] + [0], env);
+        assert (stack + [vx] + [0])[..|stack|] == stack;
+        assert (stack + [vx] + [0])[|stack|] == vx;
+        assert (stack + [vx] + [0])[|stack| + 1] == 0;
+        assert ExecCode([BinopOp(Eq)], stack + [vx] + [0], env) ==
+               (stack + [ApplyBin(Eq, vx, 0)], env);
+      }
+      case Pos(x) => {
+        var vx := EvalExpr(x, env);
+        ExprBisim(x, env, stack);
+        ExecCodeConcat(CompileExpr(x), [PushConst(0), BinopOp(Add)], stack, env);
+        assert ExecCode(CompileExpr(x) + [PushConst(0), BinopOp(Add)], stack, env) ==
+               ExecCode([PushConst(0), BinopOp(Add)], stack + [vx], env);
+        ExecCodeConcat([PushConst(0)], [BinopOp(Add)], stack + [vx], env);
+        assert ExecCode([PushConst(0), BinopOp(Add)], stack + [vx], env) ==
+               ExecCode([BinopOp(Add)], stack + [vx] + [0], env);
+        assert (stack + [vx] + [0])[..|stack|] == stack;
+        assert (stack + [vx] + [0])[|stack|] == vx;
+        assert (stack + [vx] + [0])[|stack| + 1] == 0;
+        assert ExecCode([BinopOp(Add)], stack + [vx] + [0], env) ==
+               (stack + [vx + 0], env);
+        assert vx + 0 == vx;
       }
     }
   }
