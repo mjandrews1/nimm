@@ -24,5 +24,10 @@ echo "Special-variable test (mirrors formal/special_vars.dfy)..."
 check "\$STACK base depth" '0' 'W $STACK'
 check "\$ZLEVEL base depth" '0' 'W $ZLEVEL'
 
+# $TEST reflects the last truth test (#441).
+check "\$TEST initial" '1' 'W $TEST'
+check "\$TEST postcond true" 'x1' 'S X=0 W:X=0 "x" W $TEST'
+check "\$TEST postcond false" '0' 'S X=1 W:X=0 "x" W $TEST'
+
 echo "  all checks passed"
 echo "Special-variable tests passed!"

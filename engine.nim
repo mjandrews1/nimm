@@ -90,6 +90,11 @@ proc write*(eng: var Engine, s: string) =
   advanceDevicePos(s)
   eng.output.add(s)
 
+# Set the truth-test flag and mirror it to the $TEST special variable (#441).
+proc setTestValue*(eng: var Engine, val: bool) =
+  eng.testValue = val
+  setTest(if val: "1" else: "0")
+
 proc writeln*(eng: var Engine, s: string) =
   advanceDevicePos(s & "\n")
   eng.output.add(s & "\n")
@@ -338,7 +343,8 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
     # Check postconditional
     if cmdNode.postcond != nil:
       let cond = eng.evaluator[].eval(cmdNode.postcond)
-      if not truthy(cond):
+      eng.setTestValue(truthy(cond))
+      if not eng.testValue:
         continue
 
     let cmd = cmdNode.cmd
@@ -477,7 +483,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
       of CmdKind.cIf:
         if cmd.ifCond != nil:
           let cond = eng.evaluator[].eval(cmd.ifCond)
-          eng.testValue = truthy(cond)
+          eng.setTestValue(truthy(cond))
           if eng.testValue and cmd.ifBody != nil:
             result = eng.execute(cmd.ifBody, depth + 1)
 
@@ -770,10 +776,10 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # Validate channel number
         if channel < 0 or channel > 63:
           eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
-          eng.testValue = false
+          eng.setTestValue(false)
         elif channel == 0:
           eng.globals[].setSpecialVar("$ECODE", "M25:Cannot open channel 0")
-          eng.testValue = false
+          eng.setTestValue(false)
         else:
           # Parse mode
           var flags = O_RDWR or O_CREAT
@@ -795,9 +801,9 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             discard lseek(fd, 0, SEEK_SET)
             
             eng.channels[channel] = DeviceHandle(fd: fd, isOpen: true)
-            eng.testValue = true
+            eng.setTestValue(true)
           except:
-            eng.testValue = false
+            eng.setTestValue(false)
             let errorMsg = getCurrentExceptionMsg()
             eng.globals[].setSpecialVar("$ECODE", "M1:" & errorMsg)
 
@@ -808,13 +814,13 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # Validate channel number
         if channel < 0 or channel > 63:
           eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
-          eng.testValue = false
+          eng.setTestValue(false)
         elif not eng.channels[channel].isOpen:
           eng.globals[].setSpecialVar("$ECODE", "M2:Channel not open: " & $channel)
-          eng.testValue = false
+          eng.setTestValue(false)
         else:
           eng.currentChannel = channel
-          eng.testValue = true
+          eng.setTestValue(true)
 
       of CmdKind.cClose:
         # CLOSE channel
@@ -823,18 +829,18 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
         # Validate channel number
         if channel < 0 or channel > 63:
           eng.globals[].setSpecialVar("$ECODE", "M25:Channel out of range")
-          eng.testValue = false
+          eng.setTestValue(false)
         elif channel == 0:
           # Closing channel 0 is always ignored
-          eng.testValue = true
+          eng.setTestValue(true)
         elif eng.channels[channel].isOpen:
           discard posix.close(eng.channels[channel].fd)
           eng.channels[channel] = DeviceHandle(fd: -1, isOpen: false)
           if eng.currentChannel == channel:
             eng.currentChannel = 0
-          eng.testValue = true
+          eng.setTestValue(true)
         else:
-          eng.testValue = false
+          eng.setTestValue(false)
 
       of CmdKind.cLock:
         # LOCK [+|-]ref[,(+|-)ref]... — resource locks (#278).
@@ -856,7 +862,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             if lname.len > 0:
               if op == "-": eng.globals[].releaseLock(lname)
               else: eng.globals[].acquireLock(lname)
-        eng.testValue = true
+        eng.setTestValue(true)
 
       of CmdKind.cMerge:
         # MERGE dest=src — Copy entire variable trees
@@ -872,7 +878,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           for subs in allSubs:
             let val = eng.globals[].get(srcName, subs)
             eng.globals[].set(destName, subs, val)
-        eng.testValue = true
+        eng.setTestValue(true)
 
       of CmdKind.cBreak:
         # BREAK — Enter interactive debugger
@@ -940,14 +946,14 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             eng.globals[].setLocal("$JOB", @[], $jobNum)
             # $TEST semantics: with timeout, always 1; without timeout, unchanged
             if timeout > 0:
-              eng.testValue = true
+              eng.setTestValue(true)
           except:
             # JOB failed — $TEST = 0 only with timeout
             if timeout > 0:
-              eng.testValue = false
+              eng.setTestValue(false)
         else:
           if cmd.jobTimeout != nil:
-            eng.testValue = false
+            eng.setTestValue(false)
 
       # Z-commands
       of CmdKind.cZhalt:
@@ -966,7 +972,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
           # output surfaced via $ZSTATUS.
           let (output, exitCode) = execCmdEx(cmdStr)
           let ok = exitCode == 0
-          eng.testValue = ok
+          eng.setTestValue(ok)
           eng.globals[].setSpecialVar("$TEST", if ok: "1" else: "0")
           setZsystemOutput(output.strip())
 
@@ -1295,7 +1301,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             let name = eng.evaluator[].eval(refExpr)
             if name.len > 0:
               eng.globals[].set(name, @[], "1")
-        eng.testValue = true
+        eng.setTestValue(true)
 
       of CmdKind.cZdeallocate:
         # ZDEALLOCATE ref[,ref]... — release locks (#379).
@@ -1310,7 +1316,7 @@ proc execute*(eng: var Engine, line: Line, depth: int = 0): string =
             let name = eng.evaluator[].eval(refExpr)
             if name.len > 0:
               eng.globals[].set(name, @[], "0")
-        eng.testValue = true
+        eng.setTestValue(true)
 
       of CmdKind.cZstack:
         # ZSTACK — Display call stack (with per-frame locals, #389 Phase B)

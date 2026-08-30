@@ -217,7 +217,7 @@ proc getSystem(): string =
 proc getTest(): string =
   return test
 
-proc setTest(val: string) =
+proc setTest*(val: string) =
   test = val
 
 proc getX(): string =
