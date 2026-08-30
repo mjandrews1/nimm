@@ -44,5 +44,24 @@ check "\$TRANSLATE" 'xbc' 'W $TR("abc","a","x")'
 check "\$TRANSLATE pair" 'xyc' 'W $TR("abc","ab","xy")'
 check "\$TRANSLATE repeated" 'heLLo' 'W $TR("hello","l","L")'
 
+# $GET (naked variable reference — mirrors functions_more.dfy)
+check "\$GET default" 'd' 'K ^G W $GET(^G,"d")'
+check "\$GET value" 'hi' 'K ^G S ^G="hi" W $GET(^G,"d")'
+
+# $CASE (first matching value; the :default form is a known parser gap)
+check "\$CASE match" '2' 'W $CASE("b","a":"1","b":"2",:"z")'
+check "\$CASE no match" '' 'W $CASE("c","a":"1","b":"2")'
+
+# $SELECT (first truthy condition)
+check "\$SELECT first truthy" 'yes' 'W $SELECT(0:"no",1:"yes")'
+check "\$SELECT none truthy" '' 'W $SELECT(0:"no")'
+
+# $QLENGTH (subscript count)
+check "\$QLENGTH" '3' 'W $QL("X(a,b,c)")'
+
+# $REVERSE (character reversal)
+check "\$REVERSE" 'cba' 'W $REVERSE("abc")'
+check "\$REVERSE empty" '' 'W $REVERSE("")'
+
 echo "  $PASS checks passed"
 echo "String function tests passed!"

@@ -15,6 +15,7 @@ dafny verify key_encoding.dfy globals_order.dfy order_pairs.dfy
 dafny verify key_encoding.dfy numeric_encoding.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy data_tristate.dfy
+dafny verify numeric_prefix.dfy functions_more.dfy
 # Standalone models, alphabetically sorted (progress indicator).
 dafny verify bm25.dfy
 dafny verify bytecode_bisim.dfy
@@ -23,7 +24,6 @@ dafny verify collation.dfy
 dafny verify control_flow_bisim.dfy
 dafny verify entry_term_expansion.dfy
 dafny verify hybrid_merge.dfy
-dafny verify numeric_prefix.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
 dafny verify string_functions.dfy
