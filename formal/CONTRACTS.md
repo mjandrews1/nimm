@@ -13,7 +13,7 @@ model listed; every mirror present).
 | `globals_order.dfy` | `$ORDER` successor minimal + next-element | `tests/test_order_lmdb.sh` |
 | `order_pairs.dfy` | multi-level `$ORDER` candidate order | `tests/test_order_lmdb.sh` |
 | `txn_overlay.dfy` | overlay write/kill + nested `$TLEVEL`/rollback | `tests/test_txn_lmdb.sh`, `tests/test_txn_reads.sh` |
-| `pattern.dfy` | pattern alternation match semantics | `tests/ansi_iso_m_conformance.py` |
+| `pattern.dfy` | pattern alternation match semantics | `tests/test_pattern.nim`, `tests/ansi_iso_m_conformance.py` |
 | `value_format.dfy` | `formatNumber` canonical (no leading zero) | `tests/test_property_fuzz.nim`, `value.nim` (inline assert) |
 | `data_tristate.dfy` | `$DATA` 0/1/10/11 tri-state | `tests/test_contracts.nim` |
 | `scope_stack.dfy` | NEW/QUIT discipline + multi-level propagate | `tests/test_contracts.nim`, `globals.nim` (inline assert) |
@@ -21,7 +21,7 @@ model listed; every mirror present).
 | `bytecode_bisim.dfy` | compiled bytecode ≡ AST (core language) | `tests/test_bytecode_conformance.sh` |
 | `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_bm25_m.sh` |
 | `bm25.dfy` | BM25 idf/tfNorm + `SEARCH` top-K | `tests/test_bm25_m.sh` |
-| `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_fst.sh` |
+| `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
 | `vm_opcodes.dfy` | concrete opcode Pops/Pushes table + compiler safety | `tests/test_vm_table.nim` |
 
 ## Runtime-mirror kinds

@@ -55,6 +55,21 @@ run_compare "\$LENGTH" 'W $L("abc")'
 run_compare "\$EXTRACT" 'W $E("hello",2,4)'
 run_compare "\$PIECE" 'W $P("a^b^c","^",2)'
 
+# Subscripts (compile ≡ AST: opPushGlobalSub / opSetGlobalSub)
+run_compare "Subscript SET+GET" 'S ^G("a","b")=7 W ^G("a","b")'
+run_compare "Nested subscript" 'S ^H("x")=^H("x")+1 W ^H("x")'
+
+# Nested arithmetic (compile ≡ AST: opBinop chains)
+run_compare "Nested (1+2)*3" 'W (1+2)*3'
+run_compare "Nested 1+(2*3)" 'W 1+(2*3)'
+
+# Postconditionals (compile ≡ AST: opJumpIf* control flow)
+run_compare "Postconditional WRITE" 'S X=5 W:X>3 "big"'
+run_compare "Postconditional SET" 'S X=0 S:X=0 X=9 W X'
+
+# Multiple statements in one line (statement sequencing)
+run_compare "Statement sequence" 'S A=1 S B=2 W A+B'
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

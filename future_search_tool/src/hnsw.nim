@@ -4,7 +4,8 @@
 import math
 import tables
 import sequtils
-import random
+import algorithm
+import std/random
 
 type
   HNSWIndex* = ref object
@@ -20,6 +21,7 @@ type
     entryPoint*: int
 
 proc newHNSWIndex*(dim: int, M: int = 16, efConstruction: int = 200, efSearch: int = 100): HNSWIndex =
+  new(result)
   result.dim = dim
   result.M = M
   result.efConstruction = efConstruction
@@ -49,7 +51,7 @@ proc cosineSimilarity*(a, b: seq[float]): float =
 proc randomLevel*(index: HNSWIndex): int =
   ## Assign random level to new node
   var level = 0
-  while random(1.0) < 0.5 and level < 10:
+  while rand(1.0) < 0.5 and level < 10:
     inc level
   return level
 

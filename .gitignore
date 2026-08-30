@@ -33,6 +33,8 @@ tests/test_property_fuzz
 tests/test_contracts
 tests/test_collation
 tests/test_vm_table
+tests/test_pattern
+tests/test_hybrid_rrf
 
 # LMDB database files
 *.mdb

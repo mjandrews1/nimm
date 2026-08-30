@@ -4,6 +4,7 @@
 import math
 import tables
 import strutils
+import algorithm
 
 type
   BM25Scorer* = ref object
@@ -17,6 +18,7 @@ type
     termFreqs*: Table[string, Table[string, int]]  # docId -> (term -> frequency)
 
 proc newBM25Scorer*(k1: float = 1.2, b: float = 0.75): BM25Scorer =
+  new(result)
   result.k1 = k1
   result.b = b
   result.docCount = 0
@@ -73,8 +75,8 @@ proc score*(scorer: BM25Scorer, docId: string, query: string): float =
     if df == 0:
       continue
     
-    # IDF: log((N - n + 0.5) / (n + 0.5) + 1.0)
-    let idf = log((float(n) - float(df) + 0.5) / (float(df) + 0.5) + 1.0)
+    # IDF: ln((N - n + 0.5) / (n + 0.5) + 1.0)
+    let idf = ln((float(n) - float(df) + 0.5) / (float(df) + 0.5) + 1.0)
     
     # TF normalization
     let tfNorm = (float(tf) * (scorer.k1 + 1.0)) / (float(tf) + scorer.k1 * (1.0 - scorer.b + scorer.b * float(docLen) / scorer.avgDocLen))

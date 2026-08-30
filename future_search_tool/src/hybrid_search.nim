@@ -1,6 +1,8 @@
 # hybrid_search.nim — Hybrid search with Reciprocal Rank Fusion
 # Combines BM25 keyword search and HNSW vector search
 
+import algorithm
+import strutils
 import bm25
 import hnsw
 import tables
@@ -13,6 +15,7 @@ type
     k*: int  # RRF parameter
 
 proc newHybridSearch*(dim: int, k: int = 60): HybridSearch =
+  new(result)
   result.bm25 = newBM25Scorer()
   result.hnsw = newHNSWIndex(dim)
   result.k = k
