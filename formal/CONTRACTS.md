@@ -9,6 +9,7 @@ listed, no stale rows, every mirror present).
 | Model | Proves | Nim mirror (runtime) |
 |---|---|---|
 | `collation.dfy` | `mCollationCmp` reflexive/skew/transitive | `tests/test_collation.nim` |
+| `control_flow_bisim.dfy` | IF/ELSE bytecode ≡ AST (pc-based VM) | `tests/test_bytecode_conformance.sh` |
 | `key_encoding.dfy` | type-byte framing + `decode∘encode == id` | `tests/test_encoding_roundtrip.nim`, `tests/test_key_encoding.sh` |
 | `numeric_encoding.dfy` | 9's-complement order + inverse | `tests/test_encoding_roundtrip.nim` |
 | `numeric_prefix.dfy` | `numPrefix`/`truthy` prefix grammar + truth table | `tests/test_truthy.nim` |

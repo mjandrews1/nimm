@@ -154,3 +154,6 @@ string_functions.dfy|TranslateRepeated|test|tests/test_string_functions.sh
 string_functions.dfy|FindAtRange|support|-
 string_functions.dfy|FindAtExhausts|support|-
 string_functions.dfy|FindZeroMeansAbsent|support|-
+control_flow_bisim.dfy|RunStep|support|-
+control_flow_bisim.dfy|RunStmts|support|-
+control_flow_bisim.dfy|IfBisim|conformance|tests/test_bytecode_conformance.sh
