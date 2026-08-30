@@ -75,6 +75,11 @@ OUT=$($NIMM -r samples/nimmext.m -x 'DO NIMMEXT' 2>&1)
 check_contains "nimmext tally" 'apple:2,banana:1,cherry:1' "$OUT"
 check_contains "nimmext totals" 'total=4 raw=4' "$OUT"
 
+# tests/test_error.m (error handling: $ETRAP fires, $ECODE set)
+OUT=$($NIMM -r tests/test_error.m -x 'DO ENTRY' 2>&1)
+check_contains "test_error.m trap fired" 'Error caught: M9999' "$OUT"
+check_contains "test_error.m \$ECODE set" '$ECODE: M9999' "$OUT"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

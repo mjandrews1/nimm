@@ -1233,7 +1233,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_OBJECT":
     # $NI_OBJECT(action, id, ...) — Object operations
     if args.len < 2: return ""
@@ -1275,7 +1275,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_STACK":
     # $NI_STACK(action, id, ...) — Stack operations
     if args.len < 2: return ""
@@ -1305,7 +1305,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_QUEUE":
     # $NI_QUEUE(action, id, ...) — Queue operations
     if args.len < 2: return ""
@@ -1335,7 +1335,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SET":
     # $NI_SET(action, id, ...) — Set operations
     if args.len < 2: return ""
@@ -1369,7 +1369,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_MAP":
     # $NI_MAP(action, id, ...) — Map operations
     if args.len < 2: return ""
@@ -1413,7 +1413,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SORTED":
     # $NI_SORTED(action, id, ...) — Sorted collection operations
     if args.len < 2: return ""
@@ -1450,7 +1450,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_DEQUE":
     # $NI_DEQUE(action, id, ...) — Deque operations
     if args.len < 2: return ""
@@ -1491,7 +1491,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_BAG":
     # $NI_BAG(action, id, ...) — Bag (multiset) operations
     if args.len < 2: return ""
@@ -1524,7 +1524,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_HEAP":
     # $NI_HEAP(action, id, ...) — Min-heap priority queue operations
     if args.len < 2: return ""
@@ -1554,7 +1554,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_RING":
     # $NI_RING(action, id, ...) — Ring buffer operations
     if args.len < 2: return ""
@@ -1594,7 +1594,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_LRU":
     # $NI_LRU(action, id, ...) — LRU cache operations
     if args.len < 2: return ""
@@ -1631,7 +1631,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_BITSET":
     # $NI_BITSET(action, id, ...) — Bit set operations
     if args.len < 2: return ""
@@ -1667,7 +1667,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_TRIE":
     # $NI_TRIE(action, id, ...) — Trie operations
     if args.len < 2: return ""
@@ -1705,7 +1705,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_GRAPH":
     # $NI_GRAPH(action, id, ...) — Graph operations
     if args.len < 2: return ""
@@ -1765,7 +1765,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_MATRIX":
     # $NI_MATRIX(action, id, ...) — Dense matrix operations
     if args.len < 2: return ""
@@ -1800,7 +1800,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_BLOOM":
     # $NI_BLOOM(action, id, ...) — Bloom filter operations
     if args.len < 2: return ""
@@ -1831,7 +1831,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SKIPLIST":
     # $NI_SKIPLIST(action, id, ...) — Skip list operations
     if args.len < 2: return ""
@@ -1860,7 +1860,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_TREAP":
     # $NI_TREAP(action, id, ...) — Treap operations
     if args.len < 2: return ""
@@ -1888,7 +1888,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_DSET":
     # $NI_DSET(action, id, ...) — Disjoint set operations
     if args.len < 2: return ""
@@ -1921,7 +1921,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SEGTREE":
     # $NI_SEGTREE(action, id, ...) — Segment tree operations
     if args.len < 2: return ""
@@ -1963,7 +1963,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_FENWICK":
     # $NI_FENWICK(action, id, ...) — Fenwick tree operations
     if args.len < 2: return ""
@@ -1996,7 +1996,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SPARSE":
     # $NI_SPARSE(action, id, ...) — Sparse matrix operations
     if args.len < 2: return ""
@@ -2031,7 +2031,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_ITREE":
     # $NI_ITREE(action, id, ...) — Interval tree operations
     if args.len < 2: return ""
@@ -2061,7 +2061,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_SUFFIX":
     # $NI_SUFFIX(action, id, ...) — Suffix array operations
     if args.len < 2: return ""
@@ -2089,7 +2089,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_WAVELET":
     # $NI_WAVELET(action, id, ...) — Wavelet tree operations
     if args.len < 2: return ""
@@ -2123,7 +2123,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_KDTREE":
     # $NI_KDTREE(action, id, ...) — K-d tree operations
     if args.len < 2: return ""
@@ -2160,7 +2160,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_ROPE":
     # $NI_ROPE(action, id, ...) — Rope operations
     if args.len < 2: return ""
@@ -2192,7 +2192,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "NI_MERKLE":
     # $NI_MERKLE(action, id, ...) — Merkle tree operations
     if args.len < 2: return ""
@@ -2222,7 +2222,7 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
         return "1"
       return "0"
     else:
-      return ""
+      raise newException(ValueError, "unknown action: " & action)
   of "ZJOB":
     # $ZJOB — Return current job (process) ID (#301)
     return $getpid()
