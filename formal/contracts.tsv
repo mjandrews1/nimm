@@ -47,6 +47,16 @@ entry_term_expansion.dfy|MergeNoDup|test|tests/test_bm25_m.sh
 entry_term_expansion.dfy|MergeDictFirst|test|tests/test_bm25_m.sh
 entry_term_expansion.dfy|TruncateCapped|support|-
 entry_term_expansion.dfy|MergeCapped|test|tests/test_bm25_m.sh
+engine_execution.dfy|DoQuitBalanced|test|tests/test_bytecode_conformance.sh
+engine_execution.dfy|QuitNoUnderflow|test|tests/test_bytecode_conformance.sh
+engine_execution.dfy|DoIncrementsDepth|test|tests/test_bytecode_conformance.sh
+engine_execution.dfy|QuitDecrementsDepth|test|tests/test_bytecode_conformance.sh
+engine_execution.dfy|TrapEnterBounded|test|tests/test_etrap.sh
+engine_execution.dfy|TrapNBounded|test|tests/test_etrap.sh
+engine_execution.dfy|EcodeNonEmpty|test|tests/test_etrap.sh
+engine_execution.dfy|DispatchInBounds|conformance|tests/test_bytecode_conformance.sh
+engine_execution.dfy|SortedLe|support|-
+engine_execution.dfy|FirstIsMinimal|conformance|tests/test_bytecode_conformance.sh
 globals_order.dfy|TupCmpAntisymmetric|support|-
 globals_order.dfy|TupCmpTransitive|support|-
 globals_order.dfy|EmptyIsMin|support|-

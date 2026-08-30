@@ -25,6 +25,7 @@ dafny verify command_bisim.dfy
 dafny verify control_flow_bisim.dfy
 dafny verify data_structures.dfy
 dafny verify entry_term_expansion.dfy
+dafny verify engine_execution.dfy
 dafny verify for_loop_bisim.dfy
 dafny verify hybrid_merge.dfy
 dafny verify lock_semantics.dfy

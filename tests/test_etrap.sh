@@ -48,7 +48,17 @@ OUT=$($NIMM -d "$DB" -x 'WRITE ^TRAPDONE' 2>&1)
 rm -f "$DB" "$DB-lock"
 check_contains "non-trapping \$ETRAP executes" '1' "$OUT"
 
-rm -f /tmp/etrap_self.m /tmp/etrap_ok.m
+# On error, $ECODE is set (non-empty) and $ZERROR holds the message.
+cat > /tmp/etrap_ecode.m <<'EOF'
+MAIN ;
+ SET $ETRAP="WRITE $ECODE,!"
+ set badcmd=1
+ QUIT
+EOF
+OUT=$($NIMM -m strict -r /tmp/etrap_ecode.m -x 'DO MAIN' 2>&1 || true)
+check_contains "\$ECODE set on error" 'M' "$OUT"
+
+rm -f /tmp/etrap_self.m /tmp/etrap_ok.m /tmp/etrap_ecode.m
 
 echo ""
 echo "Result: $PASS passed, $FAIL failed"

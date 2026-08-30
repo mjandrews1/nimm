@@ -29,6 +29,7 @@ listed, no stale rows, every mirror present).
 | `bytecode_stack.dfy` | operand-stack discipline (expr/stmt invariants) | `tests/test_vm_table.nim` |
 | `bytecode_bisim.dfy` | compiled bytecode ≡ AST (core language) | `tests/test_bytecode_conformance.sh` |
 | `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_bm25_m.sh` |
+| `engine_execution.dfy` | DO/QUIT call-stack + $ETRAP cap + label dispatch | `tests/test_etrap.sh`, `tests/test_bytecode_conformance.sh` |
 | `for_loop_bisim.dfy` | FOR loop bytecode ≡ AST (body + step + back-edge) | `tests/test_bytecode_conformance.sh` |
 | `bm25.dfy` | BM25 idf/tfNorm + `SEARCH` top-K | `tests/test_bm25_m.sh` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
