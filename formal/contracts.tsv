@@ -291,3 +291,10 @@ hnsw.dfy|OneSidedRemoveBreaksSymmetric|test|tests/test_hnsw_invariants.nim
 search_engine.dfy|DfAppend|test|tests/test_fst_consistency.nim
 search_engine.dfy|DfCountsDocumentsNotOccurrences|test|tests/test_fst_consistency.nim
 search_engine.dfy|AssignFreshPreservesInjective|test|tests/test_fst_consistency.nim
+network.dfy|IdsBelowFresh|support|-
+network.dfy|OpenPreservesIdsBelow|test|tests/test_network_invariants.nim
+network.dfy|CloseRemoves|test|tests/test_network_invariants.nim
+network.dfy|CloseImpliesNotConnected|test|tests/test_network_invariants.nim
+network.dfy|CloseDecreases|support|-
+network.dfy|CountIsCardinality|test|tests/test_network_invariants.nim
+network.dfy|CloseAllEmpty|test|tests/test_network_invariants.nim

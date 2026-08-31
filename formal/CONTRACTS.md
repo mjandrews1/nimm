@@ -36,6 +36,7 @@ listed, no stale rows, every mirror present).
 | `hnsw.dfy` | HNSW neighbor symmetry + bounded degree + cosine | `tests/test_hnsw_invariants.nim` |
 | `search_engine.dfy` | FST index consistency + docId↔vecId bijection | `tests/test_fst_consistency.nim` |
 | `lock_semantics.dfy` | `heldLocks` acquire/release/release-all | `tests/test_locks.nim` |
+| `network.dfy` | network connection table (fresh id / close-removes / count / closeAll) | `tests/test_network_invariants.nim` |
 | `m_programs.dfy` | M scripts (`samples/*.m`, `tests/*.m`, FST, ERIC) meet their specs | `tests/test_m_programs.sh` |
 | `vm_opcodes.dfy` | concrete opcode Pops/Pushes table + compiler safety | `tests/test_vm_table.nim` |
 

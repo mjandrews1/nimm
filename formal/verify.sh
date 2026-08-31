@@ -31,6 +31,7 @@ dafny verify hnsw.dfy
 dafny verify hybrid_merge.dfy
 dafny verify lock_semantics.dfy
 dafny verify m_programs.dfy
+dafny verify network.dfy
 dafny verify pattern.dfy
 dafny verify scope_stack.dfy
 dafny verify search_engine.dfy
