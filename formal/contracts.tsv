@@ -83,6 +83,7 @@ key_encoding.dfy|CmpTransitive|support|-
 key_encoding.dfy|CmpZeroMeansEqual|support|-
 key_encoding.dfy|CmpStrictTrans|support|-
 key_encoding.dfy|NumCodecRoundTrip|support|-
+key_encoding.dfy|LargeScaleNotEncodable|test|tests/test_encoding_roundtrip.nim
 key_encoding.dfy|StrBodyNoZero|support|-
 key_encoding.dfy|DecodeSubsRoundTrip|support|-
 key_encoding.dfy|EncodeDecodeRoundTrip|test|tests/test_encoding_roundtrip.nim

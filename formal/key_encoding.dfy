@@ -2,12 +2,41 @@
 //
 // Formal model of NimM `storage/key_encoding.nim`: the LMDB key framing and
 // M-collation ordering. This models the SPEC (unambiguous type-byte framing,
-// and the order Empty < Num < Str). The Nim implementation is checked against
-// it by tests/test_encoding_roundtrip.nim and the conformance suite.
+// and the order Empty < Num < Str), CONCRETIZED around the numeric field's
+// fixed width: the Nim encodeNumeric scales a value by 10^12 into an int64 /
+// 18-digit field, so only |scale| < 10^18 round-trips (|value| < 10^6). Any
+// number whose scaled magnitude reaches 10^18 (e.g. a 16-digit id) must be
+// classified as a *string*, or encode/decode corrupts it. The Nim
+// implementation is checked against this by tests/test_encoding_roundtrip.nim.
 //
 // Verify with:  dafny verify formal/key_encoding.dfy
 
 module KeyEncoding {
+
+  // The numeric body is the value scaled by 10^12, stored in a fixed 18-digit
+  // field. MaxScaled is 10^18 (the largest 18-digit field); a scale at or
+  // beyond it does not fit and must fall back to string encoding.
+  const MaxScaled: int := 1_000_000_000_000_000_000
+
+  ghost predicate EncodableNum(scale: int)
+  {
+    -MaxScaled < scale < MaxScaled
+  }
+
+  // A scaled magnitude of >= 10^18 (i.e. |value| >= 10^6) is not encodable.
+  lemma LargeScaleNotEncodable(scale: int)
+    requires scale >= MaxScaled
+    ensures !EncodableNum(scale)
+  {
+  }
+
+  // Every Num subscript in the list is within the encodable range.
+  ghost predicate EncodableSubs(subs: seq<Sub>)
+    decreases |subs|
+  {
+    if subs == [] then true
+    else (subs[0].Num? ==> EncodableNum(subs[0].scale)) && EncodableSubs(subs[1..])
+  }
 
   // A subscript: empty, a scaled integer (value = scale / 10^12), or a
   // non-empty string of bytes.
@@ -185,6 +214,7 @@ module KeyEncoding {
   function DecodeNum(body: seq<int>): int { if body == [] then 0 else body[0] }
 
   lemma NumCodecRoundTrip(scale: int)
+    requires EncodableNum(scale)
     ensures DecodeNum(EncodeNum(scale)) == scale
   {
   }
@@ -262,9 +292,10 @@ module KeyEncoding {
     }
   }
 
-  // Decode inverts EncodeSubs for well-formed subscripts.
+  // Decode inverts EncodeSubs for well-formed, encodable subscripts.
   lemma DecodeSubsRoundTrip(subs: seq<Sub>)
     requires WellFormedSubs(subs)
+    requires EncodableSubs(subs)
     ensures DecodeSubs(EncodeSubs(subs)) == subs
     decreases |subs|
   {
@@ -299,6 +330,7 @@ module KeyEncoding {
   lemma EncodeDecodeRoundTrip(global: seq<int>, subs: seq<Sub>)
     requires 0 !in global
     requires WellFormedSubs(subs)
+    requires EncodableSubs(subs)
     ensures Decode(Encode(global, subs)) == (global, subs)
   {
     StrBodyNoZero(global, EncodeSubs(subs));

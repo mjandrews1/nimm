@@ -32,8 +32,12 @@ import strutils
 import math
 
 func isNumeric*(s: string): bool =
-  ## Check if string represents a number, including M-canonical fractional
-  ## forms ".5" and "-.25" (formatNumber drops the redundant leading zero).
+  ## Check if string represents an M-canonical number that the 18-digit field
+  ## can encode losslessly: optional '-', then either ".digits" (fractional),
+  ## or a non-zero-led integer part (up to 6 digits) with optional ".digits".
+  ## Leading zeros ("0402304", "00") and large integers (>= 1e6, e.g. 16-digit
+  ## ids) are NOT numeric here — they are encoded as strings so the round-trip
+  ## is lossless and collation is consistent with encodeKey.
   if s.len == 0: return false
   var i = 0
   if s[0] == '-': i = 1
@@ -45,12 +49,24 @@ func isNumeric*(s: string): bool =
     while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
     return i == s.len
   if s[i] < '0' or s[i] > '9': return false
-  while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
+  if s[i] == '0':
+    # leading zero: canonical only as "0" or "0.xxx"
+    i += 1
+    if i < s.len and s[i] != '.': return false
+  else:
+    # non-zero-led integer part; count digits to bound magnitude < 1e6
+    var intDigits = 0
+    while i < s.len and s[i] >= '0' and s[i] <= '9':
+      i += 1; intDigits += 1
+    if intDigits >= 7: return false
   if i < s.len and s[i] == '.':
     i += 1
     if i >= s.len or (s[i] < '0' or s[i] > '9'): return false
     while i < s.len and s[i] >= '0' and s[i] <= '9': i += 1
   return i == s.len
+
+const MaxEncodedMagnitude = 1_000_000.0
+  ## Largest |num| whose scaled value (|num| * 1e12) fits the 18-digit field.
 
 func encodeNumeric*(num: float64): string =
   ## Encode a number as order-preserving bytes
@@ -99,11 +115,18 @@ func encodeKey*(global: string, subs: seq[string] = @[]): string =
       # Empty string: single \x00 type byte (sorts first)
       result.add('\x00')
     elif isNumeric(sub):
-      # Numeric subscript: type prefix + sign + 18 digits
+      # Numeric subscript: type prefix + sign + 18 digits.
+      # Values whose scaled magnitude overflows the 18-digit field (>= 1e6)
+      # fall back to string encoding so the round-trip is lossless.
       try:
         let num = parseFloat(sub)
-        result.add('\x01')
-        result.add(encodeNumeric(num))
+        if abs(num) >= MaxEncodedMagnitude:
+          result.add('\x02')
+          result.add(sub)
+          result.add('\x00')
+        else:
+          result.add('\x01')
+          result.add(encodeNumeric(num))
       except:
         # Fallback: treat as string
         result.add('\x02')

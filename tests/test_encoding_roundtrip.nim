@@ -55,6 +55,34 @@ proc main() =
   assert g2 == "^G" and s2 == @["-.25"], "expected canonicalization to -.25"
   echo "✓ numeric canonicalization (0.5 -> .5, -0.25 -> -.25)"
 
+  # Regression: leading-zero and large-integer subscripts must round-trip
+  # losslessly as strings (the encodeNumeric 18-digit field overflows int64
+  # for |num| >= 1e6; leading zeros are non-canonical).
+  roundtripEncodeKey("^G", @["0402304"])           # leading zero -> string
+  roundtripEncodeKey("^G", @["101258277"])         # 9-digit -> string
+  roundtripEncodeKey("^G", @["9918334887106676"])  # 16-digit -> string
+  roundtripEncodeKey("^G", @["26170740R"])         # alphanumeric -> string
+  roundtripEncodeKey("^G", @["42", "101258277", "0402304", "hello"])
+  echo "✓ large/leading-zero subscripts round-trip losslessly"
+
+  # isNumeric boundary: leading zeros and >= 7-digit integers are not numeric.
+  assert not isNumeric("0402304"), "leading zero must not be numeric"
+  assert not isNumeric("00"), "00 must not be numeric"
+  assert not isNumeric("101258277"), "7+ digit integer must not be numeric"
+  assert not isNumeric("9918334887106676"), "16-digit integer must not be numeric"
+  assert isNumeric("42"), "small integer must be numeric"
+  assert isNumeric("999999"), "6-digit integer must be numeric"
+  assert not isNumeric("1000000"), "1e6 (7 digits) must not be numeric"
+  echo "✓ isNumeric boundary (leading zero / >= 1e6)"
+
+  # Collation consistency: mCollationCmp must agree with encodeKey's type byte
+  # (numeric-vs-string) so $ORDER does not skip fallback-string subscripts.
+  assert mCollationCmp("101258277", "0402304") > 0,
+    "large int (string) must sort after leading-zero (string)"
+  assert mCollationCmp("42", "101258277") < 0,
+    "small number must sort before large int (string)"
+  echo "✓ mCollationCmp consistent with encoding"
+
   echo ""
   echo "All tests passed!"
 
