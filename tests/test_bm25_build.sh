@@ -84,41 +84,44 @@ else
   fail "BM25 TF hypertension/D000001 > 0" "positive integer" "$TF"
 fi
 
-# Test scoring: SCORE is a DO subroutine (WRITE SC, not QUIT SC)
+# Test scoring via $NI_SEARCH (M SCORE/SEARCH were deleted in FST Phase B).
 echo "--- Testing BM25 scoring ---"
-SCORE1=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000001",^TMP("BM25","terms")="hypertension" DO SCORE^BM25IDX' 2>&1)
-if echo "$SCORE1" | grep -qE "[0-9]+\.[0-9]+"; then
-  pass "Score D000001 'hypertension' = $SCORE1"
+SCORE1=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
+if echo "$SCORE1" | grep -q "D000001"; then
+  pass "Search 'hypertension' finds D000001: $SCORE1"
 else
-  fail "Score D000001 'hypertension'" "numeric score" "$SCORE1"
+  fail "Search 'hypertension' finds D000001" "D000001" "$SCORE1"
 fi
 
-SCORE2=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000002",^TMP("BM25","terms")="hypertension" DO SCORE^BM25IDX' 2>&1)
-if [ "$SCORE2" = "0" ] 2>/dev/null; then
-  pass "Score D000002 'hypertension' = 0 (not in doc)"
+SCORE2=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
+if echo "$SCORE2" | grep -q "D000002"; then
+  fail "Search 'hypertension' should NOT find D000002" "" "$SCORE2"
 else
-  fail "Score D000002 'hypertension'" "0" "$SCORE2"
+  pass "Search 'hypertension' excludes D000002 (not in doc)"
 fi
 
-SCORE3=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000001",^TMP("BM25","terms")="diabetes" DO SCORE^BM25IDX' 2>&1)
-if [ "$SCORE3" = "0" ] 2>/dev/null; then
-  pass "Score D000001 'diabetes' = 0 (not in doc)"
+SCORE3=$($BM25idx -x 'w $NI_SEARCH("MESH","diabetes",10)' 2>&1)
+if echo "$SCORE3" | grep -q "D000001"; then
+  fail "Search 'diabetes' should NOT find D000001" "" "$SCORE3"
 else
-  fail "Score D000001 'diabetes'" "0" "$SCORE3"
+  pass "Search 'diabetes' excludes D000001 (not in doc)"
 fi
 
-# Multi-term query
-SCORE4=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000001",^TMP("BM25","terms")="blood pressure" DO SCORE^BM25IDX' 2>&1)
-if echo "$SCORE4" | grep -qE "[0-9]+\.[0-9]+"; then
-  pass "Score D000001 'blood pressure' = $SCORE4"
+# Multi-term query: D000001 matches 'blood pressure'
+SCORE4=$($BM25idx -x 'w $NI_SEARCH("MESH","blood pressure",10)' 2>&1)
+if echo "$SCORE4" | grep -q "D000001"; then
+  pass "Search 'blood pressure' finds D000001: $SCORE4"
 else
-  fail "Score D000001 'blood pressure'" "numeric score" "$SCORE4"
+  fail "Search 'blood pressure' finds D000001" "D000001" "$SCORE4"
 fi
 
-# Higher-ranked doc scores higher for broad query
-SCORE_H=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000001",^TMP("BM25","terms")="hypertension blood pressure" DO SCORE^BM25IDX' 2>&1)
-SCORE_L=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000002",^TMP("BM25","terms")="hypertension blood pressure" DO SCORE^BM25IDX' 2>&1)
-pass "D000001 ($SCORE_H) > D000002 ($SCORE_L) for 'hypertension blood pressure'"
+# Higher-ranked doc ranks higher for broad query
+RANK1=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension blood pressure",10)' 2>&1 | head -1 | cut -f1)
+if [ "$RANK1" = "D000001" ]; then
+  pass "D000001 ranked first for 'hypertension blood pressure'"
+else
+  fail "D000001 ranked first" "D000001" "$RANK1"
+fi
 
 echo ""
 echo "Result: $PASSED passed, $FAILED failed"
