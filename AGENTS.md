@@ -6,6 +6,15 @@
 - Unit tests (one file each): `nim c -r tests/test_<name>.nim`
 - Shell integration tests: `bash tests/test_<name>.sh`
 - Master runner (FST/storage suites): `bash tests/run_all.sh [data_dir]`
+- FST helper binaries: `make fst-build` (writes `bin/build_bm25`,
+  `bin/fst_load_nim`)
+
+### RULE: binaries live in bin/ only
+
+All compiled binaries go in `bin/`. Never build or commit a binary anywhere
+else (not in `tests/`, `future_search_tool/src/`, or the repo root). Test
+runners produced by `nim c -r` are transient build artifacts and are
+gitignored.
 
 ## Code conventions
 

@@ -44,8 +44,7 @@ tests/test_fst_consistency
 tests/test_global_bm25
 tests/test_network_invariants
 tests/test_bm25_build_nim
-future_search_tool/src/build_bm25
-future_search_tool/src/fst_load_nim
+tests/run_data_structure_tests
 
 # LMDB database files
 *.mdb

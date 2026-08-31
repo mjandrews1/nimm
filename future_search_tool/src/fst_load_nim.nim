@@ -1,6 +1,7 @@
 # fst_load_nim.nim — NimM XML processor using string operations
 # Parses MeSH XML without parsexml module
-# Usage: nim c -r fst_load_nim.nim -- /path/to/db /path/to/desc.xml
+# Usage: nim c -d:release --path:. -o:bin/fst_load_nim future_search_tool/src/fst_load_nim.nim
+#        ./bin/fst_load_nim <db_path> <desc_xml> [qual_xml]
 
 import std/[os, strutils, times]
 import storage/lmdb_store

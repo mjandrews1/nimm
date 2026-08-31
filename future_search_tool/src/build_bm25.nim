@@ -2,9 +2,9 @@
 # Mirrors bm25idx.m COMMON (BUILDMESH/BUILDCAT/BUILDSER/BUILDPUB) but runs the
 # build in-process over globals.nim, flushing the LMDB write txn every N docs.
 #
-# Usage: nim c -d:release -o:future_search_tool/src/build_bm25 \
+# Usage: nim c -d:release -o:bin/build_bm25 \
 #          future_search_tool/src/build_bm25.nim
-#        ./future_search_tool/src/build_bm25 <db> <src> <glob> <flist> [flushEvery]
+#        ./bin/build_bm25 <db> <src> <glob> <flist> [flushEvery]
 
 import os
 import strutils

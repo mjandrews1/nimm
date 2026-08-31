@@ -90,10 +90,11 @@ for suite in "${SHELL_SUITES[@]}"; do
 done
 
 echo "--- nim unit tests (tests/test_*.nim) ---"
+TESTBIN="$(mktemp -d /tmp/nimm_tests.XXXXXX)"
 for t in tests/test_*.nim; do
     name="$(basename "$t" .nim)"
     echo "  $name:"
-    if nim c -r "$t" >/dev/null 2>&1; then
+    if nim c -r --outdir:"$TESTBIN" "$t" >/dev/null 2>&1; then
         echo "    PASS"
         PASS=$((PASS + 1))
     else
@@ -102,6 +103,7 @@ for t in tests/test_*.nim; do
         FAILED="$FAILED $name"
     fi
 done
+rm -rf "$TESTBIN"
 echo
 
 echo "=== Summary: $PASS passed, $FAIL failed ==="
