@@ -18,6 +18,7 @@ import ni_functions
 import data_structures
 import runtime
 import parser
+import future_search_tool/src/global_bm25
 import inspector
 import special_vars
 
@@ -1191,6 +1192,20 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     # $NI_SYSTEM(subscript) — System information
     let sub = if args.len >= 1: args[0] else: ""
     return niSystem(sub)
+  of "NI_SEARCH":
+    # $NI_SEARCH(type, query[, topK]) — BM25 keyword search over the ^BM25*
+    # globals (global_bm25.nim). Returns ranked "id<TAB>score" lines.
+    if args.len < 2: return ""
+    let src = args[0]
+    let query = args[1]
+    var topK = 10
+    if args.len > 2:
+      try: topK = parseInt(args[2]) except: topK = 10
+    if topK < 1: topK = 10
+    var res = ""
+    for (id, score) in searchGlobal(ev.globals[], src, query, topK):
+      res.add(id & "\t" & $score & "\n")
+    return res
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

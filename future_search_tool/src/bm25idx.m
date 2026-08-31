@@ -92,64 +92,6 @@ COMMON ; main build
  WRITE "BM25IDX DONE ",SRC," docs=",N," tokens=",SUM," avgdl=",$JUSTIFY(AVG,0,2),!
  QUIT
  ;
-SCORE ; reads ^TMP("BM25","type"/"id"/"terms"); writes BM25 score
- ; SUPERSEDED (FST Phase B): this M scoring is replaced by the Nim
- ; global_bm25.nim (scoreGlobal/searchGlobal over the same ^BM25* globals,
- ; same formula, k1=1.5). Kept for back-compat until fst_search.py migrates.
- SET TYPE=$GET(^TMP("BM25","type"))
- SET QID=$GET(^TMP("BM25","id"))
- SET QTERMS=$GET(^TMP("BM25","terms"))
- SET K1=1.5 SET B=0.75
- SET NN=+$GET(^BM25META(TYPE,"N"))
- SET AVG=+$GET(^BM25META(TYPE,"avgdl"))
- SET SC=0 SET TI=1
- FOR  SET T=$PIECE(QTERMS," ",TI) QUIT:T=""  D
- . SET TF=+$GET(^BM25(T,TYPE,QID))
- . IF TF>0 SET DF=+$GET(^BM25DF(T,TYPE)),IDF=$ZLN((NN-DF+0.5)/(DF+0.5)+1),DEN=TF+(K1*(1-B+(B*(+$GET(^BM25LEN(TYPE,QID))/AVG)))),SC=SC+IDF*TF/DEN*(K1+1)
- . SET TI=TI+1
- WRITE SC
- QUIT
- ;
-SEARCH ; top-K retrieval: reads ^TMP("BM25","type"/"terms"/"k"); WRITEs "id<TAB>score"
- ; SUPERSEDED (FST Phase B): use global_bm25.nim searchGlobal (Nim) instead.
- ; Tokenizes the query identically to COMMON, scores every doc, ranks by
- ; descending score via ^TMP("RANK", -score, id), and prints top-K.
- SET TYPE=$GET(^TMP("BM25","type"))
- SET Q=$GET(^TMP("BM25","terms"))
- SET K=$GET(^TMP("BM25","k")) SET:K="" K=10
- SET P=$CHAR(34)_$CHAR(126)_$CHAR(33)_$CHAR(64)_$CHAR(35)
- SET P=P_$CHAR(36)_$CHAR(37)_$CHAR(94)_$CHAR(38)_$CHAR(42)
- SET P=P_$CHAR(40)_$CHAR(41)_$CHAR(95)_$CHAR(45)_$CHAR(43)
- SET P=P_$CHAR(61)_$CHAR(91)_$CHAR(93)_$CHAR(123)_$CHAR(125)
- SET P=P_$CHAR(124)_$CHAR(59)_$CHAR(59)_$CHAR(58)_$CHAR(39)
- SET P=P_$CHAR(34)_$CHAR(44)_$CHAR(46)_$CHAR(60)_$CHAR(62)
- SET P=P_$CHAR(47)_$CHAR(63)_$CHAR(32)_$CHAR(96)_$CHAR(9)
- SET P=P_$CHAR(92)
- SET SP=$JUSTIFY("",$LENGTH(P))
- SET Q=$TRANSLATE(Q,"ABCDEFGHIJKLMNOPQRSTUVWXYZ","abcdefghijklmnopqrstuvwxyz")
- SET Q=$TRANSLATE(Q,P,SP)
- SET K1=1.5 SET B=0.75
- SET NN=+$GET(^BM25META(TYPE,"N"))
- SET AVG=+$GET(^BM25META(TYPE,"avgdl"))
- KILL ^TMP("RANK")
- VIEW "BATCHON"
- SET ID=""
- FOR  SET ID=$ORDER(^BM25LEN(TYPE,ID)) QUIT:ID=""  DO
- . SET SC=0 SET TI=1
- . FOR  SET T=$PIECE(Q," ",TI) QUIT:T=""  DO
- .. SET TF=+$GET(^BM25(T,TYPE,ID))
- .. IF TF>0 SET DF=+$GET(^BM25DF(T,TYPE)),IDF=$ZLN((NN-DF+0.5)/(DF+0.5)+1),DEN=TF+(K1*(1-B+(B*(+$GET(^BM25LEN(TYPE,ID))/AVG)))),SC=SC+IDF*TF/DEN*(K1+1)
- .. SET TI=TI+1
- . IF SC>0 SET ^TMP("RANK",-SC,ID)=""
- VIEW "BATCHCOMMIT"
- ; read back in ascending -score (= descending score); dump all, caller caps K
- SET SCK=""
- FOR  SET SCK=$ORDER(^TMP("RANK",SCK)) QUIT:SCK=""  DO
- . SET ID2=""
- . FOR  SET ID2=$ORDER(^TMP("RANK",SCK,ID2)) QUIT:ID2=""  DO
- .. WRITE ID2,$CHAR(9),-SCK,!
- QUIT
- ;
 DICT ; entry-term dictionary lookup: reads ^TMP("BM25","terms"); WRITEs UIs
  ; ^MESHTERM(term,ui)="1" for exact descriptor name, "0" for entry synonym.
  ; Emits exact-name matches first, then synonym matches.

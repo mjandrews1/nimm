@@ -69,10 +69,8 @@ def search_descriptors(db, query, max_results=20):
     dict_out = run_routine(db, f'S ^TMP("BM25","terms")="{q}" DO DICT^BM25IDX')
     dict_ids = [l.strip() for l in dict_out.splitlines() if l.strip()]
 
-    # 2. BM25 search — ranked "ui<TAB>score"
-    search_out = run_routine(
-        db, f'S ^TMP("BM25","type")="MESH",^TMP("BM25","terms")="{q}" DO SEARCH^BM25IDX'
-    )
+    # 2. BM25 search via $NI_SEARCH (Nim global_bm25 over the ^BM25* globals)
+    search_out = run_mcode(db, f'W $NI_SEARCH("MESH","{q}",{max_results})')
     bm25_scores = {}
     bm25_order = []
     for line in search_out.splitlines():
