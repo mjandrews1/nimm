@@ -93,8 +93,9 @@ COMMON ; main build
  QUIT
  ;
 SCORE ; reads ^TMP("BM25","type"/"id"/"terms"); writes BM25 score
- ; NEW removed: hangs in nimm when called via DO (#scoping bug)
- ; IF>DO block flattened: nested . . hangs cross-routine (#nimm scoping)
+ ; SUPERSEDED (FST Phase B): this M scoring is replaced by the Nim
+ ; global_bm25.nim (scoreGlobal/searchGlobal over the same ^BM25* globals,
+ ; same formula, k1=1.5). Kept for back-compat until fst_search.py migrates.
  SET TYPE=$GET(^TMP("BM25","type"))
  SET QID=$GET(^TMP("BM25","id"))
  SET QTERMS=$GET(^TMP("BM25","terms"))
@@ -110,6 +111,7 @@ SCORE ; reads ^TMP("BM25","type"/"id"/"terms"); writes BM25 score
  QUIT
  ;
 SEARCH ; top-K retrieval: reads ^TMP("BM25","type"/"terms"/"k"); WRITEs "id<TAB>score"
+ ; SUPERSEDED (FST Phase B): use global_bm25.nim searchGlobal (Nim) instead.
  ; Tokenizes the query identically to COMMON, scores every doc, ranks by
  ; descending score via ^TMP("RANK", -score, id), and prints top-K.
  SET TYPE=$GET(^TMP("BM25","type"))
