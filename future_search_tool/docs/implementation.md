@@ -131,8 +131,8 @@ TSTART
   SET ^BM25("hypertension","PUBMED","12345678")=3
   SET ^BM25("treatment","PUBMED","12345678")=2
   ; Add to HNSW index
-  ; Add links
-  SET ^LINK("PUBMED","12345678","MESH","D000001")="mesh_term"
+  ; Add links (MeSH-outbound, #459)
+  SET ^LINK("MESH","D000001","PUBMED","12345678")="mesh_term"
 TCOMMIT
 ```
 
