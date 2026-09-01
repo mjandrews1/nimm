@@ -143,11 +143,12 @@ fi
 # === Check 7: Multiple record types indexed ===
 echo "--- Check 7: Multi-type indexing ---"
 CAT_N=$($NIMM -d $DB -x 'w $G(^BM25META("CATLINE","N"))' 2>&1)
+SER_N=$($NIMM -d $DB -x 'w $G(^BM25META("SERLINE","N"))' 2>&1)
 PUB_N=$($NIMM -d $DB -x 'w $G(^BM25META("PUBMED","N"))' 2>&1)
-if [ "$CAT_N" = "2" ] && [ "$PUB_N" = "2" ]; then
-  pass "CatLine and PubMed indexed (N=2 each)"
+if [ "$CAT_N" = "2" ] && [ "$SER_N" = "1" ] && [ "$PUB_N" = "2" ]; then
+  pass "CatLine, SerLine, PubMed indexed (N=2,1,2)"
 else
-  fail "Multi-type indexing" "CATLINE=2, PUBMED=2" "CATLINE=$CAT_N, PUBMED=$PUB_N"
+  fail "Multi-type indexing" "CATLINE=2, SERLINE=1, PUBMED=2" "CATLINE=$CAT_N, SERLINE=$SER_N, PUBMED=$PUB_N"
 fi
 
 # === Check 8: Tokenization ===
