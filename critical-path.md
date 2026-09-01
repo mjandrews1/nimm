@@ -57,21 +57,19 @@ proves the four core properties: forward/reverse consistency under link/unlink,
 idempotent dedup, name→UI resolution soundness (no dangling links), and query
 duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistency.nim`.
 
-### Sub-tasks
+**Implemented** (commit 8e030ea) — MeSH-outbound links written by the loaders:
 
-1. **Fix the direction** — flip `mesh_term` to MESH→PUBMED (or drop it; the
-   per-record `meshUI` subscript already covers citation→MeSH).
-2. **Add MeSH→CatLine `subject`** — CatLine MARC `650` fields carry MeSH headings
-   (`ind2="2"`) as `$a` names only (no `$0` authority id); resolve name→UI via
-   `^MESHTERM`, then write the link + the `^CATLINE(nlmID,"mesh",dui)` subscript.
-3. **Add MeSH→SerLine `serial`** — same `650`-name→UI resolution, write
-   `^LINK("MESH",dui,"SERLINE",nlmID)` + `^SERLINE(nlmID,"mesh",dui)`.
-4. **Add PUBMED→CatLine `journal`** (optional) — PubMed has journal titles but no
-   CatLine NLMID; needs title→NLMID resolution. Lower priority.
-5. **Add CATLINE→SERLINE `serial`** (optional) — linking a journal to its serial
-   holdings; also needs name/NLMID resolution. Lower priority.
-6. **Rename `meshUI` → `mesh`** on the PubMed per-record subscript to match the
-   schema and query patterns.
+- [x] MeSH → CatLine `subject` + MeSH → SerLine `subject` — resolve MeSH 6xx
+      headings (600/610/611/630/650/651/655, ind2="2") to UI via `^MESHTERM`, write
+      `^LINK("MESH",dui,type,nlmID)` + per-record `"mesh"` subscript.
+- [x] `mesh_term` direction flipped to MESH→PUBMED.
+- [x] `meshUI` → `mesh` rename.
+- [x] `resolveName` prefers exact name ("1"), then unique synonym ("0").
+
+### Remaining (lower priority — record-to-record, not the MeSH hub)
+
+- [ ] **PUBMED→CatLine `journal`** — needs title→NLMID resolution.
+- [ ] **CATLINE→SERLINE `serial`** — needs NLMID→NLMID resolution.
 
 ### Data blockers (verify before implementing)
 
