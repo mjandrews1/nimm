@@ -2,8 +2,9 @@
 """
 FST Search Engine — search NLM data via NimM's BM25 + entry-term expansion.
 
-Delegates to bm25idx.m (DICT for entry-term lookup, SEARCH for BM25 ranking)
-by shelling out to the nimm binary, then merges the two rankings.
+Delegates to bm25idx.m DICT (entry-term lookup) and $NI_SEARCH (BM25 ranking
+via Nim global_bm25) by shelling out to the nimm binary, then merges the two
+rankings.
 
 Usage:
   python3 fst_search.py --db /path/to/fst.lmdb --query "heart attack"
@@ -16,7 +17,6 @@ import subprocess
 
 NIMM = os.environ.get("NIMM_BIN", "./bin/nimm")
 BM25IDX = "future_search_tool/src/bm25idx.m"
-
 
 def _escape(s):
     return s.replace('"', '""')

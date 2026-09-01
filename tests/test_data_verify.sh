@@ -5,7 +5,6 @@ set -e
 
 DB=/tmp/dataverify_test.lmdb
 NIMM=./bin/nimm
-BM25idx="$NIMM -r future_search_tool/src/bm25idx.m -d $DB"
 PASSED=0
 FAILED=0
 
@@ -43,10 +42,11 @@ SET ^PUBMED("P000002","abstract")="Insulin resistance in metabolic syndrome"
 
 # Build BM25 index
 echo "--- Building BM25 index ---"
-$BM25idx -e 'DO BUILDMESH^BM25IDX' 2>&1 > /dev/null
-$BM25idx -e 'DO BUILDCAT^BM25IDX' 2>&1 > /dev/null
-$BM25idx -e 'DO BUILDSER^BM25IDX' 2>&1 > /dev/null
-$BM25idx -e 'DO BUILDPUB^BM25IDX' 2>&1 > /dev/null
+BUILD_BM25=./bin/build_bm25
+$BUILD_BM25 "$DB" MESH '^MESH' 'name^scopeNote' 2>&1 > /dev/null
+$BUILD_BM25 "$DB" CATLINE '^CATLINE' 'title' 2>&1 > /dev/null
+$BUILD_BM25 "$DB" SERLINE '^SERLINE' 'title' 2>&1 > /dev/null
+$BUILD_BM25 "$DB" PUBMED '^PUBMED' 'title^abstract^journal' 2>&1 > /dev/null
 
 # === Check 1: Record counts ===
 echo "--- Check 1: Record counts ---"
@@ -89,21 +89,21 @@ fi
 
 # === Check 3: BM25 index integrity ===
 echo "--- Check 3: BM25 index integrity ---"
-N=$($BM25idx -x 'w $G(^BM25META("MESH","N"))' 2>&1)
+N=$($NIMM -d $DB -x 'w $G(^BM25META("MESH","N"))' 2>&1)
 if [ "$N" = "5" ]; then
   pass "BM25META MESH N=5"
 else
   fail "BM25META MESH N" "5" "$N"
 fi
 
-DF=$($BM25idx -x 'w $G(^BM25DF("hypertension","MESH"))' 2>&1)
+DF=$($NIMM -d $DB -x 'w $G(^BM25DF("hypertension","MESH"))' 2>&1)
 if [ "$DF" -gt 0 ] 2>/dev/null; then
   pass "BM25DF hypertension exists (df=$DF)"
 else
   fail "BM25DF hypertension" "positive" "$DF"
 fi
 
-LEN=$($BM25idx -x 'w $G(^BM25LEN("MESH","D000001"))' 2>&1)
+LEN=$($NIMM -d $DB -x 'w $G(^BM25LEN("MESH","D000001"))' 2>&1)
 if [ "$LEN" -gt 0 ] 2>/dev/null; then
   pass "BM25LEN D000001 = $LEN"
 else
@@ -112,8 +112,8 @@ fi
 
 # === Check 4: Search correctness ===
 echo "--- Check 4: Search correctness ---"
-SCORE_H=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000001",^TMP("BM25","terms")="hypertension" DO SCORE^BM25IDX' 2>&1)
-SCORE_D=$($BM25idx -x 'S ^TMP("BM25","type")="MESH",^TMP("BM25","id")="D000002",^TMP("BM25","terms")="hypertension" DO SCORE^BM25IDX' 2>&1)
+SCORE_H=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1 | grep -c "D000001" || true)
+SCORE_D=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1 | grep -c "D000002" || true)
 if [ "$SCORE_H" != "0" ] && [ "$SCORE_D" = "0" ]; then
   pass "Hypertension doc scores >0, Diabetes doc scores =0"
 else
@@ -142,8 +142,8 @@ fi
 
 # === Check 7: Multiple record types indexed ===
 echo "--- Check 7: Multi-type indexing ---"
-CAT_N=$($BM25idx -x 'w $G(^BM25META("CATLINE","N"))' 2>&1)
-PUB_N=$($BM25idx -x 'w $G(^BM25META("PUBMED","N"))' 2>&1)
+CAT_N=$($NIMM -d $DB -x 'w $G(^BM25META("CATLINE","N"))' 2>&1)
+PUB_N=$($NIMM -d $DB -x 'w $G(^BM25META("PUBMED","N"))' 2>&1)
 if [ "$CAT_N" = "2" ] && [ "$PUB_N" = "2" ]; then
   pass "CatLine and PubMed indexed (N=2 each)"
 else
@@ -152,7 +152,7 @@ fi
 
 # === Check 8: Tokenization ===
 echo "--- Check 8: Tokenization ---"
-TOKENS=$($BM25idx -x 'w $G(^BM25LEN("PUBMED","P000001"))' 2>&1)
+TOKENS=$($NIMM -d $DB -x 'w $G(^BM25LEN("PUBMED","P000001"))' 2>&1)
 if [ "$TOKENS" -gt 0 ] 2>/dev/null; then
   pass "PubMed P000001 tokenized ($TOKENS tokens)"
 else

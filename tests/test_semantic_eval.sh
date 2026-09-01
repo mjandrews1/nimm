@@ -80,7 +80,7 @@ progress_done
 
 # --- 2. Build BM25 index ---
 progress_start "build BM25" 120
-$BM25 -e 'DO BUILDMESH^BM25IDX' 2>&1 | tail -1
+./bin/build_bm25 "$DB" MESH '^MESH' 'name^scopeNote' 2>&1 | tail -1
 progress_done
 
 # --- 3. Run golden queries, collect dict + BM25 rankings ---
@@ -92,7 +92,7 @@ while IFS=$'\t' read -r cls query ui name; do
   [ -z "$query" ] && continue
   dict_ids=$($BM25 -x "S ^TMP(\"BM25\",\"terms\")=\"$query\" DO DICT^BM25IDX" 2>&1 \
              | head -50 | paste -sd, -)
-  bm25_ids=$($BM25 -x "S ^TMP(\"BM25\",\"type\")=\"MESH\",^TMP(\"BM25\",\"terms\")=\"$query\" DO SEARCH^BM25IDX" 2>&1 \
+  bm25_ids=$($BM25 -x "W \$NI_SEARCH(\"MESH\",\"$query\",50)" 2>&1 \
              | head -50 | cut -f1 | paste -sd, -)
   printf '%s\t%s\t%s\n' "$query" "$dict_ids" "$bm25_ids" >> /tmp/semantic_rankings.txt
   qcount=$((qcount+1))

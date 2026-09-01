@@ -4,7 +4,7 @@ set -e
 
 DB=/tmp/bm25_test.lmdb
 NIMM=./bin/nimm
-BM25idx="$NIMM -r future_search_tool/src/bm25idx.m -d $DB"
+BUILD_BM25=./bin/build_bm25
 PASSED=0
 FAILED=0
 
@@ -45,39 +45,39 @@ fi
 
 # Build BM25 index for MeSH
 echo "--- Building BM25 index ---"
-BUILD_OUTPUT=$($BM25idx -e 'DO BUILDMESH^BM25IDX' 2>&1)
+BUILD_OUTPUT=$($BUILD_BM25 "$DB" MESH '^MESH' 'name^scopeNote' 2>&1)
 echo "  $BUILD_OUTPUT"
 
 # Verify index built
-N=$($BM25idx -x 'w $G(^BM25META("MESH","N"))' 2>&1)
+N=$($NIMM -d $DB -x 'w $G(^BM25META("MESH","N"))' 2>&1)
 if [ "$N" = "5" ]; then
   pass "BM25META N=5"
 else
   fail "BM25META N=5" "5" "$N"
 fi
 
-AVG=$($BM25idx -x 'w $G(^BM25META("MESH","avgdl"))' 2>&1)
+AVG=$($NIMM -d $DB -x 'w $G(^BM25META("MESH","avgdl"))' 2>&1)
 if echo "$AVG" | grep -q "[0-9]"; then
   pass "BM25META avgdl=$AVG"
 else
   fail "BM25META avgdl" "numeric" "$AVG"
 fi
 
-LEN1=$($BM25idx -x 'w $G(^BM25LEN("MESH","D000001"))' 2>&1)
+LEN1=$($NIMM -d $DB -x 'w $G(^BM25LEN("MESH","D000001"))' 2>&1)
 if [ "$LEN1" -gt 0 ] 2>/dev/null; then
   pass "BM25LEN D000001 = $LEN1"
 else
   fail "BM25LEN D000001 > 0" "positive integer" "$LEN1"
 fi
 
-DF=$($BM25idx -x 'w $G(^BM25DF("hypertension","MESH"))' 2>&1)
+DF=$($NIMM -d $DB -x 'w $G(^BM25DF("hypertension","MESH"))' 2>&1)
 if [ "$DF" -gt 0 ] 2>/dev/null; then
   pass "BM25DF hypertension = $DF"
 else
   fail "BM25DF hypertension > 0" "positive integer" "$DF"
 fi
 
-TF=$($BM25idx -x 'w $G(^BM25("hypertension","MESH","D000001"))' 2>&1)
+TF=$($NIMM -d $DB -x 'w $G(^BM25("hypertension","MESH","D000001"))' 2>&1)
 if [ "$TF" -gt 0 ] 2>/dev/null; then
   pass "BM25 TF hypertension/D000001 = $TF"
 else
@@ -86,21 +86,21 @@ fi
 
 # Test scoring via $NI_SEARCH (M SCORE/SEARCH were deleted in FST Phase B).
 echo "--- Testing BM25 scoring ---"
-SCORE1=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
+SCORE1=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
 if echo "$SCORE1" | grep -q "D000001"; then
   pass "Search 'hypertension' finds D000001: $SCORE1"
 else
   fail "Search 'hypertension' finds D000001" "D000001" "$SCORE1"
 fi
 
-SCORE2=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
+SCORE2=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","hypertension",10)' 2>&1)
 if echo "$SCORE2" | grep -q "D000002"; then
   fail "Search 'hypertension' should NOT find D000002" "" "$SCORE2"
 else
   pass "Search 'hypertension' excludes D000002 (not in doc)"
 fi
 
-SCORE3=$($BM25idx -x 'w $NI_SEARCH("MESH","diabetes",10)' 2>&1)
+SCORE3=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","diabetes",10)' 2>&1)
 if echo "$SCORE3" | grep -q "D000001"; then
   fail "Search 'diabetes' should NOT find D000001" "" "$SCORE3"
 else
@@ -108,7 +108,7 @@ else
 fi
 
 # Multi-term query: D000001 matches 'blood pressure'
-SCORE4=$($BM25idx -x 'w $NI_SEARCH("MESH","blood pressure",10)' 2>&1)
+SCORE4=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","blood pressure",10)' 2>&1)
 if echo "$SCORE4" | grep -q "D000001"; then
   pass "Search 'blood pressure' finds D000001: $SCORE4"
 else
@@ -116,7 +116,7 @@ else
 fi
 
 # Higher-ranked doc ranks higher for broad query
-RANK1=$($BM25idx -x 'w $NI_SEARCH("MESH","hypertension blood pressure",10)' 2>&1 | head -1 | cut -f1)
+RANK1=$($NIMM -d $DB -x 'w $NI_SEARCH("MESH","hypertension blood pressure",10)' 2>&1 | head -1 | cut -f1)
 if [ "$RANK1" = "D000001" ]; then
   pass "D000001 ranked first for 'hypertension blood pressure'"
 else

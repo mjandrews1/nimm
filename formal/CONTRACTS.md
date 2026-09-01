@@ -28,10 +28,10 @@ listed, no stale rows, every mirror present).
 | `subscript_bisim.dfy` | subscripted read/write (`opPushVarSub`/`opSetVarSub`) ≡ AST | `tests/test_bytecode_conformance.sh` |
 | `bytecode_stack.dfy` | operand-stack discipline (expr/stmt invariants) | `tests/test_vm_table.nim` |
 | `bytecode_bisim.dfy` | compiled bytecode ≡ AST (core language) | `tests/test_bytecode_conformance.sh` |
-| `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_bm25_m.sh` |
+| `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_semantic_eval.sh` |
 | `engine_execution.dfy` | DO/QUIT call-stack + $ETRAP cap + label dispatch | `tests/test_etrap.sh`, `tests/test_bytecode_conformance.sh` |
 | `for_loop_bisim.dfy` | FOR loop bytecode ≡ AST (body + step + back-edge) | `tests/test_bytecode_conformance.sh` |
-| `bm25.dfy` | BM25 idf/tfNorm + `SEARCH` top-K | `tests/test_bm25_m.sh`, `tests/test_global_bm25.nim` |
+| `bm25.dfy` | BM25 idf/tfNorm + `$NI_SEARCH` top-K | `tests/test_global_bm25.nim` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
 | `hnsw.dfy` | HNSW neighbor symmetry + bounded degree + cosine | `tests/test_hnsw_invariants.nim` |
 | `search_engine.dfy` | FST index consistency + docId↔vecId bijection | `tests/test_fst_consistency.nim` |
