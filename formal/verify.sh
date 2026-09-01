@@ -29,6 +29,7 @@ dafny verify engine_execution.dfy
 dafny verify for_loop_bisim.dfy
 dafny verify hnsw.dfy
 dafny verify hybrid_merge.dfy
+dafny verify link_consistency.dfy
 dafny verify lock_semantics.dfy
 dafny verify m_programs.dfy
 dafny verify network.dfy

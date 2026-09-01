@@ -75,6 +75,11 @@ hybrid_merge.dfy|RecipDecreasing|support|-
 hybrid_merge.dfy|RRFDecreasing|test|tests/test_hybrid_rrf.nim
 hybrid_merge.dfy|CombinedNonNeg|test|tests/test_hybrid_rrf.nim
 hybrid_merge.dfy|RerankMonotone|test|tests/test_hybrid_rrf.nim
+link_consistency.dfy|LinkBothPreservesConsistency|test|tests/test_link_consistency.nim
+link_consistency.dfy|UnlinkBothPreservesConsistency|test|tests/test_link_consistency.nim
+link_consistency.dfy|LinkBothIdempotent|test|tests/test_link_consistency.nim
+link_consistency.dfy|BuildLinksKnownOnly|test|tests/test_link_consistency.nim
+link_consistency.dfy|QueryDuality|test|tests/test_link_consistency.nim
 key_encoding.dfy|LexLtAntisymmetric|support|-
 key_encoding.dfy|LexLtTransitive|support|-
 key_encoding.dfy|LexLtTotal|support|-

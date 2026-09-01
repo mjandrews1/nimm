@@ -34,6 +34,7 @@ listed, no stale rows, every mirror present).
 | `bm25.dfy` | BM25 idf/tfNorm + `$NI_SEARCH` top-K | `tests/test_global_bm25.nim` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |
 | `hnsw.dfy` | HNSW neighbor symmetry + bounded degree + cosine | `tests/test_hnsw_invariants.nim` |
+| `link_consistency.dfy` | FST ^LINK forward/reverse consistency, idempotent dedup, name→UI soundness, query duality | `tests/test_link_consistency.nim` |
 | `search_engine.dfy` | FST index consistency + docId↔vecId bijection | `tests/test_fst_consistency.nim` |
 | `lock_semantics.dfy` | `heldLocks` acquire/release/release-all | `tests/test_locks.nim` |
 | `network.dfy` | network connection table (fresh id / close-removes / count / closeAll) | `tests/test_network_invariants.nim` |
