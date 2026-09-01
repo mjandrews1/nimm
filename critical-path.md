@@ -52,6 +52,11 @@ subscripts, which are already cheap (record id is the first subscript):
 ^SERLINE(nlmID, "mesh", descUI) = "1"   ; missing
 ```
 
+**Design validated in Dafny** — `formal/link_consistency.dfy` (commit ee521dd)
+proves the four core properties: forward/reverse consistency under link/unlink,
+idempotent dedup, name→UI resolution soundness (no dangling links), and query
+duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistency.nim`.
+
 ### Sub-tasks
 
 1. **Fix the direction** — flip `mesh_term` to MESH→PUBMED (or drop it; the
