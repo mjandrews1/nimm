@@ -73,6 +73,18 @@ duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistenc
 - [ ] **PUBMED→CatLine `journal`** — needs title→NLMID resolution.
 - [ ] **CATLINE→SERLINE `serial`** — needs NLMID→NLMID resolution.
 
+### Dafny modeling gaps (#460)
+
+Three source modules touched this session have no Dafny model:
+
+1. **`global_bm25.nim` buildIndex** — df-batching equivalence (in-memory dfDelta ==
+   per-term read-modify-write), re-run idempotency (^BM25LEN skip), high-water
+   mark monotonicity. Highest priority.
+2. **`xmlload.nim` resolveName** — `link_consistency.dfy` models `resolve` opaquely;
+   the concrete preference rule (exact "1" → unique synonym "0") is unproven.
+3. **`storage/lmdb_store.nim` read-only path** — reader-never-blocks-writer, write
+   raises, write-txn read-back (#359/#368).
+
 ### Data blockers (verify before implementing)
 
 - CatLine `650`: 7,059 headings (catplus sample), `ind2="2"`, `$a` only.
