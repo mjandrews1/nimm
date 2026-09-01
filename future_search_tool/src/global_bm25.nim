@@ -115,6 +115,13 @@ proc collectDocIds(g: var Globals, glob: string): seq[string] =
     id = g.order(glob, @[id], forward = true)
   return ids
 
+proc flushDfDelta(g: var Globals, src: string, dfDelta: var CountTable[string]) =
+  ## Apply in-memory df deltas to ^BM25DF(term,src) and clear the table.
+  for w, c in dfDelta.pairs:
+    let oldDf = parseIntOr(g.get("^BM25DF", @[w, src]), 0)
+    g.set("^BM25DF", @[w, src], $(oldDf + c))
+  dfDelta.clear()
+
 proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
                  flushEvery: int = 1000): tuple[docs, tokens: int, avgdl: float] =
   ## Build the ^BM25* index for source `src` from the documents in `glob`
@@ -126,11 +133,18 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
   ## Writes are batched and the write transaction is flushed every `flushEvery`
   ## docs so a single LMDB write txn never grows to the ~1.2M-doc size that
   ## aborted the M build (#457). Doc ids are collected before the batch begins.
+  ##
+  ## df (document frequency) is accumulated in memory per flush window and
+  ## applied once per unique term at flush time, instead of a read-modify-write
+  ## on ^BM25DF for every term in every doc (which was ~2 extra LMDB ops per
+  ## term and made the CatLine build take ~1h).
   let fields = flist.split('^')
   let docIds = g.collectDocIds(glob)
 
-  g.beginWriteBatch()
+  var dfDelta = initCountTable[string]()
   var written = 0
+
+  g.beginWriteBatch()
   for docId in docIds:
     # Skip docs already indexed (idempotent re-runs mirror COMMON's
     # `IF '$DATA(^BM25LEN(SRC,ID))` guard).
@@ -149,15 +163,15 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
       continue
     for w, c in tf.pairs:
       g.set("^BM25", @[w, src, docId], $c)
-      # df is the first-occurrence count: +1 per doc containing w. The
-      # read-back during writeTxnActive sees this txn's own writes (#359/#368).
-      let oldDf = parseIntOr(g.get("^BM25DF", @[w, src]), 0)
-      g.set("^BM25DF", @[w, src], $(oldDf + 1))
+      dfDelta.inc(w)
     g.set("^BM25LEN", @[src, docId], $dl)
     inc written
     if written mod flushEvery == 0:
+      flushDfDelta(g, src, dfDelta)
       g.endWriteBatch()
       g.beginWriteBatch()
+      stderr.writeLine("  [", src, "] ", written, " docs")
+  flushDfDelta(g, src, dfDelta)
   g.endWriteBatch()
 
   # Meta: N = number of indexed docs, avgdl = mean doc length (matches COMMON).
