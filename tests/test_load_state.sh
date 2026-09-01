@@ -119,6 +119,25 @@ else
   fail "ZLOADXML loaded records" "Hypertension" "$MESH_NAME"
 fi
 
+# Test 9: Load high-water mark — a multi-batch load advances in-progress:N at
+# each flush and lands on complete:N (#459). 2500 records → 2 flush boundaries.
+echo "--- Test: Load high-water mark (in-progress:N) ---"
+{
+  echo '<?xml version="1.0"?><DescriptorRecordSet>'
+  for i in $(seq 1 2500); do
+    printf '<DescriptorRecord><DescriptorUI>D%06d</DescriptorUI><String>Term %d</String></DescriptorRecord>\n' "$i" "$i"
+  done
+  echo '</DescriptorRecordSet>'
+} > /tmp/loadstate_big_$$.xml
+$NIMM -d $DB -x "ZLOADXML \"/tmp/loadstate_big_$$.xml\",\"^MESH\",\"mesh\"" > /dev/null 2>&1
+STATUS=$($NIMM -d $DB -x "w \$G(^FST(\"load\",\"loadstate_big_$$.xml\"))" 2>&1)
+if [ "$STATUS" = "complete:2500" ]; then
+  pass "Load high-water mark lands on complete:2500"
+else
+  fail "Load high-water mark" "complete:2500" "$STATUS"
+fi
+rm -f /tmp/loadstate_big_$$.xml
+
 echo ""
 echo "Result: $PASSED passed, $FAILED failed"
 if [ $FAILED -gt 0 ]; then

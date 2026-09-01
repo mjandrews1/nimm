@@ -206,6 +206,9 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
   ## Stream-parse an NLM XML file into globals. Returns record count.
   ## Tracks load state in ^FST("load",<basename>) so partial loads
   ## (killed mid-run) are detectable: "in-progress" before, "complete:N" after.
+  ## At each batch flush the marker is advanced to "in-progress:N" — the
+  ## committed-record high-water mark — so a reader can observe load progress
+  ## in O(1) the same way ^BM25PROG does for indexing (#458/#459).
   let loadKey = extractFilename(filePath)
   # Mark in-progress in its own transaction so it persists even if the
   # process is killed mid-load (the data batch below has not yet begun).
@@ -222,6 +225,9 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
   template flushBatch() {.dirty.} =
     inc batchCount
     if batchCount >= BATCH_SIZE:
+      # Advance the load high-water mark in the SAME txn as the records it
+      # covers, so a reader sees a consistent committed count.
+      g.set("^FST", @["load", loadKey], "in-progress:" & $count)
       g.endWriteBatch()
       g.beginWriteBatch()
       batchCount = 0
