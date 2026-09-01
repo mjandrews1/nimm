@@ -20,13 +20,19 @@ type
     readTxnActive*: bool # True when cached read transaction is active
     writeTxn: ptr Txn   # Cached write transaction for batch writes
     writeTxnActive*: bool # True when cached write transaction is active
+    readOnly*: bool     # True when opened with MDB_RDONLY (reader process)
 
-proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) =
-  ## Initialize LMDB store
+proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
+           readOnly = false) =
+  ## Initialize LMDB store. When `readOnly`, the environment is opened with
+  ## MDB_RDONLY and the DBI is opened in a read txn without MDB_CREATE, so a
+  ## separate reader process can query committed state while a writer holds the
+  ## write txn (fixes the reader-blocking seen during `buildIndex`).
   if mapSize <= 0:
     raise newException(ValueError, "LMDB mapSize must be positive: " & $mapSize)
   store.path = path
   store.mapSize = mapSize
+  store.readOnly = readOnly
   
   # Create directory if needed
   let dir = parentDir(path)
@@ -38,36 +44,46 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000) 
   if rc != SUCCESS:
     raise newException(IOError, "LMDB env_create failed: " & $rc)
   
-  rc = envSetMapsize(store.env, cast[uint](mapSize))
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB set_mapsize failed: " & $rc)
+  if not readOnly:
+    rc = envSetMapsize(store.env, cast[uint](mapSize))
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB set_mapsize failed: " & $rc)
   
   # Open LMDB environment — accept both file and directory paths
   # Python lmdb creates directories by default; NimM previously used NOSUBDIR
   var flags: cuint = NOTLS
   if not dirExists(path):
     flags = flags or NOSUBDIR
+  if readOnly:
+    flags = flags or RDONLY
   rc = envOpen(store.env, path, flags, 0o664)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB env_open failed: " & path)
   
   # Open database
   var txn: ptr Txn
-  rc = txnBegin(store.env, nil, 0, addr txn)
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB txn_begin failed")
-  
-  rc = dbiOpen(txn, nil, CREATE, addr store.dbi)
-  if rc != SUCCESS:
-    abort(txn)
-    raise newException(IOError, "LMDB dbi_open failed")
-  
-  # Lock table uses main DBI with encoded key format
-  store.lockDbi = store.dbi
-  
-  rc = txnCommit(txn)
-  if rc != SUCCESS:
-    raise newException(IOError, "LMDB txn_commit failed")
+  if readOnly:
+    rc = txnBegin(store.env, nil, RDONLY, addr txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_begin (read-only) failed")
+    rc = dbiOpen(txn, nil, 0, addr store.dbi)  # no MDB_CREATE: DBI must exist
+    if rc != SUCCESS:
+      abort(txn)
+      raise newException(IOError, "LMDB dbi_open (read-only) failed: " & $rc)
+    store.lockDbi = store.dbi
+    abort(txn)  # read-only open; no commit needed
+  else:
+    rc = txnBegin(store.env, nil, 0, addr txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_begin failed")
+    rc = dbiOpen(txn, nil, CREATE, addr store.dbi)
+    if rc != SUCCESS:
+      abort(txn)
+      raise newException(IOError, "LMDB dbi_open failed")
+    store.lockDbi = store.dbi
+    rc = txnCommit(txn)
+    if rc != SUCCESS:
+      raise newException(IOError, "LMDB txn_commit failed")
 
 proc close*(store: var LmdbStore) =
   ## Close LMDB store

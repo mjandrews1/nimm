@@ -45,6 +45,7 @@ tests/test_global_bm25
 tests/test_network_invariants
 tests/test_bm25_build_nim
 tests/run_data_structure_tests
+tests/test_lmdb_readonly
 
 # LMDB database files
 *.mdb
