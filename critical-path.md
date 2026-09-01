@@ -68,8 +68,12 @@ duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistenc
 - [x] Load high-water mark: `^FST("load",file)` advances `in-progress:N` per flush
       (commit 0aa8662), landing on `complete:N` — O(1) load observability.
 
-### Remaining (lower priority — record-to-record, not the MeSH hub)
+### Remaining (record-to-record links + PubMed re-load)
 
+- [ ] **PubMed re-load + stale cleanup** — CatLine/SerLine were re-loaded, but
+      PubMed still has old-direction `^LINK("PUBMED",…)` and `"meshUI"` subscripts
+      (and no MESH→PUBMED links). Needs a PubMed re-load plus clearing the stale
+      `^LINK("PUBMED")` subtree and `^PUBMED(*,"meshUI",*)` subscripts.
 - [ ] **PUBMED→CatLine `journal`** — needs title→NLMID resolution.
 - [ ] **CATLINE→SERLINE `serial`** — needs NLMID→NLMID resolution.
 
