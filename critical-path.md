@@ -65,6 +65,8 @@ duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistenc
 - [x] `mesh_term` direction flipped to MESH→PUBMED.
 - [x] `meshUI` → `mesh` rename.
 - [x] `resolveName` prefers exact name ("1"), then unique synonym ("0").
+- [x] Load high-water mark: `^FST("load",file)` advances `in-progress:N` per flush
+      (commit 0aa8662), landing on `complete:N` — O(1) load observability.
 
 ### Remaining (lower priority — record-to-record, not the MeSH hub)
 
