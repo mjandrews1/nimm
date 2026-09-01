@@ -60,10 +60,10 @@ R=$($NIMM -d "$DB" -x 'W $G(^PUBMED("11111111","title")),"|",$G(^PUBMED("1111111
 EXP="Treatment of hypertension in testing environments|Journal of Testing|Prior work is sparse.|Smith John;Jones Alice"
 if [ "$R" = "$EXP" ]; then echo "  PASS: all fields correct"; else echo "  FAIL:"; echo "    got: $R"; echo "    exp: $EXP"; exit 1; fi
 
-# Test 3: MeSH UIs + ^LINK entries
+# Test 3: MeSH UIs + ^LINK entries (MeSH-outbound direction, #459)
 echo "Test 3: MeSH fields + LINK"
-R=$($NIMM -d "$DB" -x 'W $D(^PUBMED("11111111","meshUI","D006973")),"|",^LINK("PUBMED","11111111","MESH","D000959"),"|",$G(^LINK("PUBMED","22222222","MESH","D006973"))')
-if [ "$R" = "1|mesh_term|" ]; then echo "  PASS: meshUI + ^LINK correct"; else echo "  FAIL: got '$R'"; exit 1; fi
+R=$($NIMM -d "$DB" -x 'W $D(^PUBMED("11111111","mesh","D006973")),"|",$D(^LINK("MESH","D000959","PUBMED","11111111")),"|",$G(^LINK("MESH","D006973","PUBMED","22222222"))')
+if [ "$R" = "1|1|" ]; then echo "  PASS: mesh + ^LINK correct"; else echo "  FAIL: got '$R'"; exit 1; fi
 
 # Test 4: article without optional fields loads cleanly
 echo "Test 4: Minimal article"

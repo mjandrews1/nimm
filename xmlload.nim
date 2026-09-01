@@ -145,6 +145,62 @@ proc extractEntryTerms(s: string): seq[string] =
     if term.len > 0: result.add(term)
     pos = en + 7  # len("</Term>")
 
+proc meshSubjectNames*(record: string): seq[string] =
+  ## `$a` values of every MeSH subject heading in a record. MeSH headings are
+  ## the 6xx subject-added-entry fields (600/610/611/630/650/651/655) whose
+  ## second indicator is "2" (MeSH thesaurus). These names resolve to descriptor
+  ## UIs for the ^LINK table (#459).
+  ##
+  ## Other authority-controlled fields are deliberately NOT matched: name
+  ## authorities (100/110/111/700/710/711) link to a name authority file, and
+  ## series/uniform titles (130/240/490/800/810/811/830) link to title authority
+  ## files — neither is MeSH, and the FST schema has no such record types.
+  const meshTags = ["600", "610", "611", "630", "650", "651", "655"]
+  result = @[]
+  var pos = 0
+  while true:
+    let tagPos = record.find("tag=\"", pos)
+    if tagPos < 0: break
+    let gt = record.find(">", tagPos)
+    if gt < 0: break
+    let openTag = record[tagPos .. gt]
+    let endA = record.find("</datafield>", gt)
+    let endB = record.find("</marc:datafield>", gt)
+    var en = -1
+    if endA >= 0 and (endB < 0 or endA < endB): en = endA
+    elif endB >= 0: en = endB
+    if en < 0: break
+    var isMesh = false
+    for t in meshTags:
+      if "tag=\"" & t & "\"" in openTag: isMesh = true
+    if isMesh and "ind2=\"2\"" in openTag:
+      for n in subfieldsOf(record[tagPos ..< en], "a"):
+        if n.len > 0: result.add(n)
+    pos = en
+
+proc resolveName*(g: var Globals, name: string): string =
+  ## Resolve a MeSH heading name to a descriptor UI via ^MESHTERM. Returns ""
+  ## when the name does not map to a single descriptor. This is the
+  ## `resolve: string -> Option<DUI>` function of link_consistency.dfy.
+  ##
+  ## Prefers an exact descriptor-name match (^MESHTERM value "1"), then a
+  ## unique synonym ("0"); anything else (zero or multiple) is ambiguous → "".
+  ## MARC ind2="2" headings use the descriptor's preferred name, so the "1"
+  ## match is the correct resolution even when the same string is also an
+  ## entry term of another descriptor.
+  let key = name.toLowerAscii
+  var exact: seq[string] = @[]
+  var syn: seq[string] = @[]
+  var ui = g.order("^MESHTERM", @[key, ""], forward = true)
+  while ui.len > 0:
+    let v = g.get("^MESHTERM", @[key, ui])
+    if v == "1": exact.add(ui)
+    elif v == "0": syn.add(ui)
+    ui = g.order("^MESHTERM", @[key, ui], forward = true)
+  if exact.len == 1: return exact[0]
+  if syn.len == 1: return syn[0]
+  return ""
+
 proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
                   format: string): int =
   ## Stream-parse an NLM XML file into globals. Returns record count.
@@ -240,6 +296,15 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
             let vals = subfieldsOf(issnBlk, "a")
             if vals.len > 0:
               g.set(globalName, @[nlmId, "issn"], vals[0])
+          # MeSH subject headings (6xx ind2="2") -> ^LINK + per-record "mesh"
+          # subscript (#459). Only headings that resolve to a single descriptor
+          # UI are linked; the rest are skipped (link_consistency.dfy soundness).
+          let toType = globalName[1 .. ^1]  # "CATLINE" / "SERLINE"
+          for heading in meshSubjectNames(buffer):
+            let dui = resolveName(g, heading)
+            if dui.len > 0:
+              g.set(globalName, @[nlmId, "mesh", dui], "1")
+              g.set("^LINK", @["MESH", dui, toType, nlmId], "subject")
           inc count; flushBatch()
         buffer = ""
 
@@ -295,8 +360,8 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
             let hblk = buffer[hStart ..< hEnd]
             let dui = tagAttr(hblk, "<DescriptorName", "UI")
             if dui.len > 0:
-              g.set(globalName, @[pmid, "meshUI", dui], "1")
-              g.set("^LINK", @["PUBMED", pmid, "MESH", dui], "mesh_term")
+              g.set(globalName, @[pmid, "mesh", dui], "1")
+              g.set("^LINK", @["MESH", dui, "PUBMED", pmid], "mesh_term")
             hpos = hEnd
           inc count; flushBatch()
         buffer = ""
