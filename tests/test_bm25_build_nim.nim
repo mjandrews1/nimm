@@ -47,10 +47,16 @@ proc main() =
   assert g.get("^BM25META", @["MESH", "N"]) == "2"
   assert g.get("^BM25META", @["MESH", "avgdl"]) == "4.00"
 
+  # --- high-water mark (^BM25PROG) for O(1) progress reads (#458) ---
+  assert g.get("^BM25PROG", @["MESH", "status"]) == "done"
+  assert g.get("^BM25PROG", @["MESH", "committed"]) == "2"
+  assert g.get("^BM25PROG", @["MESH", "total"]) == "2"
+
   # --- idempotent re-run: no double-counting ---
   let res2 = g.buildIndex("MESH", "^MESH", "name^scopeNote")
   assert res2.docs == 2 and res2.tokens == 8, "re-run must be idempotent"
   assert g.get("^BM25DF", @["hypertension", "MESH"]) == "2", "df unchanged on re-run"
+  assert g.get("^BM25PROG", @["MESH", "committed"]) == "2", "high-water mark on re-run"
 
   # --- scoreGlobal agrees with the freshly built index ---
   assert g.scoreGlobal("MESH", "D1", "hypertension") > 0.0

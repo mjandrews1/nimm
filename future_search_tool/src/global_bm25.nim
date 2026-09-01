@@ -138,17 +138,30 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
   ## applied once per unique term at flush time, instead of a read-modify-write
   ## on ^BM25DF for every term in every doc (which was ~2 extra LMDB ops per
   ## term and made the CatLine build take ~1h).
+  ##
+  ## A high-water mark is written to ^BM25PROG(src,...) so a reader can observe
+  ## progress in O(1) instead of $ORDER-counting ^BM25LEN:
+  ##   ^BM25PROG(src,"status")    = "building" | "done"
+  ##   ^BM25PROG(src,"committed") = docs committed so far
+  ##   ^BM25PROG(src,"total")     = total source docs
   let fields = flist.split('^')
   let docIds = g.collectDocIds(glob)
 
   var dfDelta = initCountTable[string]()
   var written = 0
+  var skipped = 0
+
+  # Announce start in its own committed txn so a reader sees it immediately.
+  g.set("^BM25PROG", @[src, "status"], "building")
+  g.set("^BM25PROG", @[src, "committed"], "0")
+  g.set("^BM25PROG", @[src, "total"], $docIds.len)
 
   g.beginWriteBatch()
   for docId in docIds:
     # Skip docs already indexed (idempotent re-runs mirror COMMON's
     # `IF '$DATA(^BM25LEN(SRC,ID))` guard).
     if g.get("^BM25LEN", @[src, docId]).len > 0:
+      inc skipped
       continue
     var tf = initCountTable[string]()
     var dl = 0
@@ -168,6 +181,9 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
     inc written
     if written mod flushEvery == 0:
       flushDfDelta(g, src, dfDelta)
+      # Advance the high-water mark in the SAME txn as the docs it covers, so
+      # a reader sees a consistent committed count.
+      g.set("^BM25PROG", @[src, "committed"], $(skipped + written))
       g.endWriteBatch()
       g.beginWriteBatch()
       stderr.writeLine("  [", src, "] ", written, " docs")
@@ -187,4 +203,7 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
   let avgdl = if n > 0: float(sum) / float(n) else: 0.0
   g.set("^BM25META", @[src, "N"], $n)
   g.set("^BM25META", @[src, "avgdl"], formatFloat(avgdl, ffDecimal, 2))
+  # Final high-water mark.
+  g.set("^BM25PROG", @[src, "committed"], $n)
+  g.set("^BM25PROG", @[src, "status"], "done")
   return (docs: n, tokens: sum, avgdl: avgdl)
