@@ -311,7 +311,6 @@ proc planSelect*(stmt: SelectStmt): QueryPlan =
         "ORDER BY must be on the scanned column " & kc[result.walkedIdx])
     if stmt.orderDesc:
       raise newException(SqlError, "ORDER BY DESC not in M1 (materialize+sort is M3)")
-    result.cols = result.cols
 
   result.limit = stmt.limit
 
