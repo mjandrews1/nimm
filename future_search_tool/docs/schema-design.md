@@ -52,8 +52,9 @@
 ^LINK(fromType, fromId, toType, toId) = relationshipType
   "MESH", "D000001", "CATLINE", "1234567" = "subject"
   "MESH", "D000001", "PUBMED", "12345678" = "mesh_term"
+  "MESH", "D000001", "SERLINE", "7654321" = "subject"
   "CATLINE", "1234567", "SERLINE", "7654321" = "serial"
-  "PUBMED", "12345678", "CATLINE", "1234567" = "journal"
+  "PUBMED", "12345678", "SERLINE", "7654321" = "journal"
 ```
 
 ### Upsert Semantics

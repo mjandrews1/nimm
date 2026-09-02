@@ -328,6 +328,13 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
             g.set(globalName, @[pmid, "title"], title)
           if journal.len > 0:
             g.set(globalName, @[pmid, "journal"], journal)
+          # Journal catalog id: <MedlineJournalInfo><NlmUniqueID> is the serial's
+          # NLM catalog accession number — the exact ^SERLINE join key (#466).
+          # NLM links citations to journal serials by this id, not by title.
+          let nlmUniqueId = elemText(buffer, "NlmUniqueID")
+          if nlmUniqueId.len > 0:
+            g.set(globalName, @[pmid, "nlmUniqueID"], nlmUniqueId)
+            g.set("^LINK", @["PUBMED", pmid, "SERLINE", nlmUniqueId], "journal")
           if abstract.len > 0:
             g.set(globalName, @[pmid, "abstract"], abstract)
           # Authors: up to 10 as "Last ForeName", ';'-joined

@@ -27,6 +27,7 @@ cat > "$FIX" <<'XML'
 <Abstract><AbstractText Label="BACKGROUND">Prior work is sparse.</AbstractText><AbstractText Label="METHODS">This study evaluates antihypertensive therapy.</AbstractText></Abstract>
 <AuthorList><Author><LastName>Smith</LastName><ForeName>John</ForeName></Author><Author><LastName>Jones</LastName><ForeName>Alice</ForeName></Author></AuthorList>
 </Article>
+<MedlineJournalInfo><Country>United States</Country><MedlineTA>J Test</MedlineTA><NlmUniqueID>1234567</NlmUniqueID><ISSNLinking>0000-1111</ISSNLinking></MedlineJournalInfo>
 <MeshHeadingList>
 <MeshHeading><DescriptorName UI="D006973">Hypertension</DescriptorName></MeshHeading>
 <MeshHeading><DescriptorName UI="D000959">Antihypertensive Agents</DescriptorName></MeshHeading>
@@ -64,6 +65,11 @@ if [ "$R" = "$EXP" ]; then echo "  PASS: all fields correct"; else echo "  FAIL:
 echo "Test 3: MeSH fields + LINK"
 R=$($NIMM -d "$DB" -x 'W $D(^PUBMED("11111111","mesh","D006973")),"|",$D(^LINK("MESH","D000959","PUBMED","11111111")),"|",$G(^LINK("MESH","D006973","PUBMED","22222222"))')
 if [ "$R" = "1|1|" ]; then echo "  PASS: mesh + ^LINK correct"; else echo "  FAIL: got '$R'"; exit 1; fi
+
+# Test 3b: NlmUniqueID -> ^SERLINE journal link (#466)
+echo "Test 3b: NlmUniqueID journal link"
+R=$($NIMM -d "$DB" -x 'W $G(^PUBMED("11111111","nlmUniqueID")),"|",$G(^LINK("PUBMED","11111111","SERLINE","1234567"))')
+if [ "$R" = "1234567|journal" ]; then echo "  PASS: nlmUniqueID + journal link"; else echo "  FAIL: got '$R'"; exit 1; fi
 
 # Test 4: article without optional fields loads cleanly
 echo "Test 4: Minimal article"
