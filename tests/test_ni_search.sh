@@ -34,6 +34,11 @@ else
   FAIL=$((FAIL+1))
 fi
 
+# $NI_EXPLAIN — per-term breakdown, total must match the score.
+OUT=$($NIMM -x 'S ^BM25META("MESH","N")=2,^BM25META("MESH","avgdl")="2.0",^BM25LEN("MESH","d1")=2,^BM25LEN("MESH","d2")=2,^BM25("hello","MESH","d1")=1,^BM25("hello","MESH","d2")=1,^BM25DF("hello","MESH")=2 W $NI_EXPLAIN("MESH","d1","hello")' 2>&1)
+check "\$NI_EXPLAIN shows per-term breakdown" "$OUT" "term=hello tf=1 df=2"
+check "\$NI_EXPLAIN total matches" "$OUT" "total=0.182322"
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1

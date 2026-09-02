@@ -1206,6 +1206,13 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     for (id, score) in searchGlobal(ev.globals[], src, query, topK):
       res.add(id & "\t" & $score & "\n")
     return res
+  of "NI_EXPLAIN":
+    # $NI_EXPLAIN(type, id, query) — per-term BM25 score breakdown (#463).
+    if args.len < 3: return ""
+    let src = args[0]
+    let docId = args[1]
+    let query = args[2]
+    return explainGlobal(ev.globals[], src, docId, query)
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

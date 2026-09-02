@@ -105,6 +105,31 @@ proc searchGlobal*(g: var Globals, src: string, query: string, topK: int = 10,
     return scores[0 ..< topK]
   return scores
 
+proc explainGlobal*(g: var Globals, src: string, docId: string, query: string,
+                    k1: float = 1.5, b: float = 0.75): string =
+  ## Per-term breakdown of `docId`'s BM25 score against `query` (#463): for each
+  ## query term, tf, df, idf, docLen, avgdl, and that term's contribution. Reads
+  ## the same ^BM25* globals as scoreGlobal; pure read.
+  let n = parseIntOr(g.get("^BM25META", @[src, "N"]), 0)
+  let avgdl = parseFloatOr(g.get("^BM25META", @[src, "avgdl"]), 0.0)
+  let docLen = parseIntOr(g.get("^BM25LEN", @[src, docId]), 0)
+  result = "doc=" & docId & " src=" & src & " N=" & $n & " avgdl=" &
+           formatFloat(avgdl, ffDecimal, 2) & " docLen=" & $docLen & "\n"
+  var total = 0.0
+  for term in tokenizeQuery(query):
+    let tf = parseIntOr(g.get("^BM25", @[term, src, docId]), 0)
+    let df = parseIntOr(g.get("^BM25DF", @[term, src]), 0)
+    let idfV = if df > 0: idf(n, df) else: 0.0
+    var contrib = 0.0
+    if tf > 0 and df > 0:
+      let denom = float(tf) + k1 * (1.0 - b + b * float(docLen) / avgdl)
+      contrib = idfV * (float(tf) * (k1 + 1.0)) / denom
+      total += contrib
+    result.add("  term=" & term & " tf=" & $tf & " df=" & $df &
+               " idf=" & formatFloat(idfV, ffDecimal, 4) &
+               " contrib=" & formatFloat(contrib, ffDecimal, 4) & "\n")
+  result.add("  total=" & formatFloat(total, ffDecimal, 6))
+
 proc collectDocIds(g: var Globals, glob: string): seq[string] =
   ## Top-level subscripts of `glob` (the doc ids), in $ORDER order. Must run
   ## BEFORE beginWriteBatch so the cursor reads the committed source globals.
