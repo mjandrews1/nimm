@@ -63,7 +63,8 @@ proc decodeMakeKey*(key: string): (string, seq[string]) =
     subs.add(parts[i])
   result = (parts[0], subs)
 
-proc newGlobals*(dbPath: string = "", readOnly: bool = false): Globals =
+proc newGlobals*(dbPath: string = "", readOnly: bool = false,
+                 nosync: bool = false): Globals =
   result.scopes = @[initTable[string, string]()]
   result.scopeShared = @[false]
   result.dbPath = dbPath
@@ -73,7 +74,7 @@ proc newGlobals*(dbPath: string = "", readOnly: bool = false): Globals =
   result.nakedSubs = @[]
   
   if dbPath.len > 0:
-    result.globals.init(dbPath, readOnly = readOnly)
+    result.globals.init(dbPath, readOnly = readOnly, nosync = nosync)
 
 proc close*(g: var Globals) =
   if g.dbPath.len > 0:

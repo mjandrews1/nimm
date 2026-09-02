@@ -21,18 +21,22 @@ type
     writeTxn: ptr Txn   # Cached write transaction for batch writes
     writeTxnActive*: bool # True when cached write transaction is active
     readOnly*: bool     # True when opened with MDB_RDONLY (reader process)
+    nosync*: bool       # True when opened with MDB_NOSYNC (disposable workload)
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
-           readOnly = false) =
+           readOnly = false, nosync = false) =
   ## Initialize LMDB store. When `readOnly`, the environment is opened with
   ## MDB_RDONLY and the DBI is opened in a read txn without MDB_CREATE, so a
   ## separate reader process can query committed state while a writer holds the
   ## write txn (fixes the reader-blocking seen during `buildIndex`).
+  ## When `nosync`, the environment is opened with MDB_NOSYNC (commit does not
+  ## fsync) — use only for disposable, regenerable workloads (load/build, #461).
   if mapSize <= 0:
     raise newException(ValueError, "LMDB mapSize must be positive: " & $mapSize)
   store.path = path
   store.mapSize = mapSize
   store.readOnly = readOnly
+  store.nosync = nosync
   
   # Create directory if needed
   let dir = parentDir(path)
@@ -56,6 +60,8 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
     flags = flags or NOSUBDIR
   if readOnly:
     flags = flags or RDONLY
+  if nosync:
+    flags = flags or NOSYNC
   rc = envOpen(store.env, path, flags, 0o664)
   if rc != SUCCESS:
     raise newException(IOError, "LMDB env_open failed: " & path)

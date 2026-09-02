@@ -4,7 +4,7 @@
 #
 # Usage: nim c -d:release -o:bin/build_bm25 \
 #          future_search_tool/src/build_bm25.nim
-#        ./bin/build_bm25 <db> <src> <glob> <flist> [flushEvery]
+#        ./bin/build_bm25 <db> <src> <glob> <flist> [flushEvery] [--nosync]
 
 import os
 import strutils
@@ -14,22 +14,28 @@ import global_bm25
 
 proc main() =
   let p = commandLineParams()
-  if p.len < 4:
-    echo "usage: build_bm25 <db> <src> <glob> <flist> [flushEvery]"
+  var args: seq[string] = @[]
+  var nosync = false
+  for a in p:
+    if a == "--nosync": nosync = true
+    else: args.add(a)
+  if args.len < 4:
+    echo "usage: build_bm25 <db> <src> <glob> <flist> [flushEvery] [--nosync]"
     quit(1)
-  let db = p[0]
-  let src = p[1]
-  let glob = p[2]
-  let flist = p[3]
-  let flushEvery = if p.len >= 5: parseInt(p[4]) else: 1000
+  let db = args[0]
+  let src = args[1]
+  let glob = args[2]
+  let flist = args[3]
+  let flushEvery = if args.len >= 5: parseInt(args[4]) else: 1000
 
-  var g = newGlobals(db)
+  var g = newGlobals(db, nosync = nosync)
   let start = epochTime()
   let (docs, tokens, avgdl) = g.buildIndex(src, glob, flist, flushEvery)
   let elapsed = epochTime() - start
   echo "BM25IDX DONE ", src, " docs=", docs, " tokens=", tokens,
        " avgdl=", formatFloat(avgdl, ffDecimal, 2),
-       " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s"
+       " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s",
+       (if nosync: " [nosync]" else: "")
   g.close()
 
 main()

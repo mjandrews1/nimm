@@ -55,6 +55,7 @@ type
     lint: bool          # --lint: analyze code without executing
     lintStrict: bool    # --lint-strict: exit non-zero on warnings/errors
     readOnly: bool      # --readonly: open the LMDB DB read-only
+    nosync: bool        # --nosync: open LMDB with MDB_NOSYNC (disposable writes)
     parentJobNum: int  # -p: parent M job number (set by JOB command)
     argv: seq[string]  # positional script arguments ($ZARG)
 
@@ -80,6 +81,7 @@ proc parseArgs(): CliArgs =
   result.lint = false
   result.lintStrict = false
   result.readOnly = false
+  result.nosync = false
   result.parentJobNum = 0
   result.argv = @[]
 
@@ -167,6 +169,8 @@ proc parseArgs(): CliArgs =
         result.lintStrict = true
       of "readonly", "read-only":
         result.readOnly = true
+      of "nosync":
+        result.nosync = true
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -203,6 +207,7 @@ proc parseArgs(): CliArgs =
         echo "  --lint       Analyze loaded routine(s)/code, do not execute"
         echo "  --lint-strict Exit non-zero on warnings or errors (implies --lint)"
         echo "  --readonly   Open the LMDB database read-only (query without blocking a writer)"
+        echo "  --nosync     Open LMDB with MDB_NOSYNC (no fsync per commit; disposable writes)"
         echo "  --pemdas     Use standard math precedence (2+3*4 = 14, not 20)"
         echo "  -h/--help     Show this help"
         quit(0)
@@ -235,7 +240,7 @@ proc main() =
     mode = nimm
 
   # Initialize components
-  var g = newGlobals(args.dbPath, readOnly = args.readOnly)
+  var g = newGlobals(args.dbPath, readOnly = args.readOnly, nosync = args.nosync)
   g.registerAllSpecialVars()
   var rt = newRuntime(mode)
   var ev = newEvaluator(g, rt)
