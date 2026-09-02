@@ -7,9 +7,9 @@ The issue tracker is authoritative; this file is the human-readable plan.
 **Remotes:** GitHub (`origin`) and Utility-01 (`/home/mark/nimm`, synced via
 pull). GitLab is deprecated.
 
-**Current state (2026-09-01):**
-- Formal verification: **31 Dafny model sets, 300 lemmas**, `make verify` green.
-- Test suite: **74 tests passing**.
+**Current state (2026-09-02):**
+- Formal verification: **32 Dafny model sets, 305 lemmas**, `make verify` green.
+- Test suite: **75 tests passing**.
 - FST search pipeline complete and validated end-to-end. All four sources loaded
   and BM25-indexed on Utility-01:
 
@@ -23,6 +23,16 @@ pull). GitLab is deprecated.
 - BM25 index build is Nim `buildIndex` (batched flush, #457); M `BUILD*`/`SCORE`/
   `SEARCH` retired from `bm25idx.m` (only `DICT` remains). `build_bm25.nim` CLI,
   `--readonly` reader path, and `^BM25PROG` high-water mark all landed (#458).
+
+## Open issues
+
+| # | Issue | Language (primary) |
+|---|-------|--------------------|
+| #459 | `^LINK`: PubMed re-load + record-to-record links | bash (orchestration) + Nim (loader) |
+| #460 | Dafny modeling gaps | Dafny + Nim mirrors |
+| #461 | NOSYNC/SYNC durability split | Nim |
+| #462 | SELECT-only SQL layer | Nim (compiler) → M or Nim (emitted) |
+| #463 | Retrieval introspection | Nim (+ M query surface) |
 
 ---
 
