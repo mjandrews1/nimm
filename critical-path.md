@@ -28,12 +28,12 @@ pull). GitLab is deprecated.
 
 | # | Issue | Language (primary) |
 |---|-------|--------------------|
-| #467 | `^LINK`: PUBMED→SERLINE ISSN fallback (optional) | Nim (loader) |
 | #462 | SELECT-only SQL layer | Nim (compiler) → M or Nim (emitted) |
-| #463 | Retrieval introspection (query profiling only) | Nim |
 
-(Completed this pass: #459 MeSH-outbound hub, #465 CATLINE→SERLINE serial,
-#466 PUBMED→SERLINE journal, #460 Dafny gaps, #461 NOSYNC measurement.)
+Completed: #459 MeSH-outbound ^LINK graph, #465 CATLINE→SERLINE serial,
+#466 PUBMED→SERLINE journal (NlmUniqueID), #460 Dafny gaps, #461 NOSYNC
+measurement, #463 retrieval introspection. #467 ISSN fallback measured as a
+0.0003% gain → won't do.
 
 ---
 
