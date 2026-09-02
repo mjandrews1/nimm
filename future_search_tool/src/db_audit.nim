@@ -5,12 +5,11 @@
 #
 #   Probe 1: ^LINK forward↔reverse symmetry (link_consistency.dfy).
 #   Probe 2: ^BM25DF == distinct-doc count (search_engine.dfy df-vs-tf).
-#   Probe 3: raw-key framing well-formedness (#356 anti-pattern).
-#   Probe 4: raw-key round-trip decode∘encode == id (key_encoding.dfy).
-#   Probe 5: raw-key byte-order monotonicity (M-collation preserved).
+#   Probe 3-5: full raw-key scan — framing, decode∘encode round-trip,
+#              byte-order monotonicity (key_encoding.dfy / #356).
 #
 # Usage: nim c -d:release --path:. -o:bin/db_audit future_search_tool/src/db_audit.nim
-#        ./bin/db_audit <db_path> [link_sample] [df_sample] [raw_sample]
+#        ./bin/db_audit <db_path> [link_sample] [df_sample] [raw_max|-1] [progress_every]
 
 import os
 import strutils
@@ -24,11 +23,12 @@ proc parseIntOr(s: string, def: int): int =
 proc main() =
   let p = commandLineParams()
   if p.len < 1:
-    echo "usage: db_audit <db> [link_sample] [df_sample] [raw_sample]"
+    echo "usage: db_audit <db> [link_sample] [df_sample] [raw_max|-1] [progress_every]"
     quit(1)
   let linkSample = if p.len > 1: parseInt(p[1]) else: 2000
   let dfSample = if p.len > 2: parseInt(p[2]) else: 500
-  let rawSample = if p.len > 3: parseInt(p[3]) else: 100000
+  let rawMax = if p.len > 3: parseInt(p[3]) else: -1
+  let progressEvery = if p.len > 4: parseInt(p[4]) else: 0
 
   var g = newGlobals(p[0], readOnly = true)
 
@@ -75,30 +75,13 @@ proc main() =
     term = g.order("^BM25DF", @[term], forward = true)
   echo "BM25DF==doccount: checked=", dfChecked, " mismatches=", dfMis
 
-  # --- Probes 3-5: raw-key framing / round-trip / ordering ---
-  let rawKeys = g.globals.sampleRawKeys(rawSample)
-  var framingBad = 0
-  var roundTripBad = 0
-  var orderBad = 0
-  var framingSamples: seq[string] = @[]
-  var prev: string = ""
-  for k in rawKeys:
-    let framingErr = validateFraming(k)
-    if framingErr.len > 0:
-      inc framingBad
-      if framingSamples.len < 5:
-        framingSamples.add(framingErr)
-    let (gname, subs) = decodeKey(k)
-    if encodeKey(gname, subs) != k:
-      inc roundTripBad
-    if prev.len > 0 and prev >= k:
-      inc orderBad
-    prev = k
-  echo "raw framing: checked=", rawKeys.len, " bad=", framingBad
-  for s in framingSamples:
+  # --- Probes 3-5: full raw-key scan (streaming; framing/round-trip/ordering) ---
+  let rep = g.globals.auditScan(maxKeys = rawMax, progressEvery = progressEvery)
+  echo "raw framing: checked=", rep.checked, " bad=", rep.framingBad
+  for s in rep.framingSamples:
     echo "  framing: ", s
-  echo "raw round-trip: checked=", rawKeys.len, " bad=", roundTripBad
-  echo "raw ordering: checked=", rawKeys.len, " bad=", orderBad
+  echo "raw round-trip: checked=", rep.checked, " bad=", rep.roundTripBad
+  echo "raw ordering: checked=", rep.checked, " bad=", rep.orderBad
 
   g.close()
   echo "db_audit done"

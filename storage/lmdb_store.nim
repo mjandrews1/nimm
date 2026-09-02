@@ -833,23 +833,49 @@ proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
 
-proc sampleRawKeys*(store: var LmdbStore, maxKeys: int): seq[string] =
-  ## Return up to `maxKeys` raw (encoded) keys, in byte order, for auditing.
-  ## Intended for read-only invariant probes over the live DB (#464).
+type RawAuditReport* = object
+  checked*: int
+  framingBad*: int
+  roundTripBad*: int
+  orderBad*: int
+  framingSamples*: seq[string]            # up to 5 framing-error samples
+
+proc auditScan*(store: var LmdbStore, maxKeys: int = -1,
+                progressEvery: int = 0): RawAuditReport =
+  ## Stream every raw key (up to `maxKeys`; -1 = all) checking three invariants
+  ## against the live DB, without materializing keys (#464):
+  ##   framing   — validateFraming (strict well-formedness)
+  ##   round-trip — encodeKey(decodeKey(k)) == k
+  ##   ordering  — byte order strictly monotone (M-collation preserved)
+  ## When `progressEvery` > 0, writes progress to stderr every N keys.
   let readTxn = store.getReadTxn()
-  if readTxn == nil: return @[]
+  if readTxn == nil: return result
   var cursor: LMDBCursor
   var rc = cursorOpen(readTxn, store.dbi, addr cursor)
   if rc != SUCCESS:
     store.abortIfNotBatch(readTxn)
-    return @[]
+    return result
   var mdbKey: Val
   var mdbVal: Val
   rc = cursorGet(cursor, addr mdbKey, addr mdbVal, FIRST)
-  while rc == SUCCESS and result.len < maxKeys:
+  var prev = ""
+  while rc == SUCCESS and (maxKeys < 0 or result.checked < maxKeys):
     let key = newString(mdbKey.mvSize)
     copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
-    result.add(key)
+    let ferr = validateFraming(key)
+    if ferr.len > 0:
+      inc result.framingBad
+      if result.framingSamples.len < 5:
+        result.framingSamples.add(ferr)
+    let (gname, subs) = decodeKey(key)
+    if encodeKey(gname, subs) != key:
+      inc result.roundTripBad
+    if prev.len > 0 and prev >= key:
+      inc result.orderBad
+    prev = key
+    inc result.checked
+    if progressEvery > 0 and result.checked mod progressEvery == 0:
+      stderr.writeLine("  [audit] ", result.checked, " keys")
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
