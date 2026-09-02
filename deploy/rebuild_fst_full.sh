@@ -30,6 +30,10 @@ log "load MeSH descriptors (desc2026.xml -> ^MESH)"
 log "load MeSH qualifiers (qual2026.xml -> ^QUAL)"
 "$NIMM" -d "$DB" -x "ZLOADXML \"$DATA_DIR/mesh-staging/xml/qual2026.xml\",\"^QUAL\",\"qualifier\"" >> "$LOG" 2>&1
 
+# 1b. MeSH Supplementary Concept Records (supp2026 -> ^SUPP, MESH->SUPP links)
+log "load MeSH Supplementary Concept Records (supp2026 -> ^SUPP)"
+"$NIMM" -d "$DB" -x "ZLOADXML \"$DATA_DIR/mesh-staging/xml/supp2026\",\"^SUPP\",\"scr\"" >> "$LOG" 2>&1
+
 # 2. CatLine (all catplus files)
 log "load CatLine"
 for f in "$DATA_DIR"/nlm-staging/catplus-marcxml/catplus*.marcxml.xml; do

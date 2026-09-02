@@ -325,3 +325,10 @@ query_semantics.dfy|ScanAllPreservesOrder|test|tests/test_ni_sql.nim
 query_semantics.dfy|TakeIsPrefix|test|tests/test_ni_sql.nim
 query_semantics.dfy|TakeBounded|test|tests/test_ni_sql.nim
 query_semantics.dfy|PointLookupCount|test|tests/test_ni_sql.nim
+supp_concepts.dfy|StripStarIdempotent|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|BareDui|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|MappedSound|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|LinkBothPreserves|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|UnlinkBothPreserves|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|LinkBothIdempotent|test|tests/test_supp_concepts.nim
+supp_concepts.dfy|QueryDuality|test|tests/test_supp_concepts.nim

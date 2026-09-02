@@ -1,6 +1,6 @@
 # xmlload.nim — Shared XML loading for ZLOADXML
 # Single implementation used by both AST engine and bytecode VM.
-# Formats: mesh, qualifier (mesh-qualifier), catline (marc), pubmed
+# Formats: mesh, qualifier (mesh-qualifier), catline (marc), pubmed, scr
 # Supports plain and .gz inputs (gunzip via pipe; no new library deps).
 
 import strutils
@@ -79,6 +79,22 @@ proc tagAttr*(s: string, tagStart: string, attr: string): string =
   let e = rest.find('"')
   if e < 0: return ""
   return rest[0 ..< e]
+
+proc attrLoose*(s: string, attr: string): string =
+  ## Attribute value for `attr` within a single opening tag, tolerant of
+  ## whitespace around '=' (e.g. `SCRClass = "1"`). Returns "" when absent.
+  let i = s.find(attr)
+  if i < 0: return ""
+  var j = i + attr.len
+  while j < s.len and s[j] != '=' and s[j] != '>' and s[j] != '"':
+    inc j
+  if j >= s.len or s[j] != '=': return ""
+  inc j
+  while j < s.len and (s[j] == ' ' or s[j] == '\t'): inc j
+  if j >= s.len or s[j] != '"': return ""
+  let e = s.find('"', j + 1)
+  if e < 0: return ""
+  return s[j + 1 ..< e]
 
 type LineSource = object
   file: File
@@ -270,6 +286,58 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
           if abbrev.len > 0:
             g.set(globalName, @[ui, "abbreviation"], abbrev)
           inc count; flushBatch()
+        buffer = ""
+
+  of "scr", "supplemental", "mesh-scr":
+    # MeSH Supplementary Concept Records (supp2026). Each SupplementalRecord is
+    # a chemical/drug/protocol concept (SCRUI) that maps to one or more MeSH
+    # descriptors via HeadingMappedTo (the canonical SCR->descriptor join), and
+    # optionally has pharmacological-action descriptors. Links follow the #459
+    # MeSH-outbound hub: ^LINK("MESH", dui, "SUPP", scrui) = "supplemental", with
+    # the per-record reverse subscript ^SUPP(scrui,"mesh",dui)="1".
+    for line in src.sourceLines:
+      buffer.add(line); buffer.add("\n")
+      if "</SupplementalRecord>" in buffer:
+        let scrui = extractBetween(buffer, "<SupplementalRecordUI>", "</SupplementalRecordUI>")
+        if scrui.len > 0:
+          let nameBlk = extractBetween(buffer, "<SupplementalRecordName>", "</SupplementalRecordName>")
+          let name = extractBetween(nameBlk, "<String>", "</String>")
+          if name.len > 0:
+            g.set(globalName, @[scrui, "name"], name)
+            let tagStart = buffer.find("<SupplementalRecord ")
+            let tagEnd = buffer.find(">", tagStart)
+            if tagStart >= 0 and tagEnd >= 0:
+              let scrClass = attrLoose(buffer[tagStart .. tagEnd], "SCRClass")
+              if scrClass.len > 0:
+                g.set(globalName, @[scrui, "class"], scrClass)
+            let note = extractBetween(buffer, "<Note>", "</Note>")
+            if note.len > 0:
+              g.set(globalName, @[scrui, "note"], note)
+            let frequency = extractBetween(buffer, "<Frequency>", "</Frequency>")
+            if frequency.len > 0:
+              g.set(globalName, @[scrui, "frequency"], frequency)
+            for rn in extractAll(buffer, "<RegistryNumber>", "</RegistryNumber>"):
+              if rn.len > 0:
+                g.set(globalName, @[scrui, "regnum", rn], "1")
+            for cui in extractAll(buffer, "<ConceptUI>", "</ConceptUI>"):
+              if cui.len > 0:
+                g.set(globalName, @[scrui, "concept", cui], "1")
+            # heading-mapped descriptors (SCR -> descriptor)
+            let headingBlk = findBlock(buffer, "<HeadingMappedToList>",
+                                       "</HeadingMappedToList>", "")
+            for raw in extractAll(headingBlk, "<DescriptorUI>", "</DescriptorUI>"):
+              let dui = if raw.len > 0 and raw[0] == '*': raw[1 ..^ 1] else: raw
+              if dui.len > 0:
+                g.set(globalName, @[scrui, "mesh", dui], "1")
+                g.set("^LINK", @["MESH", dui, globalName[1 ..^ 1], scrui], "supplemental")
+            # pharmacological-action descriptors (per-record field only)
+            let pharmBlk = findBlock(buffer, "<PharmacologicalActionList>",
+                                     "</PharmacologicalActionList>", "")
+            for raw in extractAll(pharmBlk, "<DescriptorUI>", "</DescriptorUI>"):
+              let dui = if raw.len > 0 and raw[0] == '*': raw[1 ..^ 1] else: raw
+              if dui.len > 0:
+                g.set(globalName, @[scrui, "pharmaction", dui], "1")
+            inc count; flushBatch()
         buffer = ""
 
   of "catline", "marc":

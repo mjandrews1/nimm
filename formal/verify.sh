@@ -42,6 +42,7 @@ dafny verify search_engine.dfy
 dafny verify special_vars.dfy
 dafny verify string_functions.dfy
 dafny verify subscript_bisim.dfy
+dafny verify supp_concepts.dfy
 dafny verify value_format.dfy
 dafny verify vm_opcodes.dfy
 echo "formal models verified."
