@@ -67,7 +67,12 @@ log "build BM25 SERLINE"
 log "build BM25 PUBMED"
 "$BUILD_BM25" "$DB" PUBMED "^PUBMED" "title^abstract^journal" >> "$LOG" 2>&1
 
-# 5. Summary
+# 5. Consistency audit (read-only; framing/round-trip/ordering + LINK/df probes, #464)
+log "run db_audit"
+DB_AUDIT=./bin/db_audit
+"$DB_AUDIT" "$DB" 2000 500 -1 10000000 >> "$LOG" 2>&1 || log "  db_audit reported violations (see log)"
+
+# 6. Summary
 log "=== FULL FST REBUILD DONE ==="
 log "--- index summary ---"
 "$NIMM" -d "$DB" -x "W ^BM25META(\"MESH\",\"N\"),\" mesh / \",^BM25META(\"CATLINE\",\"N\"),\" catline / \",^BM25META(\"SERLINE\",\"N\"),\" serline / \",^BM25META(\"PUBMED\",\"N\"),\" pubmed\"" >> "$LOG" 2>&1
