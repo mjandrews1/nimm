@@ -28,15 +28,12 @@ pull). GitLab is deprecated.
 
 | # | Issue | Language (primary) |
 |---|-------|--------------------|
-| #465 | `^LINK`: CATLINE→SERLINE `serial` (ISSN join) | Nim (loader) |
-| #466 | `^LINK`: PUBMED→SERLINE `journal` (NlmUniqueID join) | Nim (loader) |
-| #460 | Dafny modeling gaps | Dafny + Nim mirrors |
-| #461 | NOSYNC/SYNC durability split | Nim |
+| #467 | `^LINK`: PUBMED→SERLINE ISSN fallback (optional) | Nim (loader) |
 | #462 | SELECT-only SQL layer | Nim (compiler) → M or Nim (emitted) |
-| #463 | Retrieval introspection | Nim (+ M query surface) |
+| #463 | Retrieval introspection (query profiling only) | Nim |
 
-(#459 — the MeSH-outbound hub — is done; the two record-to-record links are now
-tracked as #465/#466.)
+(Completed this pass: #459 MeSH-outbound hub, #465 CATLINE→SERLINE serial,
+#466 PUBMED→SERLINE journal, #460 Dafny gaps, #461 NOSYNC measurement.)
 
 ---
 
