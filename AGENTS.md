@@ -18,6 +18,27 @@ gitignored.
 
 ## Code conventions
 
+### Language choices
+
+One language per role. Default to the first choice listed; the alternatives
+only apply where explicitly noted.
+
+| Role | Language | Why |
+|---|---|---|
+| Core algorithms, storage, compiler, perf-critical code, runtime tests | **Nim** | typed, fast, colocated with `globals.nim`/`lmdb_store.nim`; the runtime-test mirrors of Dafny lemmas are Nim |
+| Formal spec | **Dafny** | each `formal/*.dfy` model + `contracts.tsv` row; every non-`support` lemma has a Nim mirror |
+| Declarative data traversal + the query surface | **M (NimM)** | `$ORDER`/`$QUERY`/`$DATA` are the data model's native traversal; use for `ZVERIFY`-style introspection and query entry points, not algorithms |
+| Orchestration / ETL / glue | **bash** | portable across macOS + Linux; `set -euo pipefail`; **not zsh** (bash is the more consistent common denominator for non-interactive scripts) |
+| Interactive shell use | zsh if you like | orthogonal to repo scripts; keep it out of committed `.sh` files |
+
+Rules:
+
+- Do **not** implement algorithms (parsers, planners, hashing, scoring inner
+  loops) in M — that is Nim's job. M is the interface, not the engine.
+- Do **not** write new committed shell scripts in zsh; target `#!/bin/bash`.
+- Every Dafny lemma that isn't `support` kind must have a Nim mirror test
+  (`formal/contracts.tsv` enforces this via `make formal`).
+
 ### RULE: Unambiguous separators in data-structure encodings
 
 Every serialized encoding — LMDB global keys, in-memory store keys, wire or
