@@ -833,6 +833,27 @@ proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
 
+proc sampleRawKeys*(store: var LmdbStore, maxKeys: int): seq[string] =
+  ## Return up to `maxKeys` raw (encoded) keys, in byte order, for auditing.
+  ## Intended for read-only invariant probes over the live DB (#464).
+  let readTxn = store.getReadTxn()
+  if readTxn == nil: return @[]
+  var cursor: LMDBCursor
+  var rc = cursorOpen(readTxn, store.dbi, addr cursor)
+  if rc != SUCCESS:
+    store.abortIfNotBatch(readTxn)
+    return @[]
+  var mdbKey: Val
+  var mdbVal: Val
+  rc = cursorGet(cursor, addr mdbKey, addr mdbVal, FIRST)
+  while rc == SUCCESS and result.len < maxKeys:
+    let key = newString(mdbKey.mvSize)
+    copyMem(addr key[0], mdbKey.mvData, mdbKey.mvSize)
+    result.add(key)
+    rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
+  cursorClose(cursor)
+  store.abortIfNotBatch(readTxn)
+
 # --- Integrity verification (#366) ---
 
 type VerifyReport* = object

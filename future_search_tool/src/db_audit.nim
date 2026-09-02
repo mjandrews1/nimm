@@ -3,18 +3,20 @@
 # Sampled checks of invariants the Dafny models prove, run against the actual
 # artifact. Opens the DB read-only (never blocks a writer).
 #
-#   Probe 1: ^LINK forward↔reverse symmetry. Every MeSH-outbound link
-#            ^LINK("MESH",dui,type,id) must have the matching per-record
-#            subscript ^TYPE(id,"mesh",dui)="1" (link_consistency.dfy).
-#   Probe 2: ^BM25DF(term,src) must equal the distinct-doc count of
-#            ^BM25(term,src,*) (search_engine.dfy df-vs-tf).
+#   Probe 1: ^LINK forward↔reverse symmetry (link_consistency.dfy).
+#   Probe 2: ^BM25DF == distinct-doc count (search_engine.dfy df-vs-tf).
+#   Probe 3: raw-key framing well-formedness (#356 anti-pattern).
+#   Probe 4: raw-key round-trip decode∘encode == id (key_encoding.dfy).
+#   Probe 5: raw-key byte-order monotonicity (M-collation preserved).
 #
 # Usage: nim c -d:release --path:. -o:bin/db_audit future_search_tool/src/db_audit.nim
-#        ./bin/db_audit <db_path> [link_sample] [df_sample]
+#        ./bin/db_audit <db_path> [link_sample] [df_sample] [raw_sample]
 
 import os
 import strutils
 import ../../globals
+import ../../storage/lmdb_store
+import ../../storage/key_encoding
 
 proc parseIntOr(s: string, def: int): int =
   try: parseInt(s) except: def
@@ -22,10 +24,11 @@ proc parseIntOr(s: string, def: int): int =
 proc main() =
   let p = commandLineParams()
   if p.len < 1:
-    echo "usage: db_audit <db> [link_sample] [df_sample]"
+    echo "usage: db_audit <db> [link_sample] [df_sample] [raw_sample]"
     quit(1)
   let linkSample = if p.len > 1: parseInt(p[1]) else: 2000
   let dfSample = if p.len > 2: parseInt(p[2]) else: 500
+  let rawSample = if p.len > 3: parseInt(p[3]) else: 100000
 
   var g = newGlobals(p[0], readOnly = true)
 
@@ -71,6 +74,31 @@ proc main() =
       inc dfChecked
     term = g.order("^BM25DF", @[term], forward = true)
   echo "BM25DF==doccount: checked=", dfChecked, " mismatches=", dfMis
+
+  # --- Probes 3-5: raw-key framing / round-trip / ordering ---
+  let rawKeys = g.globals.sampleRawKeys(rawSample)
+  var framingBad = 0
+  var roundTripBad = 0
+  var orderBad = 0
+  var framingSamples: seq[string] = @[]
+  var prev: string = ""
+  for k in rawKeys:
+    let framingErr = validateFraming(k)
+    if framingErr.len > 0:
+      inc framingBad
+      if framingSamples.len < 5:
+        framingSamples.add(framingErr)
+    let (gname, subs) = decodeKey(k)
+    if encodeKey(gname, subs) != k:
+      inc roundTripBad
+    if prev.len > 0 and prev >= k:
+      inc orderBad
+    prev = k
+  echo "raw framing: checked=", rawKeys.len, " bad=", framingBad
+  for s in framingSamples:
+    echo "  framing: ", s
+  echo "raw round-trip: checked=", rawKeys.len, " bad=", roundTripBad
+  echo "raw ordering: checked=", rawKeys.len, " bad=", orderBad
 
   g.close()
   echo "db_audit done"

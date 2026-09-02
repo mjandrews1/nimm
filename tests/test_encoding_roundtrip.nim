@@ -83,6 +83,17 @@ proc main() =
     "small number must sort before large int (string)"
   echo "✓ mCollationCmp consistent with encoding"
 
+  # Framing well-formedness: validateFraming rejects every malformed form.
+  assert validateFraming("^X\x00") == ""
+  assert validateFraming("^X\x00\x00") == ""
+  assert validateFraming("^X\x00\x02abc\x00") == ""
+  assert validateFraming("") == "empty key"
+  assert validateFraming("^X") == "no global terminator"
+  assert validateFraming("^X\x00\x03") != ""
+  assert validateFraming("^X\x00\x01") != ""
+  assert validateFraming("^X\x00\x02abc") != ""
+  echo "✓ validateFraming rejects malformed keys"
+
   echo ""
   echo "All tests passed!"
 

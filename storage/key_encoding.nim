@@ -219,6 +219,42 @@ func decodeKey*(key: string): (string, seq[string]) =
   
   result = (globalName, parts)
 
+func validateFraming*(key: string): string =
+  ## Strict well-formedness check of an encoded key. Returns "" when valid, or
+  ## a short reason when the framing is malformed (truncated type byte, numeric
+  ## field too short, unterminated string, garbage after a type byte). Unlike
+  ## decodeKey, which silently stops on bad input, this rejects every malformed
+  ## form so an audit can flag it (#464, #356 anti-pattern).
+  if key.len == 0: return "empty key"
+  var i = 0
+  # Global name: non-empty, up to the first \x00.
+  while i < key.len and key[i] != '\x00':
+    i += 1
+  if i == 0: return "empty global name"
+  if i >= key.len: return "no global terminator"
+  i += 1  # skip the \x00 after the global name
+  # Subscripts: type byte + payload, until the key is exhausted.
+  while i < key.len:
+    let typeByte = key[i]
+    i += 1
+    case typeByte
+    of '\x00':
+      discard  # empty string subscript (0 payload bytes)
+    of '\x01':
+      # number: sign byte + 18 digits = 19 bytes
+      if i + 19 > key.len: return "truncated numeric field"
+      i += 19
+    of '\x02':
+      # string: bytes until the next \x00 terminator
+      var j = i
+      while j < key.len and key[j] != '\x00':
+        j += 1
+      if j >= key.len: return "unterminated string"
+      i = j + 1  # skip terminator
+    else:
+      return "bad type byte " & $ord(typeByte)
+  return ""
+
 func mCollationCmp*(a, b: string): int =
   ## M-collation comparison: numeric before string
   ## Empty string sorts first
