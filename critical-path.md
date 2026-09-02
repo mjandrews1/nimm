@@ -28,11 +28,15 @@ pull). GitLab is deprecated.
 
 | # | Issue | Language (primary) |
 |---|-------|--------------------|
-| #459 | `^LINK`: record-to-record links (journal/serial) | Nim (loader) |
+| #465 | `^LINK`: CATLINE→SERLINE `serial` (ISSN join) | Nim (loader) |
+| #466 | `^LINK`: PUBMED→SERLINE `journal` (NlmUniqueID join) | Nim (loader) |
 | #460 | Dafny modeling gaps | Dafny + Nim mirrors |
 | #461 | NOSYNC/SYNC durability split | Nim |
 | #462 | SELECT-only SQL layer | Nim (compiler) → M or Nim (emitted) |
 | #463 | Retrieval introspection | Nim (+ M query surface) |
+
+(#459 — the MeSH-outbound hub — is done; the two record-to-record links are now
+tracked as #465/#466.)
 
 ---
 
@@ -82,8 +86,10 @@ duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistenc
 
 - [x] **PubMed re-load + stale cleanup** — done (commit 3983fc5 era); all four
       sources now use the MeSH-outbound scheme and verified via db_audit.
-- [ ] **PUBMED→CatLine `journal`** — needs title→NLMID resolution.
-- [ ] **CATLINE→SERLINE `serial`** — needs NLMID→NLMID resolution.
+- [ ] **#466 PUBMED→SERLINE `journal`** — join on `NlmUniqueID` (PubMed supplies
+      it; literature confirms NLM links citations to journal serials by id, not
+      title). Loader must extract `<NlmUniqueID>` from `<MedlineJournalInfo>`.
+- [ ] **#465 CATLINE→SERLINE `serial`** — join on `issn` (`022 $a`), not NLMID.
 
 ### Dafny modeling gaps (#460)
 
