@@ -28,7 +28,7 @@ pull). GitLab is deprecated.
 
 | # | Issue | Language (primary) |
 |---|-------|--------------------|
-| #459 | `^LINK`: PubMed re-load + record-to-record links | bash (orchestration) + Nim (loader) |
+| #459 | `^LINK`: record-to-record links (journal/serial) | Nim (loader) |
 | #460 | Dafny modeling gaps | Dafny + Nim mirrors |
 | #461 | NOSYNC/SYNC durability split | Nim |
 | #462 | SELECT-only SQL layer | Nim (compiler) → M or Nim (emitted) |
@@ -78,12 +78,10 @@ duality (bi-directional storage unnecessary). Mirror `tests/test_link_consistenc
 - [x] Load high-water mark: `^FST("load",file)` advances `in-progress:N` per flush
       (commit 0aa8662), landing on `complete:N` — O(1) load observability.
 
-### Remaining (record-to-record links + PubMed re-load)
+### Remaining (record-to-record links)
 
-- [ ] **PubMed re-load + stale cleanup** — CatLine/SerLine were re-loaded, but
-      PubMed still has old-direction `^LINK("PUBMED",…)` and `"meshUI"` subscripts
-      (and no MESH→PUBMED links). Needs a PubMed re-load plus clearing the stale
-      `^LINK("PUBMED")` subtree and `^PUBMED(*,"meshUI",*)` subscripts.
+- [x] **PubMed re-load + stale cleanup** — done (commit 3983fc5 era); all four
+      sources now use the MeSH-outbound scheme and verified via db_audit.
 - [ ] **PUBMED→CatLine `journal`** — needs title→NLMID resolution.
 - [ ] **CATLINE→SERLINE `serial`** — needs NLMID→NLMID resolution.
 
@@ -98,6 +96,12 @@ Three source modules touched this session have no Dafny model:
    the concrete preference rule (exact "1" → unique synonym "0") is unproven.
 3. **`storage/lmdb_store.nim` read-only path** — reader-never-blocks-writer, write
    raises, write-txn read-back (#359/#368).
+
+### Other open items
+
+- **#461** NOSYNC-for-build / SYNC-for-serve durability split (experiment).
+- **#462** SELECT-only SQL layer over M globals (experiment).
+- **#463** Retrieval introspection (search-explain, raw-key view, query profiling).
 
 ### Data blockers (verify before implementing)
 
