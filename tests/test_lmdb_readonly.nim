@@ -23,7 +23,12 @@ proc main() =
   assert r.get("^X", @["a"]) == "1", "read-only get a"
   assert r.get("^X", @["b"]) == "2", "read-only get b"
   assert r.order("^X", @[], forward = true) == "a", "read-only order"
+  # Views agree: read-only and read-write see the same committed value.
+  assert r.get("^X", @["a"]) == "1", "views agree on committed (rw wrote 1)"
+  # Absent key yields the empty default.
+  assert r.get("^X", @["absent"]) == "", "absent key -> empty default"
   r.close()
+  w.close()
 
   echo "  read-only open: reads OK"
 

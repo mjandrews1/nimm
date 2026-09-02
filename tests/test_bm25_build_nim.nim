@@ -58,6 +58,14 @@ proc main() =
   assert g.get("^BM25DF", @["hypertension", "MESH"]) == "2", "df unchanged on re-run"
   assert g.get("^BM25PROG", @["MESH", "committed"]) == "2", "high-water mark on re-run"
 
+  # --- df-batching == from-scratch recompute (#460 build_index.dfy) ---
+  # The batched dfDelta accumulation must equal a fresh per-term recompute: for
+  # "hypertension", df is the count of docs whose tokenization contains it.
+  assert g.get("^BM25DF", @["hypertension", "MESH"]) == "2",
+    "df batching must equal recompute (hypertension in D1+D2)"
+  assert g.get("^BM25DF", @["kidney", "MESH"]) == "1",
+    "df batching must equal recompute (kidney in D2 only)"
+
   # --- scoreGlobal agrees with the freshly built index ---
   assert g.scoreGlobal("MESH", "D1", "hypertension") > 0.0
 

@@ -114,6 +114,14 @@ proc main() =
   assert resolveName(g, "Cardiac") == "", "resolve Cardiac (ambiguous)"
   assert resolveName(g, "Not a heading") == "", "resolve absent name"
 
+  # Preference rule (#460 link_consistency.dfy ExactPreferred): a name that is
+  # an exact match for one descriptor AND a synonym of another must resolve to
+  # the exact match (MARC headings use the preferred name).
+  var g2 = newGlobals("")
+  g2.set("^MESHTERM", @["diabetes", "D0001"], "1")   # exact
+  g2.set("^MESHTERM", @["diabetes", "D0002"], "0")   # synonym of another
+  assert resolveName(g2, "Diabetes") == "D0001", "exact preferred over synonym"
+
   echo "  forward/reverse consistency, dedup, soundness, duality, loader helpers all hold"
   echo "link_consistency mirror test passed!"
 

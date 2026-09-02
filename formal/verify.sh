@@ -16,8 +16,10 @@ dafny verify key_encoding.dfy numeric_encoding.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy data_tristate.dfy
 dafny verify numeric_prefix.dfy functions_more.dfy
+dafny verify readonly_path.dfy
 # Standalone models, alphabetically sorted (progress indicator).
 dafny verify bm25.dfy
+dafny verify build_index.dfy
 dafny verify bytecode_bisim.dfy
 dafny verify bytecode_stack.dfy
 dafny verify collation.dfy

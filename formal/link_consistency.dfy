@@ -77,36 +77,98 @@ module LinkConsistency {
 
   datatype Option<T> = None | Some(value: T)
 
-  // The ^MESHTERM dictionary maps a MeSH-heading *name* to at most one
-  // descriptor UI. Names not in the dictionary resolve to None.
-  function resolve(name: string): Option<DUI>
+  // The ^MESHTERM dictionary: (name, ui, kind) where kind is "1" (exact
+  // descriptor name) or "0" (entry-term synonym). Multiple uis may share a
+  // name (a synonym of several descriptors).
+  type Dict = set<(string, DUI, string)>
 
-  // A "known" descriptor is one that some heading name resolves to.
-  ghost predicate Known(dui: DUI)
+  // Exact-name matches for `name`.
+  function Exacts(dict: Dict, name: string): set<DUI>
   {
-    exists n :: resolve(n) == Some(dui)
+    set p | p in dict && p.0 == name && p.2 == "1" :: p.1
   }
 
-  // Build the links for one record from its list of MeSH-heading names:
-  // only names that actually resolve to a descriptor UI produce a link.
-  function BuildLinks(t: Target, id: RecId, names: seq<string>): set<Link>
+  // Synonym matches for `name`.
+  function Syns(dict: Dict, name: string): set<DUI>
+  {
+    set p | p in dict && p.0 == name && p.2 == "0" :: p.1
+  }
+
+  // Concrete resolveName (xmlload.nim): prefer the unique exact-name match;
+  // otherwise the unique synonym; otherwise None. This is the preference rule
+  // the opaque `resolve` above abstracted away. Ghost: models the rule.
+  ghost function resolveConcrete(dict: Dict, name: string): Option<DUI>
+  {
+    if |Exacts(dict, name)| == 1 then
+      var u :| u in Exacts(dict, name);
+      Some(u)
+    else if |Syns(dict, name)| == 1 then
+      var u :| u in Syns(dict, name);
+      Some(u)
+    else
+      None
+  }
+
+  // A "known" descriptor is one that appears in the dictionary under some name.
+
+  // The exact-name match wins when unique, even if the name is also a synonym
+  // of other descriptors (MARC ind2="2" headings use the preferred name).
+  lemma ExactPreferred(dict: Dict, name: string, e: DUI)
+    requires Exacts(dict, name) == {e}
+    ensures resolveConcrete(dict, name) == Some(e)
+  {
+  }
+
+  // When there is no exact match and exactly one synonym, that synonym wins.
+  lemma SynonymFallback(dict: Dict, name: string, s: DUI)
+    requires Exacts(dict, name) == {}
+    requires Syns(dict, name) == {s}
+    ensures resolveConcrete(dict, name) == Some(s)
+  {
+  }
+
+  // Ambiguous (multiple exacts, or multiple synonyms with no exact) → None.
+  lemma AmbiguousResolvesNone(dict: Dict, name: string)
+    requires |Exacts(dict, name)| != 1
+    requires |Syns(dict, name)| != 1
+    ensures resolveConcrete(dict, name) == None
+  {
+  }
+
+  // Soundness: a concrete resolution only ever names a descriptor present in
+  // the dictionary — no dangling link.
+  lemma ConcreteResolveKnown(dict: Dict, name: string, dui: DUI)
+    requires resolveConcrete(dict, name) == Some(dui)
+    ensures (name, dui, "1") in dict || (name, dui, "0") in dict
+  {
+    if |Exacts(dict, name)| == 1 {
+      assert dui in Exacts(dict, name);
+    } else if |Syns(dict, name)| == 1 {
+      assert dui in Syns(dict, name);
+    }
+  }
+
+  ghost function BuildLinksConcrete(dict: Dict, t: Target, id: RecId, names: seq<string>): set<Link>
     decreases |names|
   {
     if |names| == 0 then {}
     else
-      (if resolve(names[0]).Some? then {Link(resolve(names[0]).value, t, id)} else {})
-      + BuildLinks(t, id, names[1..])
+      (if resolveConcrete(dict, names[0]).Some?
+         then {Link(resolveConcrete(dict, names[0]).value, t, id)} else {})
+      + BuildLinksConcrete(dict, t, id, names[1..])
   }
 
-  // Soundness: every link built by name resolution references a known
-  // descriptor — no dangling link to a non-existent UI.
-  lemma BuildLinksKnownOnly(t: Target, id: RecId, names: seq<string>)
-    ensures forall l | l in BuildLinks(t, id, names) :: Known(l.dui)
+  // Soundness (concrete): every link built by the concrete resolver references
+  // a descriptor present in the dictionary.
+  lemma BuildLinksConcreteKnown(dict: Dict, t: Target, id: RecId, names: seq<string>)
+    ensures forall l | l in BuildLinksConcrete(dict, t, id, names) ::
+              exists name | name in names ::
+                (name, l.dui, "1") in dict || (name, l.dui, "0") in dict
     decreases |names|
   {
     if |names| == 0 {
     } else {
-      BuildLinksKnownOnly(t, id, names[1..]);
+      BuildLinksConcreteKnown(dict, t, id, names[1..]);
     }
   }
 
