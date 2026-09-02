@@ -47,6 +47,7 @@ tests/test_bm25_build_nim
 tests/run_data_structure_tests
 tests/test_lmdb_readonly
 tests/test_link_consistency
+tests/test_ni_sql
 
 # LMDB database files
 *.mdb

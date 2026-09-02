@@ -19,6 +19,7 @@ import data_structures
 import runtime
 import parser
 import future_search_tool/src/global_bm25
+import future_search_tool/src/sql_select
 import inspector
 import special_vars
 
@@ -1219,6 +1220,15 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       ev.globals[].resetCursorSteps()
       return "reset"
     return $ev.globals[].cursorSteps()
+  of "NI_SQL":
+    # $NI_SQL("SELECT ...") — SELECT-only query over the globals (#462, M1).
+    # Returns rows as TSV lines. SQL literal quoting uses single quotes; the
+    # whole statement is a single double-quoted M string argument.
+    if args.len < 1: return ""
+    try:
+      return niSql(ev.globals[], args[0])
+    except SqlError as e:
+      return "NI_SQL error: " & e.msg
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

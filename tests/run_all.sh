@@ -30,6 +30,7 @@ SHELL_SUITES=(
     test_mcp_introspection
     test_mode_gates
     test_ni_search
+    test_ni_sql
     test_ni_structures
     test_ni_system
     test_order_lmdb

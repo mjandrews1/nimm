@@ -317,3 +317,11 @@ network.dfy|CloseImpliesNotConnected|test|tests/test_network_invariants.nim
 network.dfy|CloseDecreases|support|-
 network.dfy|CountIsCardinality|test|tests/test_network_invariants.nim
 network.dfy|CloseAllEmpty|test|tests/test_network_invariants.nim
+query_semantics.dfy|ScanAllSound|test|tests/test_ni_sql.nim
+query_semantics.dfy|ScanAllComplete|test|tests/test_ni_sql.nim
+query_semantics.dfy|ScanAllFromKeys|support|-
+query_semantics.dfy|HeadLtRest|support|-
+query_semantics.dfy|ScanAllPreservesOrder|test|tests/test_ni_sql.nim
+query_semantics.dfy|TakeIsPrefix|test|tests/test_ni_sql.nim
+query_semantics.dfy|TakeBounded|test|tests/test_ni_sql.nim
+query_semantics.dfy|PointLookupCount|test|tests/test_ni_sql.nim
