@@ -1213,6 +1213,12 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
     let docId = args[1]
     let query = args[2]
     return explainGlobal(ev.globals[], src, docId, query)
+  of "NI_PROFILE":
+    # $NI_PROFILE() — cursor steps since last reset; $NI_PROFILE("reset") resets.
+    if args.len > 0 and args[0].toLowerAscii == "reset":
+      ev.globals[].resetCursorSteps()
+      return "reset"
+    return $ev.globals[].cursorSteps()
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

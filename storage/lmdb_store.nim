@@ -22,6 +22,7 @@ type
     writeTxnActive*: bool # True when cached write transaction is active
     readOnly*: bool     # True when opened with MDB_RDONLY (reader process)
     nosync*: bool       # True when opened with MDB_NOSYNC (disposable workload)
+    cursorSteps*: int   # cumulative NEXT/PREV cursor advances since last reset (#463)
 
 proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
            readOnly = false, nosync = false) =
@@ -101,6 +102,10 @@ proc close*(store: var LmdbStore) =
     dbiClose(store.env, store.lockDbi)
     envClose(store.env)
     store.env = nil
+
+proc resetCursorSteps*(store: var LmdbStore) =
+  ## Reset the cursor-step counter (#463).
+  store.cursorSteps = 0
 
 # --- Cross-process LOCK operations (#307) ---
 
@@ -635,6 +640,7 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       else:       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
       if rc != SUCCESS:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+      inc store.cursorSteps
     examine = false
     
     var (gname, ksubs) = decodeCur()
@@ -679,6 +685,7 @@ proc order*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       else:       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, PREV)
       if rc != SUCCESS:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
+      inc store.cursorSteps
       (gname, ksubs) = decodeCur()
       if gname != global:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return ""
@@ -727,6 +734,7 @@ proc query*(store: var LmdbStore, global: string, subs: seq[string] = @[], forwa
       rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
       if rc != SUCCESS:
         cursorClose(cursor); store.abortIfNotBatch(readTxn); return @[]
+      inc store.cursorSteps
   else:
     # Backward: step to the node strictly before the reference. If the
     # reference is past the last node, the predecessor is simply LAST.
@@ -801,7 +809,8 @@ proc listSubs*(store: var LmdbStore, global: string, subs: seq[string] = @[]): s
         res.add(decoded[1])
     
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
-  
+    inc store.cursorSteps
+   
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
   return res
@@ -835,7 +844,8 @@ proc listKeys*(store: var LmdbStore, prefix: string = ""): seq[string] =
       break
     result.add(decodeKey(key)[0])
     rc = cursorGet(cursor, addr mdbKey, addr mdbVal, NEXT)
-  
+    inc store.cursorSteps
+   
   cursorClose(cursor)
   store.abortIfNotBatch(readTxn)
 

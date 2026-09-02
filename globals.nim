@@ -332,6 +332,17 @@ proc writeTxnActive*(g: Globals): bool =
     return g.globals.writeTxnActive
   return false
 
+proc resetCursorSteps*(g: var Globals) =
+  ## Reset the cursor-step counter (#463).
+  if g.dbPath.len > 0:
+    g.globals.resetCursorSteps()
+
+proc cursorSteps*(g: Globals): int =
+  ## Cursor advances (NEXT/PREV) since last reset (#463).
+  if g.dbPath.len > 0:
+    return g.globals.cursorSteps
+  return 0
+
 # --- Cross-process LOCK via LMDB globals (#307) ---
 
 proc lockGlobalKey(name: string): seq[string] =
