@@ -80,3 +80,5 @@ DB_AUDIT=./bin/db_audit
 log "=== FULL FST REBUILD DONE ==="
 log "--- index summary ---"
 "$NIMM" -d "$DB" -x "W ^BM25META(\"MESH\",\"N\"),\" mesh / \",^BM25META(\"CATLINE\",\"N\"),\" catline / \",^BM25META(\"SERLINE\",\"N\"),\" serline / \",^BM25META(\"PUBMED\",\"N\"),\" pubmed\"" >> "$LOG" 2>&1
+log "--- supplementary concept records ---"
+"$NIMM" -d "$DB" -x "W \" supp records: \",$G(^FST(\"load\",\"supp2026\"))" >> "$LOG" 2>&1
