@@ -52,6 +52,7 @@ tests/test_orangebook
 tests/test_reference_loaders
 tests/test_reporter_link
 tests/test_boolean_search
+tests/test_boolean_engine
 tests/test_phrase_search
 tests/test_supp_concepts
 

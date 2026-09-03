@@ -189,6 +189,7 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
       inc skipped
       continue
     var tf = initCountTable[string]()
+    var positions = initTable[string, seq[int]]()  # term -> positions (^BMPOS)
     var dl = 0
     for fname in fields:
       if fname.len == 0:
@@ -197,11 +198,19 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
       for w in tokenizeDoc(txt):
         tf.inc(w)
         inc dl
+        # Continuous 1-based position across all fields of this doc (phrase
+        # adjacency is meaningful only over a single continuous space).
+        if w notin positions:
+          positions[w] = @[]
+        positions[w].add(dl)
     if dl == 0:
       continue
     for w, c in tf.pairs:
       g.set("^BM25", @[w, src, docId], $c)
       dfDelta.inc(w)
+    # Phrase positions: packed as "p1|p2|..." per (src, docId, term) (#468).
+    for w, plist in positions.pairs:
+      g.set("^BMPOS", @[src, docId, w], plist.join("|"))
     g.set("^BM25LEN", @[src, docId], $dl)
     inc written
     if written mod flushEvery == 0:

@@ -20,6 +20,7 @@ import runtime
 import parser
 import future_search_tool/src/global_bm25
 import future_search_tool/src/sql_select
+import future_search_tool/src/bool_search
 import inspector
 import special_vars
 
@@ -1229,6 +1230,26 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return niSql(ev.globals[], args[0])
     except SqlError as e:
       return "NI_SQL error: " & e.msg
+  of "NI_BOOL":
+    # $NI_BOOL(src, query[, topK]) — Boolean search over ^BM25 posting lists
+    # (#468): AND/OR/NOT, parens, and "double-quoted phrases". Returns sorted
+    # doc ids, one per line.
+    if args.len < 2: return ""
+    let src = args[0]
+    let query = args[1]
+    var topK = 0
+    if args.len > 2:
+      try: topK = parseInt(args[2]) except: topK = 0
+    try:
+      var ids = boolSearch(ev.globals[], src, query)
+      if topK > 0 and ids.len > topK:
+        ids = ids[0 ..< topK]
+      var res = ""
+      for id in ids:
+        res.add(id); res.add("\n")
+      return res
+    except BoolError as e:
+      return "NI_BOOL error: " & e.msg
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""
