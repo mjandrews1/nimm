@@ -21,6 +21,7 @@ dafny verify readonly_path.dfy
 dafny verify reference_loaders.dfy
 # Standalone models, alphabetically sorted (progress indicator).
 dafny verify bm25.dfy
+dafny verify boolean_search.dfy
 dafny verify build_index.dfy
 dafny verify bytecode_bisim.dfy
 dafny verify bytecode_stack.dfy
@@ -39,6 +40,7 @@ dafny verify m_programs.dfy
 dafny verify network.dfy
 dafny verify orangebook_link.dfy
 dafny verify pattern.dfy
+dafny verify phrase_search.dfy
 dafny verify reporter_link.dfy
 dafny verify scope_stack.dfy
 dafny verify search_engine.dfy
