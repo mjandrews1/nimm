@@ -63,6 +63,10 @@ proc main() =
   echo "--- parser/loader test ---"
   assert parseCsvLine("\"38329837\",\"P50AA022537\"") == ("38329837", "P50AA022537"),
     "basic line"
+  assert parseCsvLine("3489745,\"N01HV062923\"") == ("3489745", "N01HV062923"),
+    "unquoted first field (older files)"
+  assert parseCsvLine("3489745,\"N01HV062923\"\r") == ("3489745", "N01HV062923"),
+    "unquoted first field CRLF"
   assert parseCsvLine("\"PMID\",\"PROJECT_NUMBER\"") == ("PMID", "PROJECT_NUMBER"),
     "header line"
   assert parseCsvLine("\"40893628\",\"R01AA025936\"\r") == ("40893628", "R01AA025936"),

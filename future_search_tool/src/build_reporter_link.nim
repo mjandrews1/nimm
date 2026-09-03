@@ -23,16 +23,31 @@ import sets
 import ../../globals
 
 proc parseCsvLine*(line: string): tuple[pmid, project: string] =
-  ## Parse a '"PMID","PROJECT_NUMBER"' line into (pmid, project).
+  ## Parse a '"PMID","PROJECT_NUMBER"' line into (pmid, project). Tolerates an
+  ## unquoted first field (older ExPORTER files: `3489745,"N01HV062923"`).
   var s = line
   if s.endsWith("\r"): s = s[0 ..^ 2]
   if s.len == 0: return ("", "")
-  if s[0] == '"': s = s[1 ..^ 1]
-  if s.len > 0 and s[^1] == '"': s = s[0 ..^ 2]
-  let parts = s.split("\",\"")
-  if parts.len >= 2:
-    return (parts[0], parts[1])
-  return ("", "")
+  var first = ""
+  var second = ""
+  if s[0] == '"':
+    # quoted first field
+    let comma = s.find("\",\"")
+    if comma < 0: return ("", "")
+    first = s[1 ..< comma]
+    var rest = s[(comma + 3) ..^ 1]
+    if rest.len > 0 and rest[^1] == '"': rest = rest[0 ..^ 2]
+    second = rest
+  else:
+    # unquoted first field: everything up to the first comma
+    let comma = s.find(',')
+    if comma < 0: return ("", "")
+    first = s[0 ..< comma]
+    var rest = s[(comma + 1) ..^ 1]
+    if rest.len > 0 and rest[0] == '"': rest = rest[1 ..^ 1]
+    if rest.len > 0 and rest[^1] == '"': rest = rest[0 ..^ 2]
+    second = rest
+  return (first, second)
 
 proc main() =
   let p = commandLineParams()
