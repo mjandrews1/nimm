@@ -71,6 +71,26 @@ log "load Orange Book"
 BUILD_OB=./bin/build_orangebook
 "$BUILD_OB" "$DB" "$DATA_DIR/orangebook-staging" >> "$LOG" 2>&1
 
+# 3d. ClinicalTrials.gov (NCT -> MeSH DUI cross-link)
+log "load ClinicalTrials.gov"
+BUILD_CT=./bin/build_clinicaltrials
+"$BUILD_CT" "$DB" "$DATA_DIR/clinicaltrials-full/clinicaltrials_full.json" >> "$LOG" 2>&1
+
+# 3e. Medicare Provider Directory (standalone)
+log "load Medicare providers"
+BUILD_MCR=./bin/build_medicare
+"$BUILD_MCR" "$DB" "$DATA_DIR/medicare-staging/providers.json" >> "$LOG" 2>&1
+
+# 3f. CDC aggregates (standalone)
+log "load CDC"
+BUILD_CDC=./bin/build_cdc
+"$BUILD_CDC" "$DB" "$DATA_DIR/cdc-staging" >> "$LOG" 2>&1
+
+# 3g. FAERS adverse events (standalone)
+log "load FAERS"
+BUILD_FAERS=./bin/build_faers
+"$BUILD_FAERS" "$DB" "$DATA_DIR/faers-staging" >> "$LOG" 2>&1
+
 # 4. BM25 index build (Nim buildIndex; batched flush, #457)
 log "build BM25 MESH"
 "$BUILD_BM25" "$DB" MESH "^MESH" "name^scopeNote" >> "$LOG" 2>&1

@@ -12,6 +12,10 @@ fst-build:
 	nim c -d:release --path:. -o:bin/build_serial_link future_search_tool/src/build_serial_link.nim
 	nim c -d:release --path:. -o:bin/build_reporter_link future_search_tool/src/build_reporter_link.nim
 	nim c -d:release --path:. -o:bin/build_orangebook future_search_tool/src/build_orangebook.nim
+	nim c -d:release --path:. -o:bin/build_clinicaltrials future_search_tool/src/build_clinicaltrials.nim
+	nim c -d:release --path:. -o:bin/build_medicare future_search_tool/src/build_medicare.nim
+	nim c -d:release --path:. -o:bin/build_cdc future_search_tool/src/build_cdc.nim
+	nim c -d:release --path:. -o:bin/build_faers future_search_tool/src/build_faers.nim
 
 # Full fast test suite (rebuilds the binary, then runs all shell + .nim tests).
 test: build

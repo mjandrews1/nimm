@@ -341,3 +341,7 @@ orangebook_link.dfy|ResolveEmpty|test|tests/test_orangebook.nim
 orangebook_link.dfy|ResolveIsDeterministic|test|tests/test_orangebook.nim
 orangebook_link.dfy|LinkBothPreserves|test|tests/test_orangebook.nim
 orangebook_link.dfy|LinkBothIdempotent|test|tests/test_orangebook.nim
+reference_loaders.dfy|SetIdempotent|test|tests/test_reference_loaders.nim
+reference_loaders.dfy|SetFieldsCommute|test|tests/test_reference_loaders.nim
+reference_loaders.dfy|FoldIdempotent|test|tests/test_reference_loaders.nim
+reference_loaders.dfy|DistinctKeysStayDistinct|test|tests/test_reference_loaders.nim

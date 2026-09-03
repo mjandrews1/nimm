@@ -18,6 +18,7 @@ dafny verify key_encoding.dfy txn_overlay.dfy
 dafny verify key_encoding.dfy txn_overlay.dfy data_tristate.dfy
 dafny verify numeric_prefix.dfy functions_more.dfy
 dafny verify readonly_path.dfy
+dafny verify reference_loaders.dfy
 # Standalone models, alphabetically sorted (progress indicator).
 dafny verify bm25.dfy
 dafny verify build_index.dfy
