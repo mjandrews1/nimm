@@ -42,6 +42,7 @@ proc main() =
     var line = ""
     var first = true
     var n = 0
+    var seenCases = initHashSet[string]()
     while s.readLine(line):
       if first: first = false; continue
       let f = line.strip(leading=false, trailing=true).split('$')
@@ -52,9 +53,11 @@ proc main() =
         g.set("^FAERS", @[caseid, "drug", f[2]], f[4])   # role field 2, drugname field 4
       elif kind == "reac" and f.len > 3 and f[3].len > 0:
         g.set("^FAERS", @[caseid, "reaction", f[3]], "1")  # MedDRA PT field 3
-      g.set("^FAERS", @[caseid, "meta", "quarter"], quarter)
+      if caseid notin seenCases:
+        seenCases.incl(caseid)
+        g.set("^FAERS", @[caseid, "meta", "quarter"], quarter)
       inc n
-      if n mod 100000 == 0:
+      if n mod 20000 == 0:
         g.endWriteBatch()
         g.beginWriteBatch()
     discard uz.waitForExit(); uz.close()
