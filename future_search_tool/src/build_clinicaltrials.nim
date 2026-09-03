@@ -85,6 +85,7 @@ proc main() =
   var studyDepth = 0
   var inStudies = false
   var buf = ""
+  var line = ""
   let f = open(file)
   g.beginWriteBatch()
   while f.readLine(line):
