@@ -5,6 +5,7 @@ import tables
 import strutils
 import algorithm
 import sets
+import os
 import posix
 import storage/lmdb_store
 import storage/key_encoding
@@ -64,7 +65,7 @@ proc decodeMakeKey*(key: string): (string, seq[string]) =
   result = (parts[0], subs)
 
 proc newGlobals*(dbPath: string = "", readOnly: bool = false,
-                 nosync: bool = false): Globals =
+                 nosync: bool = false, mapSize: int64 = 0): Globals =
   result.scopes = @[initTable[string, string]()]
   result.scopeShared = @[false]
   result.dbPath = dbPath
@@ -74,7 +75,15 @@ proc newGlobals*(dbPath: string = "", readOnly: bool = false,
   result.nakedSubs = @[]
   
   if dbPath.len > 0:
-    result.globals.init(dbPath, readOnly = readOnly, nosync = nosync)
+    var ms = mapSize
+    if ms <= 0:
+      # NIMM_MAPSIZE env override so standalone helper binaries can raise the
+      # LMDB map ceiling without per-binary plumbing (#462: DB hit MDB_MAP_FULL).
+      let envVal = getEnv("NIMM_MAPSIZE")
+      if envVal.len > 0:
+        try: ms = parseInt(envVal).int64 except: ms = 0
+    result.globals.init(dbPath, readOnly = readOnly, nosync = nosync,
+                        mapSize = ms)
 
 proc close*(g: var Globals) =
   if g.dbPath.len > 0:

@@ -32,10 +32,12 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
   ## write txn (fixes the reader-blocking seen during `buildIndex`).
   ## When `nosync`, the environment is opened with MDB_NOSYNC (commit does not
   ## fsync) — use only for disposable, regenerable workloads (load/build, #461).
-  if mapSize <= 0:
-    raise newException(ValueError, "LMDB mapSize must be positive: " & $mapSize)
+  if mapSize < 0:
+    raise newException(ValueError, "LMDB mapSize must be >= 0: " & $mapSize)
+  # mapSize == 0 means "use default".
+  let effectiveMapSize = if mapSize == 0: 50_000_000_000'i64 else: mapSize
   store.path = path
-  store.mapSize = mapSize
+  store.mapSize = effectiveMapSize
   store.readOnly = readOnly
   store.nosync = nosync
   
@@ -50,7 +52,7 @@ proc init*(store: var LmdbStore, path: string, mapSize: int64 = 50_000_000_000,
     raise newException(IOError, "LMDB env_create failed: " & $rc)
   
   if not readOnly:
-    rc = envSetMapsize(store.env, cast[uint](mapSize))
+    rc = envSetMapsize(store.env, cast[uint](effectiveMapSize))
     if rc != SUCCESS:
       raise newException(IOError, "LMDB set_mapsize failed: " & $rc)
   

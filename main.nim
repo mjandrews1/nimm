@@ -56,6 +56,7 @@ type
     lintStrict: bool    # --lint-strict: exit non-zero on warnings/errors
     readOnly: bool      # --readonly: open the LMDB DB read-only
     nosync: bool        # --nosync: open LMDB with MDB_NOSYNC (disposable writes)
+    mapSize: int64      # --mapsize: LMDB map size in bytes
     parentJobNum: int  # -p: parent M job number (set by JOB command)
     argv: seq[string]  # positional script arguments ($ZARG)
 
@@ -82,6 +83,7 @@ proc parseArgs(): CliArgs =
   result.lintStrict = false
   result.readOnly = false
   result.nosync = false
+  result.mapSize = 0
   result.parentJobNum = 0
   result.argv = @[]
 
@@ -171,6 +173,13 @@ proc parseArgs(): CliArgs =
         result.readOnly = true
       of "nosync":
         result.nosync = true
+      of "mapsize":
+        if i + 1 < args.len:
+          inc i
+          try:
+            result.mapSize = parseInt(args[i]).int64
+          except:
+            discard
       of "V", "version":
         echo "nimm " & Version
         quit(0)
@@ -208,6 +217,7 @@ proc parseArgs(): CliArgs =
         echo "  --lint-strict Exit non-zero on warnings or errors (implies --lint)"
         echo "  --readonly   Open the LMDB database read-only (query without blocking a writer)"
         echo "  --nosync     Open LMDB with MDB_NOSYNC (no fsync per commit; disposable writes)"
+        echo "  --mapsize N  LMDB map size in bytes (default 50GB; raise when MDB_MAP_FULL)"
         echo "  --pemdas     Use standard math precedence (2+3*4 = 14, not 20)"
         echo "  -h/--help     Show this help"
         quit(0)
@@ -240,7 +250,11 @@ proc main() =
     mode = nimm
 
   # Initialize components
-  var g = newGlobals(args.dbPath, readOnly = args.readOnly, nosync = args.nosync)
+  var g = if args.mapSize > 0:
+    newGlobals(args.dbPath, readOnly = args.readOnly, nosync = args.nosync,
+               mapSize = args.mapSize)
+  else:
+    newGlobals(args.dbPath, readOnly = args.readOnly, nosync = args.nosync)
   g.registerAllSpecialVars()
   var rt = newRuntime(mode)
   var ev = newEvaluator(g, rt)
