@@ -72,8 +72,10 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
    first, BIORXIV→PUBMED post-publication PMID link).
 5. **#472 / #473 — Theory of Operation** — **done** (`docs/theory-of-operation-nimm.md`,
    `docs/theory-of-operation-fst.md`).
-6. **#471 — Odin experiment** — **designed** (spike scoring, decision gates; see
-   #471).
+6. **#471 — Odin experiment** — **designed** ("OdinM" = NimM side-port, "OdinFST"
+   = FST side-port; the two theory-of-operation docs are the porting contract:
+   section→module map, invariants→parity asserts keyed to `contracts.tsv`,
+   NimM's conformance output as the differential oracle).
 
 ---
 
