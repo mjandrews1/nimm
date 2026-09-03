@@ -63,7 +63,10 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
    DESC) remain. Sole *genuinely-open* engine experiment.
 2. **#468 — Boolean search** (in progress). Formal + engine + `$NI_BOOL` +
    `^BMPOS` all committed and green; `^BMPOS` backfill for PubMed is running on
-   Utility-01.
+   Utility-01. **Sub-feature (new): named result sets** — Dialog-style `S1`,
+   `S2` … set numbering (per source), referencing sets as operands (`S1 AND
+   S2`), sets stored source-scoped (e.g. `^BOOLSET(src,name,id)`), plus a
+   `bool_sets.dfy` model ("saved set == re-run result").
 3. **#470 — Data freshness**: define per-source refresh cadence (user lean:
    week/month/quarter) and a scheduler; PubMed needs its baseline re-downloaded
    to completion (99/1200 files ≈ 18%).
