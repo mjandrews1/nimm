@@ -332,3 +332,7 @@ supp_concepts.dfy|LinkBothPreserves|test|tests/test_supp_concepts.nim
 supp_concepts.dfy|UnlinkBothPreserves|test|tests/test_supp_concepts.nim
 supp_concepts.dfy|LinkBothIdempotent|test|tests/test_supp_concepts.nim
 supp_concepts.dfy|QueryDuality|test|tests/test_supp_concepts.nim
+reporter_link.dfy|LinkBothPreserves|test|tests/test_reporter_link.nim
+reporter_link.dfy|UnlinkBothPreserves|test|tests/test_reporter_link.nim
+reporter_link.dfy|LinkBothIdempotent|test|tests/test_reporter_link.nim
+reporter_link.dfy|QueryDuality|test|tests/test_reporter_link.nim

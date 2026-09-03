@@ -37,6 +37,7 @@ dafny verify lock_semantics.dfy
 dafny verify m_programs.dfy
 dafny verify network.dfy
 dafny verify pattern.dfy
+dafny verify reporter_link.dfy
 dafny verify scope_stack.dfy
 dafny verify search_engine.dfy
 dafny verify special_vars.dfy

@@ -61,6 +61,11 @@ for f in "$DATA_DIR"/pubmed-baseline/*.xml.gz; do
 done
 log "  done PubMed ($n files)"
 
+# 3b. PUBMED→REPORTER funding links (ExPORTER publications link tables)
+log "build PUBMED->REPORTER funding links"
+BUILD_REPORTER=./bin/build_reporter_link
+"$BUILD_REPORTER" "$DB" "$DATA_DIR/reporter-staging/linktables" >> "$LOG" 2>&1
+
 # 4. BM25 index build (Nim buildIndex; batched flush, #457)
 log "build BM25 MESH"
 "$BUILD_BM25" "$DB" MESH "^MESH" "name^scopeNote" >> "$LOG" 2>&1
