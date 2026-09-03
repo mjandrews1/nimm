@@ -61,24 +61,62 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
 1. **#462 — SELECT-only SQL layer** (the long-deferred experiment). M1 landed
    (single relation). M2 (nested-index JOIN over `^LINK`) and M3 (merge join +
    DESC) remain. Sole *genuinely-open* engine experiment.
-2. **#468 — Boolean search** (in progress). Formal + engine + `$NI_BOOL` +
-   `^BMPOS` all committed and green; `^BMPOS` backfill for PubMed is running on
-   Utility-01. **Sub-feature (new): named result sets** — Dialog-style `S1`,
-   `S2` … set numbering (per source), referencing sets as operands (`S1 AND
-   S2`), sets stored source-scoped (e.g. `^BOOLSET(src,name,id)`), plus a
+2. **#468 — Boolean search** — engine/phrases **done** (formal + `bool_search.nim`
+   + `$NI_BOOL` + `^BMPOS`; PubMed backfill completed, 2.97M docs in ~55 min,
+   live phrase verified). **Sub-feature (next): named result sets** — Dialog-
+   style `S1`/`S2` … set numbering (per source), sets referenced as operands
+   (`S1 AND S2`), stored source-scoped (e.g. `^BOOLSET(src,name,id)`), plus a
    `bool_sets.dfy` model ("saved set == re-run result").
-3. **#470 — Data freshness**: define per-source refresh cadence (user lean:
-   week/month/quarter) and a scheduler; PubMed needs its baseline re-downloaded
-   to completion (99/1200 files ≈ 18%).
-4. **#469 — BioArxiv** data source (stub).
+3. **#470 — Data freshness**: per-source cadence + scheduler (design below).
+4. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
+   first, BIORXIV→PUBMED post-publication PMID link).
 5. **#472 / #473 — Theory of Operation** for NimM / FST (docs).
 6. **#471 — Odin experiment** (curiosity only).
+
+---
+
+## Data freshness (#470) — design summary
+
+*Cadence is per-source, policy is a table, freshness is an observable in the
+DB.*
+
+- Ground truth markers already exist: `^FST("load",<file>)` (per-file state +
+  count), `^BM25PROG`, `^BM25META`. All loaders are idempotent on re-run.
+- **Missing piece: a timestamp.** Add `^FST("meta",<source>,<version>) = <ISO8601>`
+  written by each loader on completion, so "how fresh is X" is one `$G`.
+
+### Cadence policy (user trimers: week / month / quarter)
+
+| Source | Cadence |
+|---|---|
+| PubMed baseline, RxNorm, ClinicalTrials, BioArxiv (later) | **weekly** |
+| CDC tables, Orange Book | **monthly** |
+| FAERS, CatLine, SerLine | **quarterly** |
+| MeSH descriptors/qualifiers, MeSH SCR | **annual** |
+| RePORTER (ExPORTER) | annual + weekly snapshots |
+
+Daily/instant are explicitly out of v1 (overkill for a search corpus; NLM/CDC
+rate limits favour less-frequent).
+
+### Scheduler
+
+- `deploy/sources.tsv` manifest: `source|cadence|loaderArgs…`.
+- `deploy/refresh.sh --due-only` (bash) runs each source whose
+  `^FST("meta",…)` timestamp is stale; driven by one cron/systemd timer on
+  Utility-01.
+- **Incremental vs full:** v1 does full re-load per source (idempotent, cheap
+  for everything but PubMed); PubMed delta (update files) is a later milestone.
+
+---
+
+## Verify
 
 ### Blocked (need external input)
 
 - **RxNorm → SCR** needs a UTS API key (UNII codes live only in the licensed
   full release; the unlicensed "prescribable" release has none).
-- **PubMed baseline completion** (~1200 files; only 99 staged) — re-download.
+- **PubMed baseline completion** (#474) — download job designed, not yet run
+  (99/~1200 files staged; resumable `deploy/fetch_pubmed_baseline.sh`).
 - **Medicare full provider directory** — re-download with pagination (staged
   file holds only page 1 = 1,000 of 3.39M).
 
