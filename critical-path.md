@@ -70,8 +70,10 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
 3. **#470 — Data freshness**: per-source cadence + scheduler (design below).
 4. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
    first, BIORXIV→PUBMED post-publication PMID link).
-5. **#472 / #473 — Theory of Operation** for NimM / FST (docs).
-6. **#471 — Odin experiment** (curiosity only).
+5. **#472 / #473 — Theory of Operation** — **done** (`docs/theory-of-operation-nimm.md`,
+   `docs/theory-of-operation-fst.md`).
+6. **#471 — Odin experiment** — **designed** (spike scoring, decision gates; see
+   #471).
 
 ---
 
