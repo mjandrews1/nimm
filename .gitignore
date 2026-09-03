@@ -48,6 +48,7 @@ tests/run_data_structure_tests
 tests/test_lmdb_readonly
 tests/test_link_consistency
 tests/test_ni_sql
+tests/test_orangebook
 tests/test_reporter_link
 tests/test_supp_concepts
 

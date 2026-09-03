@@ -1,0 +1,110 @@
+# build_orangebook.nim — load the FDA Orange Book into ^ORANGEBOOK (#462, Phase 2).
+#
+# The Orange Book ships as three ~-delimited tables (products/patents/exclusivity)
+# keyed by (Appl_Type, Appl_No, Product_No). Loads:
+#   ^ORANGEBOOK(applType, applNo, product, "ingredient"|"trade"|"strength"
+#               |"te_code"|"type") = value
+#   ^ORANGEBOOK(applType, applNo, product, "patent", patentNo) = expireDate
+#   ^ORANGEBOOK(applType, applNo, product, "exclusivity", code) = date
+#
+# Each product's ingredient is cross-linked to a MeSH SCR by exact (case-
+# insensitive) name via ^SUPPNAME: ^LINK("ORANGEBOOK", productKey, "SUPP",
+# scrui) = "ingredient", plus the reverse ^SUPP(scrui,"orangebook",productKey).
+#
+# Usage: nim c -d:release --path:. -o:bin/build_orangebook \
+#          future_search_tool/src/build_orangebook.nim
+#        ./bin/build_orangebook <db> <dir>
+
+import os
+import sets
+import strutils
+import ../../globals
+
+proc productKey(f: seq[string]): seq[string] =
+  return @[f[0], f[1], f[2]]  # applType, applNo, productNo
+
+proc main() =
+  let p = commandLineParams()
+  if p.len < 2:
+    echo "usage: build_orangebook <db> <dir>"
+    quit(1)
+  let db = p[0]
+  let dir = p[1]
+
+  var g = newGlobals(db)
+  var products = 0
+  var patents = 0
+  var exclusivities = 0
+  var ingredients = 0
+  var linkedIngredients = 0
+
+  # Resolve an ingredient name to a single SCR UI via ^SUPPNAME. Returns ""
+  # when zero or multiple SCRs share the name (deterministic, no fuzzy match).
+  proc resolveScr(g: var Globals, name: string): string =
+    let key = name.toLowerAscii
+    var uis = g.order("^SUPPNAME", @[key, ""], forward = true)
+    let first = uis
+    if first.len == 0: return ""
+    # unambiguous iff exactly one SCR claims this name
+    if g.order("^SUPPNAME", @[key, first], forward = true).len > 0: return ""
+    return first
+
+  # products.txt
+  for line in lines(dir & "/products.txt"):
+    let f = line.strip(leading = false, trailing = true).split('~')
+    if f.len < 14 or f[0] == "Ingredient":
+      continue
+    let key = productKey(f)
+    g.set("^ORANGEBOOK", key & @["ingredient"], f[0])
+    g.set("^ORANGEBOOK", key & @["route"], f[1])
+    g.set("^ORANGEBOOK", key & @["trade"], f[2])
+    g.set("^ORANGEBOOK", key & @["applicant"], f[3])
+    g.set("^ORANGEBOOK", key & @["strength"], f[4])
+    g.set("^ORANGEBOOK", key & @["te_code"], f[8])
+    g.set("^ORANGEBOOK", key & @["approval_date"], f[9])
+    g.set("^ORANGEBOOK", key & @["type"], f[12])
+    g.set("^ORANGEBOOK", key & @["applicant_full"], f[13])
+    inc products
+    # ingredient -> SCR exact-name cross-link (many ingredients, one product)
+    var seen = initHashSet[string]()
+    for ing in f[0].split(';'):
+      let s = ing.strip().toLowerAscii
+      if s.len == 0 or s in seen:
+        continue
+      seen.incl(s)
+      inc ingredients
+      let scrui = resolveScr(g, s)
+      if scrui.len > 0:
+        # product identity = (applType, applNo, productNo); keep as discrete
+        # subscripts in ^LINK so the key framing stays unambiguous (#356 rule).
+        g.set("^LINK", @["ORANGEBOOK", key[0], key[1], key[2], "SUPP", scrui], "ingredient")
+        g.set("^SUPP", @[scrui, "orangebook", key[0], key[1], key[2]], "1")
+        inc linkedIngredients
+
+  # patent.txt
+  for line in lines(dir & "/patent.txt"):
+    let f = line.strip(leading = false, trailing = true).split('~')
+    if f.len < 4 or f[0] == "Appl_Type":
+      continue
+    let key = productKey(f)
+    g.set("^ORANGEBOOK", key & @["patent", f[3]], f[4])
+    inc patents
+
+  # exclusivity.txt
+  for line in lines(dir & "/exclusivity.txt"):
+    let f = line.strip(leading = false, trailing = true).split('~')
+    if f.len < 5 or f[0] == "Appl_Type":
+      continue
+    let key = productKey(f)
+    g.set("^ORANGEBOOK", key & @["exclusivity", f[3]], f[4])
+    inc exclusivities
+
+  echo "orangebook DONE products=", products,
+       " patents=", patents,
+       " exclusivities=", exclusivities,
+       " ingredients=", ingredients,
+       " linked_ingredients=", linkedIngredients
+  g.close()
+
+when isMainModule:
+  main()

@@ -336,3 +336,8 @@ reporter_link.dfy|LinkBothPreserves|test|tests/test_reporter_link.nim
 reporter_link.dfy|UnlinkBothPreserves|test|tests/test_reporter_link.nim
 reporter_link.dfy|LinkBothIdempotent|test|tests/test_reporter_link.nim
 reporter_link.dfy|QueryDuality|test|tests/test_reporter_link.nim
+orangebook_link.dfy|ResolveUnambiguous|test|tests/test_orangebook.nim
+orangebook_link.dfy|ResolveEmpty|test|tests/test_orangebook.nim
+orangebook_link.dfy|ResolveIsDeterministic|test|tests/test_orangebook.nim
+orangebook_link.dfy|LinkBothPreserves|test|tests/test_orangebook.nim
+orangebook_link.dfy|LinkBothIdempotent|test|tests/test_orangebook.nim

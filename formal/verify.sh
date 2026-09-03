@@ -36,6 +36,7 @@ dafny verify link_consistency.dfy
 dafny verify lock_semantics.dfy
 dafny verify m_programs.dfy
 dafny verify network.dfy
+dafny verify orangebook_link.dfy
 dafny verify pattern.dfy
 dafny verify reporter_link.dfy
 dafny verify scope_stack.dfy

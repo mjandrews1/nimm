@@ -66,6 +66,11 @@ log "build PUBMED->REPORTER funding links"
 BUILD_REPORTER=./bin/build_reporter_link
 "$BUILD_REPORTER" "$DB" "$DATA_DIR/reporter-staging/linktables" >> "$LOG" 2>&1
 
+# 3c. FDA Orange Book (products/patents/exclusivity -> ^ORANGEBOOK + SCR links)
+log "load Orange Book"
+BUILD_OB=./bin/build_orangebook
+"$BUILD_OB" "$DB" "$DATA_DIR/orangebook-staging" >> "$LOG" 2>&1
+
 # 4. BM25 index build (Nim buildIndex; batched flush, #457)
 log "build BM25 MESH"
 "$BUILD_BM25" "$DB" MESH "^MESH" "name^scopeNote" >> "$LOG" 2>&1

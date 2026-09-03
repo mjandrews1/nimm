@@ -304,6 +304,10 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
           let name = extractBetween(nameBlk, "<String>", "</String>")
           if name.len > 0:
             g.set(globalName, @[scrui, "name"], name)
+            # reverse index: SCR name -> SCRUI (for exact-name cross-links, e.g.
+            # Orange Book ingredient -> ^SUPP). Value "1"; a name maps to at most
+            # one SCR ("0" is unnecessary since SCR names are preferred terms).
+            g.set("^SUPPNAME", @[name.toLowerAscii, scrui], "1")
             let tagStart = buffer.find("<SupplementalRecord ")
             let tagEnd = buffer.find(">", tagStart)
             if tagStart >= 0 and tagEnd >= 0:
