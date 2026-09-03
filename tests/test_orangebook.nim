@@ -11,6 +11,7 @@ import os
 import strutils
 import sets
 import ../globals
+import ../future_search_tool/src/build_orangebook
 
 proc main() =
   echo "orangebook loader test..."
@@ -41,7 +42,8 @@ proc main() =
   for line in lines(dir / "products.txt"):
     let f = line.strip(leading = false, trailing = true).split('~')
     if f.len < 14 or f[0] == "Ingredient": continue
-    let key = @[f[5], f[6], f[7]]
+    let key = productKey(f)
+    assert key == @[f[5], f[6], f[7]], "productKey = Appl_Type/Appl_No/Product_No"
     g.set("^ORANGEBOOK", key & @["ingredient"], f[0])
     g.set("^ORANGEBOOK", key & @["trade"], f[2])
     g.set("^ORANGEBOOK", key & @["te_code"], f[8])

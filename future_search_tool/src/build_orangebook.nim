@@ -21,8 +21,14 @@ import strutils
 import tables
 import ../../globals
 
-proc productKey(f: seq[string]): seq[string] =
-  return @[f[0], f[1], f[2]]  # applType, applNo, productNo
+proc productKey*(f: seq[string]): seq[string] =
+  # products.txt columns: 0=Ingredient 1=DF;Route 2=Trade_Name 3=Applicant
+  # 4=Strength 5=Appl_Type 6=Appl_No 7=Product_No ... 12=Type 13=ApplFullName.
+  return @[f[5], f[6], f[7]]  # applType, applNo, productNo
+
+proc productKeyPatent(f: seq[string]): seq[string] =
+  # patent.txt / exclusivity.txt columns: 0=Appl_Type 1=Appl_No 2=Product_No ...
+  return @[f[0], f[1], f[2]]
 
 proc main() =
   let p = commandLineParams()
@@ -100,7 +106,7 @@ proc main() =
     let f = line.strip(leading = false, trailing = true).split('~')
     if f.len < 4 or f[0] == "Appl_Type":
       continue
-    let key = productKey(f)
+    let key = productKeyPatent(f)
     g.set("^ORANGEBOOK", key & @["patent", f[3]], f[4])
     inc patents
 
@@ -109,7 +115,7 @@ proc main() =
     let f = line.strip(leading = false, trailing = true).split('~')
     if f.len < 5 or f[0] == "Appl_Type":
       continue
-    let key = productKey(f)
+    let key = productKeyPatent(f)
     g.set("^ORANGEBOOK", key & @["exclusivity", f[3]], f[4])
     inc exclusivities
 
