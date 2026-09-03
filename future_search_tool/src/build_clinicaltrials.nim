@@ -80,17 +80,35 @@ proc main() =
   # `{"studies": [ {study}, {study}, ... ]}`. Skip the wrapper: a study begins at
   # the first `{` whose enclosing depth is 1 (inside the `studies` array), i.e.
   # every `{` after the array has begun is a study object.
+  #
+  # Structural chars inside JSON string values (`{` `}` `[` `]` `"`) must not
+  # affect depth, so we track whether we are inside a string and honor `\`
+  # escapes. (A raw char-count over the corpus showed 14 extra `]` — brackets
+  # that live inside abstracts and titles.)
   var depth = 0
   var inStudy = false
   var studyDepth = 0
   var inStudies = false
   var buf = ""
   var line = ""
+  var inStr = false
+  var escaped = false
   let f = open(file)
   g.beginWriteBatch()
   while f.readLine(line):
     for c in line:
-      if c == '{':
+      if inStr:
+        buf.add(c)
+        if escaped:
+          escaped = false
+        elif c == '\\':
+          escaped = true
+        elif c == '"':
+          inStr = false
+      elif c == '"':
+        inStr = true
+        buf.add(c)
+      elif c == '{':
         if inStudies and not inStudy:
           inStudy = true
           studyDepth = depth
@@ -126,8 +144,6 @@ proc main() =
               stderr.writeLine("  [studies] ", studies)
           inStudy = false
           buf = ""
-        else:
-          buf.add(c)
       elif c == '[':
         inc depth
         if depth == 2:
