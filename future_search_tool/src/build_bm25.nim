@@ -16,11 +16,13 @@ proc main() =
   let p = commandLineParams()
   var args: seq[string] = @[]
   var nosync = false
+  var posOnly = false
   for a in p:
     if a == "--nosync": nosync = true
+    elif a == "--pos": posOnly = true
     else: args.add(a)
   if args.len < 4:
-    echo "usage: build_bm25 <db> <src> <glob> <flist> [flushEvery] [--nosync]"
+    echo "usage: build_bm25 <db> <src> <glob> <flist> [flushEvery] [--nosync] [--pos]"
     quit(1)
   let db = args[0]
   let src = args[1]
@@ -30,12 +32,19 @@ proc main() =
 
   var g = newGlobals(db, nosync = nosync)
   let start = epochTime()
-  let (docs, tokens, avgdl) = g.buildIndex(src, glob, flist, flushEvery)
-  let elapsed = epochTime() - start
-  echo "BM25IDX DONE ", src, " docs=", docs, " tokens=", tokens,
-       " avgdl=", formatFloat(avgdl, ffDecimal, 2),
-       " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s",
-       (if nosync: " [nosync]" else: "")
+  if posOnly:
+    let (docs, tokens) = g.buildPositions(src, glob, flist, flushEvery)
+    let elapsed = epochTime() - start
+    echo "BMPOS DONE ", src, " docs=", docs, " tokens=", tokens,
+         " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s",
+         (if nosync: " [nosync]" else: "")
+  else:
+    let (docs, tokens, avgdl) = g.buildIndex(src, glob, flist, flushEvery)
+    let elapsed = epochTime() - start
+    echo "BM25IDX DONE ", src, " docs=", docs, " tokens=", tokens,
+         " avgdl=", formatFloat(avgdl, ffDecimal, 2),
+         " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s",
+         (if nosync: " [nosync]" else: "")
   g.close()
 
 main()

@@ -241,3 +241,42 @@ proc buildIndex*(g: var Globals, src: string, glob: string, flist: string,
   g.set("^BM25PROG", @[src, "committed"], $n)
   g.set("^BM25PROG", @[src, "status"], "done")
   return (docs: n, tokens: sum, avgdl: avgdl)
+
+proc buildPositions*(g: var Globals, src: string, glob: string, flist: string,
+                     flushEvery: int = 5000): tuple[docs, tokens: int] =
+  ## Rebuild ONLY the ^BMPOS phrase-position index for `src`, independent of the
+  ## ^BM25 idempotency guard (#468). Used to backfill positions when ^BM25 was
+  ## built before ^BMPOS existed (or when a --nopos build needs positions added).
+  ## Positions are continuous 1-based across the doc's fields, matching
+  ## buildIndex.
+  let fields = flist.split('^')
+  let docIds = g.collectDocIds(glob)
+  var written = 0
+  var tokens = 0
+
+  g.beginWriteBatch()
+  for docId in docIds:
+    var positions = initTable[string, seq[int]]()
+    var dl = 0
+    for fname in fields:
+      if fname.len == 0:
+        continue
+      let txt = g.get(glob, @[docId, fname])
+      for w in tokenizeDoc(txt):
+        inc dl
+        if w notin positions:
+          positions[w] = @[]
+        positions[w].add(dl)
+    if dl == 0:
+      continue
+    for w, plist in positions.pairs:
+      g.set("^BMPOS", @[src, docId, w], plist.join("|"))
+    g.set("^BM25LEN", @[src, docId], $dl)
+    inc tokens, dl
+    inc written
+    if written mod flushEvery == 0:
+      g.endWriteBatch()
+      g.beginWriteBatch()
+      stderr.writeLine("  [", src, " pos] ", written, " docs")
+  g.endWriteBatch()
+  return (docs: written, tokens: tokens)
