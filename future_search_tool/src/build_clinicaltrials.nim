@@ -76,18 +76,21 @@ proc main() =
       if v.len > 0: result.add(v)
       pos = j + 1
 
-  # Stream the file; split study objects by brace depth.
+  # Stream the file; split study objects by brace depth. The top-level object is
+  # `{"studies": [ {study}, {study}, ... ]}`. Skip the wrapper: a study begins at
+  # the first `{` whose enclosing depth is 1 (inside the `studies` array), i.e.
+  # every `{` after the array has begun is a study object.
   var depth = 0
   var inStudy = false
   var studyDepth = 0
+  var inStudies = false
   var buf = ""
-  var line = ""
   let f = open(file)
   g.beginWriteBatch()
   while f.readLine(line):
     for c in line:
       if c == '{':
-        if not inStudy:
+        if inStudies and not inStudy:
           inStudy = true
           studyDepth = depth
           buf = ""
@@ -124,6 +127,12 @@ proc main() =
           buf = ""
         else:
           buf.add(c)
+      elif c == '[':
+        inc depth
+        if depth == 2:
+          inStudies = true
+      elif c == ']':
+        dec depth
       elif inStudy:
         buf.add(c)
   f.close()
