@@ -18,6 +18,7 @@
 import os
 import sets
 import strutils
+import tables
 import ../../globals
 
 proc productKey(f: seq[string]): seq[string] =
@@ -37,17 +38,26 @@ proc main() =
   var exclusivities = 0
   var ingredients = 0
   var linkedIngredients = 0
+  var scrCache = initTable[string, string]()
 
   # Resolve an ingredient name to a single SCR UI via ^SUPPNAME. Returns ""
   # when zero or multiple SCRs share the name (deterministic, no fuzzy match).
+  # Memoized: 48k products share a small ~2k-name ingredient vocabulary, and a
+  # per-product $ORDER walk over ^SUPPNAME on a 100GB map is the does-nothing-
+  # but-slow path this fixes (#457/#462 batching lesson).
   proc resolveScr(g: var Globals, name: string): string =
     let key = name.toLowerAscii
+    if key in scrCache:
+      return scrCache[key]
     var uis = g.order("^SUPPNAME", @[key, ""], forward = true)
     let first = uis
-    if first.len == 0: return ""
-    # unambiguous iff exactly one SCR claims this name
-    if g.order("^SUPPNAME", @[key, first], forward = true).len > 0: return ""
-    return first
+    var res = ""
+    if first.len > 0 and g.order("^SUPPNAME", @[key, first], forward = true).len == 0:
+      res = first
+    scrCache[key] = res
+    return res
+
+  g.beginWriteBatch()
 
   # products.txt
   for line in lines(dir & "/products.txt"):
@@ -80,6 +90,10 @@ proc main() =
         g.set("^LINK", @["ORANGEBOOK", key[0], key[1], key[2], "SUPP", scrui], "ingredient")
         g.set("^SUPP", @[scrui, "orangebook", key[0], key[1], key[2]], "1")
         inc linkedIngredients
+    if products mod 5000 == 0:
+      g.endWriteBatch()
+      g.beginWriteBatch()
+      stderr.writeLine("  [products] ", products)
 
   # patent.txt
   for line in lines(dir & "/patent.txt"):
@@ -98,6 +112,8 @@ proc main() =
     let key = productKey(f)
     g.set("^ORANGEBOOK", key & @["exclusivity", f[3]], f[4])
     inc exclusivities
+
+  g.endWriteBatch()
 
   echo "orangebook DONE products=", products,
        " patents=", patents,
