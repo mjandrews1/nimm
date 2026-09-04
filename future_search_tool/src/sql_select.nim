@@ -25,6 +25,7 @@ import strutils
 import tables
 import ../../globals
 import ../../storage/key_encoding
+import bool_search
 
 type
   PredOp* = enum opNone, opEq, opGe, opLe, opGt, opLt
@@ -453,6 +454,10 @@ proc niSql*(g: var Globals, sql: string): string =
 # column (`pmid`). This is the O(k) walk + O(1) lookups shape from #462 — the
 # join is baked into subscript order, no hash/nested-loop.
 
+proc niSqlMergeJoin*(g: var Globals, stmt: SelectStmt): string
+proc readFieldJoin(g: var Globals, def: TableDef, key: string, col: string,
+                   eq: Table[string, string], walkCol: string, bound: seq[string]): string
+
 proc qualAlias(col: string): (string, string) =
   ## Split "a.b" into (alias, col); unqualified -> ("", col).
   let dot = col.find('.')
@@ -529,6 +534,14 @@ proc niSqlJoin*(g: var Globals, stmt: SelectStmt): string =
     else: walkCol = rightC
     joinedAlias = joinAlias
 
+  # The joined side's ON column (the column fed by the driving walk value).
+  let joinedCol = (if leftA == joinedAlias: leftC else: rightC)
+
+  # M3: if the joined ON column is NOT the joined table's leading key, a point
+  # lookup is impossible — fall through to a merge join over two sorted walks.
+  if joinedDef.keyCols.len > 0 and joinedDef.keyCols[0] != joinedCol:
+    return niSqlMergeJoin(g, stmt)
+
   # walkCol must be the driver's final key column we scan (all earlier cols bound).
   var bound: seq[string] = @[]
   for kc in driveDef.keyCols:
@@ -578,3 +591,133 @@ proc niSqlJoin*(g: var Globals, stmt: SelectStmt): string =
         break
     cur = g.order(driveDef.global, bound & @[cur], forward = true)
   return res
+
+# ---------------------------------------------------------------------------
+# M3 — merge join (zig-zag) for a non-leading-key ON column (#462)
+# ---------------------------------------------------------------------------
+#
+# When the joined table's ON column is NOT its leading key, a point lookup
+# (`get(joined, @[key])`) is impossible. Instead both sides are range-walked on
+# their shared join-key column (both in M-collation order) and merged by zig-zag
+# (advance the smaller, emit on equality) — the relational analog of
+# bool_search.intersectPostings. boolean_search.dfy already proves the merge
+# soundness/completeness; query_semantics.dfy.JoinIsIntersection shows this M3
+# merge == the M2 nested-index join result.
+
+proc niSqlMergeJoin*(g: var Globals, stmt: SelectStmt): string =
+  let cat = catalog()
+  let j = stmt.joins[0]
+  let fromDef = cat[stmt.table]
+  let joinDef = cat[j.table]
+  let fromAlias = stmt.alias
+  let joinAlias = j.alias
+
+  let (leftA, leftC) = qualAlias(j.leftCol)
+  let (rightA, rightC) = qualAlias(j.rightCol)
+
+  # Driving side = the one whose WHERE binds its leading key columns.
+  var fromEq = initTable[string, string]()
+  var joinEq = initTable[string, string]()
+  for pred in stmt.preds:
+    if pred.op != opEq:
+      raise newException(SqlError, "M3 supports only = predicates")
+    let (a, c) = qualAlias(pred.col)
+    if a == fromAlias: fromEq[c] = pred.val
+    elif a == joinAlias: joinEq[c] = pred.val
+    else: raise newException(SqlError, "M3 cannot bind " & pred.col)
+
+  proc boundPrefix(t: TableDef, eq: Table[string, string]): int =
+    var n = 0
+    while n < t.keyCols.len and t.keyCols[n] in eq: inc n
+    return n
+
+  let fromBound = boundPrefix(fromDef, fromEq)
+  let joinBound = boundPrefix(joinDef, joinEq)
+
+  # Identify which global to walk on the join key, and the join-key column name
+  # on each side.
+  #   left side of `=` : (leftA alias, leftC col)
+  #   right side        : (rightA alias, rightC col)
+  var driveDef, lookDef: TableDef
+  var driveKeyCol, lookKeyCol: string
+  var driveEq: Table[string, string]
+
+  # Driver is the side with the deeper EQ-bound prefix.
+  if joinBound > fromBound:
+    driveDef = joinDef; lookDef = fromDef; driveEq = joinEq
+    if leftA == joinAlias: (driveKeyCol, lookKeyCol) = (leftC, rightC)
+    else:                  (driveKeyCol, lookKeyCol) = (rightC, leftC)
+  else:
+    driveDef = fromDef; lookDef = joinDef; driveEq = fromEq
+    if leftA == fromAlias: (driveKeyCol, lookKeyCol) = (leftC, rightC)
+    else:                  (driveKeyCol, lookKeyCol) = (rightC, leftC)
+
+  # Per-table walk column + EQ-bound leading subscripts (alias-consistent).
+  proc sideCfg(def: TableDef, isFrom: bool): tuple[walkCol: string, bound: seq[string], eq: Table[string, string]] =
+    result.walkCol = (if isFrom: (if leftA == fromAlias: leftC else: rightC)
+                      else: (if leftA == joinAlias: leftC else: rightC))
+    result.eq = (if isFrom: fromEq else: joinEq)
+    for kc in def.keyCols:
+      if kc == result.walkCol: break
+      if kc notin result.eq:
+        raise newException(SqlError, "M3 requires binding " & kc & " before " & result.walkCol)
+      result.bound.add(result.eq[kc])
+
+  let driveCfg = sideCfg(driveDef, driveDef.global == fromDef.global)
+  let lookCfg  = sideCfg(lookDef,  lookDef.global == fromDef.global)
+
+  var driveKeys: seq[string] = @[]
+  var dk = g.order(driveDef.global, driveCfg.bound & @[""], forward = true)
+  while dk.len > 0:
+    driveKeys.add(dk)
+    dk = g.order(driveDef.global, driveCfg.bound & @[dk], forward = true)
+
+  var lookKeys: seq[string] = @[]
+  var lk = g.order(lookDef.global, lookCfg.bound & @[""], forward = true)
+  while lk.len > 0:
+    lookKeys.add(lk)
+    lk = g.order(lookDef.global, lookCfg.bound & @[lk], forward = true)
+
+  # Zig-zag intersect (reuse bool_search).
+  let matched = intersectPostings(driveKeys, lookKeys)
+
+  # Project: each SELECT col names a side (alias) + column.
+  var outCols: seq[string] = @[]
+  if stmt.cols.len == 0:
+    outCols = lookDef.keyCols & (if lookDef.fields.len > 0: lookDef.fields else: @[lookDef.valCol])
+  else:
+    outCols = stmt.cols
+
+  var res = ""
+  var emitted = 0
+  for key in matched:
+    var row: seq[string] = @[]
+    for c in outCols:
+      let (a, col) = qualAlias(c)
+      if a == fromAlias:
+        let cfg = sideCfg(fromDef, true)
+        row.add(readFieldJoin(g, fromDef, key, col, cfg.eq, cfg.walkCol, cfg.bound))
+      else:
+        let cfg = sideCfg(joinDef, false)
+        row.add(readFieldJoin(g, joinDef, key, col, cfg.eq, cfg.walkCol, cfg.bound))
+    res.add(row.join("\t")); res.add("\n")
+    inc emitted
+    if stmt.limit > 0 and emitted >= stmt.limit:
+      break
+  return res
+
+proc readFieldJoin(g: var Globals, def: TableDef, key: string, col: string,
+                   eq: Table[string, string], walkCol: string,
+                   bound: seq[string]): string =
+  ## Project a column value for one side of a merge join. `key` is the join-key
+  ## value; `walkCol` is that side's join-key column; `bound` is the side's
+  ## leading EQ subscripts (before the key col).
+  if col == walkCol:
+    return key
+  if col in eq:
+    return eq[col]
+  if def.fields.len > 0:
+    return g.get(def.global, bound & @[key, col])
+  if col == def.valCol:
+    return g.get(def.global, bound & @[key])
+  return ""

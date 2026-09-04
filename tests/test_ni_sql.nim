@@ -176,6 +176,18 @@ proc main() =
     "WHERE l.from_type='MESH' AND l.from_id='D000001' AND l.to_type='CATLINE'")
   assert noCat == "", "M2 wrong to_type yields empty, got:\n" & noCat
 
+  # --- M3: merge join (zig-zag) over non-leading-key column (#462) ---
+  g.set("^BM25", @["hello", "MESH", "d1"], "1")
+  g.set("^BM25", @["hello", "MESH", "d2"], "1")
+  g.set("^BM25LEN", @["MESH", "d1"], "10")
+  g.set("^BM25LEN", @["MESH", "d2"], "20")
+  g.set("^BM25LEN", @["MESH", "d999"], "99")   # present in bm25len, absent in bm25
+
+  let m3 = g.niSql(
+    "SELECT b.doc_id, l.doc_len FROM bm25len l JOIN bm25 b ON b.doc_id = l.doc_id " &
+    "WHERE b.term='hello' AND b.src='MESH' AND l.src='MESH'")
+  assert m3 == "d1\t10\nd2\t20\n", "M3 merge join, got:\n" & m3
+
   # Error gates.
   proc expectErr(sql: string, needle: string) =
     var caught = false
