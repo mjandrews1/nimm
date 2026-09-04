@@ -59,9 +59,9 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
 ## Open issues (critical-path order)
 
 1. **#462 — SELECT-only SQL layer** (the long-deferred experiment). **M1 single
-   relation, and M2 nested-index JOIN** landed; M3 (merge join, reusing
-   `bool_search.intersectPostings`) and M4 (`fst_search.py` migration gate)
-   remain. Sole *genuinely-open* engine experiment.
+   relation, M2 nested-index JOIN, and M3 merge join (zig-zag, reusing
+   `bool_search`) landed.** M4 (`fst_search.py` migration gate) remains. Sole
+   *genuinely-open* engine experiment.
 2. **#468 — Boolean search** — engine/phrases **done** (formal + `bool_search.nim`
    + `$NI_BOOL` + `^BMPOS`; PubMed backfill completed, 2.97M docs in ~55 min,
    live phrase verified). **Sub-feature (next): named result sets** — Dialog-
