@@ -59,14 +59,15 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
 ## Open issues (critical-path order)
 
 1. **#470 — Data freshness**: per-source cadence + scheduler (design below).
-2. **#474 — PubMed baseline download**: resume-safe backfill 99/~1200 files
-   (design in #474: `deploy/fetch_pubmed_baseline.sh`, md5-verified, resumable).
+2. **#474 — PubMed baseline download**: **fetch running** (`deploy/fetch_pubmed_baseline.sh`,
+   HTTPS + md5-verified + resume-safe; ~1334 files, ~1235 to fetch). User
+   decision: **download only, load later** — reload + re-index + RePORTER re-
+   measure are parked until we choose to load.
 3. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
    first, BIORXIV→PUBMED post-publication PMID link).
-4. **#471 — Odin experiment** — **designed + spiked** (OdinM/OdinFST port plan,
-   order-of-reference; `key_encoding` + `intersectPostings` parity spikes
-   compile+pass, 4 lifetime/ergonomics findings recorded; verdict: monitored,
-   no port unless a bottleneck or spec dividend appears).
+4. **#475 — systems-language spike (Zig + V)** — follow-on to #471; repeat the
+   key_encoding + intersectPostings parity slice in Zig and V (toolchains on
+   Mac + Utility-01), measuring compile/size/ergonomics vs the Odin findings.
 
 ### Closed this pass
 
@@ -75,6 +76,8 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
   ranking policy, already specified by `entry_term_expansion.dfy`).
 - **#468 — Boolean search** (closed): AND/OR/NOT + parens + phrases + named
   result sets (Dialog `S1`/`S2`) all landed; `^BMPOS` backfilled; suite 86.
+- **#471 — Odin experiment** (closed): negative result — no port win, 4 concrete
+  port costs found; spike deliverable recorded in `~/odinm-spike/`.
 - **#472 / #473 — Theory of Operation** (closed): `docs/theory-of-operation-{nimm,fst}.md`.
 
 ---
