@@ -13,8 +13,8 @@ pull). GitLab is deprecated.
 - nimm v0.1.0 frozen (tag `v0.1.0`); development continues on v0.1.x.
 
 **Health (current):**
-- Formal verification: **41 Dafny models, 364 lemmas**, `make verify` green.
-- Test suite: **85 tests passing**.
+- Formal verification: **41 Dafny models, 374 lemmas**, `make verify` green.
+- Test suite: **86 tests passing**.
 - Loaded sources on Utility-01: MESH, SUPP, CATLINE, SERLINE, PUBMED, plus the
   complementary sources (ClinicalTrials, RePORTER, Orange Book, Medicare, CDC,
   FAERS) — see "Loaded data" below.
@@ -58,25 +58,24 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
 
 ## Open issues (critical-path order)
 
-1. **#462 — SELECT-only SQL layer** (the long-deferred experiment). **M1 single
-   relation, M2 nested-index JOIN, and M3 merge join (zig-zag, reusing
-   `bool_search`) landed.** M4 (`fst_search.py` migration gate) remains. Sole
-   *genuinely-open* engine experiment.
-2. **#468 — Boolean search** — engine/phrases **done** (formal + `bool_search.nim`
-   + `$NI_BOOL` + `^BMPOS`; PubMed backfill completed, 2.97M docs in ~55 min,
-   live phrase verified). **Sub-feature (next): named result sets** — Dialog-
-   style `S1`/`S2` … set numbering (per source), sets referenced as operands
-   (`S1 AND S2`), stored source-scoped (e.g. `^BOOLSET(src,name,id)`), plus a
-   `bool_sets.dfy` model ("saved set == re-run result").
-3. **#470 — Data freshness**: per-source cadence + scheduler (design below).
-4. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
+1. **#470 — Data freshness**: per-source cadence + scheduler (design below).
+2. **#474 — PubMed baseline download**: resume-safe backfill 99/~1200 files
+   (design in #474: `deploy/fetch_pubmed_baseline.sh`, md5-verified, resumable).
+3. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
    first, BIORXIV→PUBMED post-publication PMID link).
-5. **#472 / #473 — Theory of Operation** — **done** (`docs/theory-of-operation-nimm.md`,
-   `docs/theory-of-operation-fst.md`).
-6. **#471 — Odin experiment** — **designed** ("OdinM" = NimM side-port, "OdinFST"
-   = FST side-port; the two theory-of-operation docs are the porting contract:
-   section→module map, invariants→parity asserts keyed to `contracts.tsv`,
-   NimM's conformance output as the differential oracle).
+4. **#471 — Odin experiment** — **designed + spiked** (OdinM/OdinFST port plan,
+   order-of-reference; `key_encoding` + `intersectPostings` parity spikes
+   compile+pass, 4 lifetime/ergonomics findings recorded; verdict: monitored,
+   no port unless a bottleneck or spec dividend appears).
+
+### Closed this pass
+
+- **#462 — SELECT-only SQL layer** (closed): M1 single-relation, M2 nested-index
+  JOIN, M3 merge join all landed; M4 (dict+BM25 merge migration) = won't do (a
+  ranking policy, already specified by `entry_term_expansion.dfy`).
+- **#468 — Boolean search** (closed): AND/OR/NOT + parens + phrases + named
+  result sets (Dialog `S1`/`S2`) all landed; `^BMPOS` backfilled; suite 86.
+- **#472 / #473 — Theory of Operation** (closed): `docs/theory-of-operation-{nimm,fst}.md`.
 
 ---
 
@@ -114,9 +113,7 @@ rate limits favour less-frequent).
 
 ---
 
-## Verify
-
-### Blocked (need external input)
+## Blocked (need external input)
 
 - **RxNorm → SCR** needs a UTS API key (UNII codes live only in the licensed
   full release; the unlicensed "prescribable" release has none).
@@ -125,7 +122,7 @@ rate limits favour less-frequent).
 - **Medicare full provider directory** — re-download with pagination (staged
   file holds only page 1 = 1,000 of 3.39M).
 
-### Deprecated / non-goals
+## Deprecated / non-goals
 
 - #467 ISSN fallback — measured 0.0003% gain → won't do.
 - CDI/DailyMed-/FAERS-API stubs were replaced by real downloads (FAERS ASCII
