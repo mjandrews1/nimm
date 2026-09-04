@@ -88,6 +88,7 @@ proc main() =
   g.endWriteBatch()
 
   echo "faers DONE zips=", zips, " drugs=", drugs, " reactions=", reactions
+  g.markUpdated("faers")
   g.close()
 
 when isMainModule:

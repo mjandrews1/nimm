@@ -54,6 +54,7 @@ proc main() =
   g.endWriteBatch()
 
   echo "medicare DONE providers=", providers
+  g.markUpdated("medicare")
   g.close()
 
 when isMainModule:

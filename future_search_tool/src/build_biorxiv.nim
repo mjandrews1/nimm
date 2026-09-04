@@ -82,6 +82,7 @@ proc main() =
   g.endWriteBatch()
   client.close()
   echo "biorxiv DONE server=", server, " records=", records
+  g.markUpdated(server)
   g.close()
 
 when isMainModule:

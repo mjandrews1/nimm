@@ -36,6 +36,7 @@ SHELL_SUITES=(
     test_ni_system
     test_order_lmdb
     test_pemdas
+    test_refresh
     test_scoping
     test_scripting
     test_source

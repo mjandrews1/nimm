@@ -458,4 +458,7 @@ proc loadXmlData*(g: var Globals, filePath: string, globalName: string,
     g.endWriteBatch()
   # Mark load complete (own transaction, after data committed)
   g.set("^FST", @["load", loadKey], "complete:" & $count)
+  # Freshness timestamp for the refresh scheduler (#470). Source = the global
+  # name (e.g. ^MESH, ^PUBMED, ^SUPP ...).
+  g.markUpdated(globalName)
   return count

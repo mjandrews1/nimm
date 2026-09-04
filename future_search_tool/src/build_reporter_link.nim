@@ -104,6 +104,7 @@ proc main() =
        " distinct_pmids=", citedPmids.len,
        " distinct_projects=", distinctProjects.len,
        " cited_pmids_in_pubmed=", citedInPubmed.len
+  g.markUpdated("reporter")
   g.close()
 
 when isMainModule:

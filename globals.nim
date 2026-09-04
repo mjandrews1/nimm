@@ -7,6 +7,7 @@ import algorithm
 import sets
 import os
 import posix
+import times
 import storage/lmdb_store
 import storage/key_encoding
 
@@ -862,3 +863,18 @@ proc getSpecialVar*(g: Globals, name: string): string =
 proc setSpecialVar*(g: var Globals, name: string, value: string) =
   if name in g.specialSetters:
     g.specialSetters[name](value)
+
+# --- FST freshness markers (#470) ---
+
+proc markUpdated*(g: var Globals, source: string) =
+  ## Write the source's last-updated epoch-seconds marker: ^FST("meta", source,
+  ## "updated"). Called by every loader at completion; the refresh scheduler
+  ## (#470) reads it to decide whether a source is stale. Pure write, safe in
+  ## or out of a write batch (uses g.set, which routes through the txn overlay).
+  g.set("^FST", @["meta", source, "updated"], $toUnix(times.getTime()))
+
+proc lastUpdated*(g: var Globals, source: string): int =
+  ## Read the source's last-updated epoch marker (0 = never loaded).
+  let v = g.get("^FST", @["meta", source, "updated"])
+  result = 0
+  try: result = parseInt(v) except: discard

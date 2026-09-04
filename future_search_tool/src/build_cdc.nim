@@ -100,6 +100,7 @@ proc main() =
   g.endWriteBatch()
 
   echo "cdc DONE chronic=", chronic, " covid=", covid, " natality=", natality
+  g.markUpdated("cdc")
   g.close()
 
 when isMainModule:

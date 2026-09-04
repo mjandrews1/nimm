@@ -158,6 +158,7 @@ proc main() =
   echo "clinicaltrials DONE studies=", studies,
        " links=", links,
        " distinct_mesh_dui=", distinctDui.len
+  g.markUpdated("clinicaltrials")
   g.close()
 
 when isMainModule:

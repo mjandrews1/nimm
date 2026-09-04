@@ -126,6 +126,7 @@ proc main() =
        " exclusivities=", exclusivities,
        " ingredients=", ingredients,
        " linked_ingredients=", linkedIngredients
+  g.markUpdated("orangebook")
   g.close()
 
 when isMainModule:

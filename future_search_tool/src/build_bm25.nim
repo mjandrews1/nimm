@@ -45,6 +45,7 @@ proc main() =
          " avgdl=", formatFloat(avgdl, ffDecimal, 2),
          " elapsed=", formatFloat(elapsed, ffDecimal, 1), "s",
          (if nosync: " [nosync]" else: "")
+  g.markUpdated(src)
   g.close()
 
 main()

@@ -50,6 +50,7 @@ proc main() =
         inc linked
     nlmId = g.order("^CATLINE", @[nlmId], forward = true)
   g.endWriteBatch()
+  g.markUpdated("serial")
   g.close()
 
   echo "serial-link DONE serline_with_issn=", serlineWithIssn,

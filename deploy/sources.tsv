@@ -1,0 +1,27 @@
+# deploy/sources.tsv — FST source refresh manifest (#470).
+#
+# Columns (tab-separated):  source | cadence
+#   source  — the name stored in ^FST("meta",source,"updated") by markUpdated()
+#   cadence — one of: weekly | monthly | quarterly | annual
+#
+# The loader command for each source lives in deploy/refresh.sh (a `case`
+# dispatch mirroring rebuild_fst_full.sh), so this file stays pure policy.
+# Cadence policy (user trimers — week / month / quarter):
+#   weekly    : PubMed, ClinicalTrials, BioArxiv (medRxiv)
+#   monthly   : CDC, Orange Book
+#   quarterly : FAERS, CatLine, SerLine
+#   annual    : MeSH descriptors, MeSH qualifiers, MeSH SCR
+
+^MESH	annual
+^QUAL	annual
+^SUPP	annual
+^CATLINE	quarterly
+^SERLINE	quarterly
+^PUBMED	weekly
+reporter	annual
+orangebook	monthly
+clinicaltrials	weekly
+medicare	monthly
+cdc	monthly
+faers	quarterly
+biorxiv	weekly
