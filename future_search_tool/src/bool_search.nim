@@ -20,13 +20,15 @@ import tables
 import ../../globals
 
 type
-  BoolExprKind* = enum eTerm, ePhrase, eAnd, eOr, eNot
+  BoolExprKind* = enum eTerm, ePhrase, eAnd, eOr, eNot, eSet
   BoolExpr* = ref object
     case kind*: BoolExprKind
     of eTerm:
       term*: string
     of ePhrase:
       words*: seq[string]
+    of eSet:
+      setName*: string
     of eAnd, eOr:
       left*, right*: BoolExpr
     of eNot:
@@ -37,12 +39,20 @@ type
 # --- lexer ---
 
 type
-  TokKind = enum tWord, tPhrase, tAnd, tOr, tNot, tLParen, tRParen, tEof
+  TokKind = enum tWord, tPhrase, tSet, tAnd, tOr, tNot, tLParen, tRParen, tEof
   Tok = object
     kind: TokKind
     text: string
 
 const BoolWs = {' ', '\t', '\n', '\r'}
+
+proc isSetName(s: string): bool =
+  ## Dialog set reference: "S" + digits (case-insensitive), e.g. S1, S7, S1023.
+  if s.len < 2: return false
+  if s[0] != 'S' and s[0] != 's': return false
+  for i in 1 ..< s.len:
+    if s[i] < '0' or s[i] > '9': return false
+  return true
 
 proc lex*(src: string): seq[Tok] =
   result = @[]
@@ -70,6 +80,7 @@ proc lex*(src: string): seq[Tok] =
       if up == "AND": result.add(Tok(kind: tAnd, text: s))
       elif up == "OR": result.add(Tok(kind: tOr, text: s))
       elif up == "NOT": result.add(Tok(kind: tNot, text: s))
+      elif isSetName(s): result.add(Tok(kind: tSet, text: up))
       else: result.add(Tok(kind: tWord, text: s))
   result.add(Tok(kind: tEof, text: ""))
 
@@ -105,6 +116,9 @@ proc parseNot(p: var Parser): BoolExpr =
   of tWord:
     discard p.next()
     result = BoolExpr(kind: eTerm, term: t.text)
+  of tSet:
+    discard p.next()
+    result = BoolExpr(kind: eSet, setName: t.text)
   of tPhrase:
     discard p.next()
     # tokenize the phrase the same way documents are tokenized
@@ -163,6 +177,58 @@ proc posting*(g: var Globals, src: string, term: string): seq[string] =
   while id.len > 0:
     result.add(id)
     id = g.order("^BM25", @[term, src, id], forward = true)
+
+# --- named result sets (Dialog S1/S2/...) ---
+#
+# A saved set is `^BOOLSET(src, "S7", docId) = "1"` — source-scoped, membership
+# only, doc ids in M-collation order (the same order as a term posting walk), so
+# reading a set operand is identical to reading a term posting (boolean_search.dfy
+# merge correctness carries over verbatim).
+
+proc setPosting*(g: var Globals, src: string, setName: string): seq[string] =
+  ## The sorted doc-id membership list of a named set (empty if unset).
+  result = @[]
+  var id = g.order("^BOOLSET", @[src, setName, ""], forward = true)
+  while id.len > 0:
+    result.add(id)
+    id = g.order("^BOOLSET", @[src, setName, id], forward = true)
+
+proc saveSet*(g: var Globals, src: string, setName: string, ids: seq[string]) =
+  ## Store a result set as ^BOOLSET(src, setName, id) = "1". Overwrites any
+  ## prior set of the same name (Dialog reassignment is a fresh set).
+  for id in ids:
+    g.set("^BOOLSET", @[src, setName, id], "1")
+
+proc nextSetName*(g: var Globals, src: string): string =
+  ## The next available set number (max existing S<N> + 1), Dialog-style.
+  var maxN = 0
+  var name = g.order("^BOOLSET", @[src, ""], forward = true)
+  while name.len > 0:
+    if name.len > 1 and name[0] == 'S':
+      try:
+        let n = parseInt(name[1 .. ^1])
+        if n > maxN: maxN = n
+      except ValueError:
+        discard
+    name = g.order("^BOOLSET", @[src, name], forward = true)
+  return "S" & $(maxN + 1)
+
+proc listSets*(g: var Globals, src: string): seq[tuple[name: string, count: int]] =
+  ## All saved sets for `src` with their member counts, in name order.
+  result = @[]
+  var name = g.order("^BOOLSET", @[src, ""], forward = true)
+  while name.len > 0:
+    var n = 0
+    var id = g.order("^BOOLSET", @[src, name, ""], forward = true)
+    while id.len > 0:
+      inc n
+      id = g.order("^BOOLSET", @[src, name, id], forward = true)
+    result.add((name, n))
+    name = g.order("^BOOLSET", @[src, name], forward = true)
+
+proc killSet*(g: var Globals, src: string, setName: string) =
+  ## Delete a saved set (Dialog `K` / erase-set).
+  g.kill("^BOOLSET", @[src, setName])
 
 proc intersectPostings*(a, b: seq[string]): seq[string] =
   ## Zig-zag intersect of two sorted posting lists.
@@ -231,6 +297,8 @@ proc evalExpr*(g: var Globals, src: string, e: BoolExpr): seq[string] =
   case e.kind
   of eTerm:
     result = g.posting(src, e.term)
+  of eSet:
+    result = g.setPosting(src, e.setName)
   of ePhrase:
     # candidate docs = posting of the rarest word; then adjacency-check each.
     var candidates: seq[string] = @[]

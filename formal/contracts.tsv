@@ -369,3 +369,7 @@ phrase_search.dfy|SingleTermHit|test|tests/test_phrase_search.nim
 phrase_search.dfy|PhraseHitExtensional|test|tests/test_phrase_search.nim
 phrase_search.dfy|SortedHasNoDuplicates|test|tests/test_phrase_search.nim
 phrase_search.dfy|StrictlyIncreasingBetween|support|-
+bool_sets.dfy|SaveReadIdentity|test|tests/test_boolean_engine.nim
+bool_sets.dfy|KillReadEmpty|test|tests/test_boolean_engine.nim
+bool_sets.dfy|KillIdempotent|test|tests/test_boolean_engine.nim
+bool_sets.dfy|SaveIndependent|test|tests/test_boolean_engine.nim

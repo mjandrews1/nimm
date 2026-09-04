@@ -83,6 +83,37 @@ proc main() =
   assert q(phraseQuery) == @["p1"], "phrase: only adjacent p1"
 
   echo "  evaluator + phrases hold"
+
+  # --- named result sets (bool_sets.dfy mirror) ---
+  echo "--- set tests ---"
+  # SaveReadIdentity: save then setPosting returns exactly the saved ids.
+  saveSet(g, "MESH", "S10", @["d1", "d2"])
+  assert setPosting(g, "MESH", "S10") == @["d1", "d2"], "save/read identity"
+
+  # Set operand = term posting: S10 AND lung == {d1}.
+  assert boolSearch(g, "MESH", "S10 AND lung") == @["d1"], "set AND term"
+
+  # nextSetName is fresh (never an existing live name).
+  let before = listSets(g, "MESH")
+  let nxt = nextSetName(g, "MESH")
+  for (name, _) in before:
+    assert name != nxt, "next name is fresh"
+  saveSet(g, "MESH", nxt, @["d1"])
+  assert setPosting(g, "MESH", nxt) == @["d1"], "new set saved under fresh name"
+
+  # KillReadEmpty + KillIdempotent.
+  killSet(g, "MESH", "S10")
+  assert setPosting(g, "MESH", "S10") == @[], "kill/read empty"
+  killSet(g, "MESH", "S10")  # idempotent
+  assert setPosting(g, "MESH", "S10") == @[], "kill idempotent"
+
+  # SaveIndependent: saving under one name leaves another intact.
+  saveSet(g, "MESH", "SA", @["d1"])
+  saveSet(g, "MESH", "SB", @["d2", "d3"])
+  assert setPosting(g, "MESH", "SA") == @["d1"], "SA intact after SB save"
+  assert setPosting(g, "MESH", "SB") == @["d2", "d3"], "SB saved"
+
+  echo "  save/read, kill, freshness, independence hold"
   echo "boolean_engine test passed!"
 
 main()

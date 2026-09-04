@@ -46,6 +46,7 @@ listed, no stale rows, every mirror present).
 | `network.dfy` | network connection table (fresh id / close-removes / count / closeAll) | `tests/test_network_invariants.nim` |
 | `orangebook_link.dfy` | Orange Book ingredient→SCR exact-name join (unambiguous resolve, consistency, idempotency) | `tests/test_orangebook.nim` |
 | `boolean_search.dfy` | AND/OR/NOT zig-zag merge soundness+completeness (nat ordinals), commutativity | `tests/test_boolean_search.nim` |
+| `bool_sets.dfy` | named result sets: save/read identity, kill/read empty, kill idempotency, save independence | `tests/test_boolean_engine.nim` |
 | `phrase_search.dfy` | phrase positions round-trip, adjacency chain soundness+completeness, rarest-term independence | `tests/test_phrase_search.nim` |
 | `m_programs.dfy` | M scripts (`samples/*.m`, `tests/*.m`, FST, ERIC) meet their specs | `tests/test_m_programs.sh` |
 | `vm_opcodes.dfy` | concrete opcode Pops/Pushes table + compiler safety | `tests/test_vm_table.nim` |

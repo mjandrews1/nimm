@@ -21,6 +21,7 @@ dafny verify readonly_path.dfy
 dafny verify reference_loaders.dfy
 # Standalone models, alphabetically sorted (progress indicator).
 dafny verify bm25.dfy
+dafny verify bool_sets.dfy
 dafny verify boolean_search.dfy
 dafny verify build_index.dfy
 dafny verify bytecode_bisim.dfy

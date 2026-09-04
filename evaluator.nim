@@ -1232,8 +1232,9 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       return "NI_SQL error: " & e.msg
   of "NI_BOOL":
     # $NI_BOOL(src, query[, topK]) — Boolean search over ^BM25 posting lists
-    # (#468): AND/OR/NOT, parens, and "double-quoted phrases". Returns sorted
-    # doc ids, one per line.
+    # (#468): AND/OR/NOT, parens, "double-quoted phrases", and named result
+    # sets (Dialog S1/S2/...). Returns sorted doc ids, one per line. Each
+    # NON-set-reference query auto-saves its result as the next set number.
     if args.len < 2: return ""
     let src = args[0]
     let query = args[1]
@@ -1244,12 +1245,39 @@ proc callFunction*(ev: var Evaluator, name: string, args: seq[string]): string =
       var ids = boolSearch(ev.globals[], src, query)
       if topK > 0 and ids.len > topK:
         ids = ids[0 ..< topK]
+      # Auto-assign a Dialog set number unless the query was itself a bare set
+      # reference (reading a set should not create a new one).
+      try:
+        let e = bool_search.parseBool(query)
+        if e.kind != eSet:
+          saveSet(ev.globals[], src, nextSetName(ev.globals[], src), ids)
+      except BoolError:
+        discard
       var res = ""
       for id in ids:
         res.add(id); res.add("\n")
       return res
     except BoolError as e:
       return "NI_BOOL error: " & e.msg
+  of "NI_BOOLSET":
+    # $NI_BOOLSET(src) — list saved sets as "S<N><TAB><count>" lines (Dialog DS).
+    # $NI_BOOLSET(src, "S1") — list the members of that set, one per line.
+    # $NI_BOOLSET(src, "S1", "kill") — delete a set.
+    if args.len < 1: return ""
+    let src = args[0]
+    if args.len == 1:
+      var res = ""
+      for (name, count) in listSets(ev.globals[], src):
+        res.add(name); res.add("\t"); res.add($count); res.add("\n")
+      return res
+    let setName = args[1].toUpperAscii
+    if args.len >= 3 and args[2].toLowerAscii == "kill":
+      killSet(ev.globals[], src, setName)
+      return "killed " & setName
+    var res = ""
+    for id in setPosting(ev.globals[], src, setName):
+      res.add(id); res.add("\n")
+    return res
   of "NI_ARRAY":
     # $NI_ARRAY(action, id, ...) — Array operations
     if args.len < 2: return ""

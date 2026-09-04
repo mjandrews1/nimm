@@ -46,6 +46,27 @@ check "phrase adjacent only" "$OUT" $'p1'
 OUT=$($NIMM -x "$SEED W \$NI_BOOL(\"MESH\",\"heart\",\"2\")" 2>&1)
 check "topK=2" "$OUT" $'d1\nd2'
 
+# --- named result sets (Dialog S1/S2) ---
+SETM="$(mktemp /tmp/ni_bool_set_XXXXXX.m)"
+cat > "$SETM" <<'EOF'
+;
+ENTRY
+ S ^BM25("heart","MESH","d1")=1,^BM25("heart","MESH","d2")=1,^BM25("heart","MESH","d3")=1
+ S ^BM25("lung","MESH","d1")=1
+ S ^BM25LEN("MESH","d1")=5,^BM25LEN("MESH","d2")=5,^BM25LEN("MESH","d3")=5
+ S ^BM25DF("heart","MESH")=3,^BM25DF("lung","MESH")=1
+ W $NI_BOOL("MESH","heart"),!        ; S1 = d1 d2 d3
+ W $NI_BOOL("MESH","lung"),!         ; S2 = d1
+ W "INTERSECT:",$NI_BOOL("MESH","S1 AND S2"),!
+ W "SETLIST:",!
+ W $NI_BOOLSET("MESH"),!
+ W $NI_BOOLSET("MESH","S1"),!
+ QUIT
+EOF
+OUT=$($NIMM -r "$SETM" -x 'DO ENTRY' 2>&1)
+rm -f "$SETM"
+check "named sets: auto-number + intersect + list" "$OUT" $'d1\nd2\nd3\n\nd1\n\nINTERSECT:d1\n\nSETLIST:\nS1\t3\nS2\t1\nS3\t1\n\nd1\nd2\nd3'
+
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] && exit 0 || exit 1
