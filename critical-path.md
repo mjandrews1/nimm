@@ -65,9 +65,6 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
    measure are parked until we choose to load.
 3. **#469 — BioArxiv** data source (design in #469: `^BIORXIV` by DOI, medRxiv
    first, BIORXIV→PUBMED post-publication PMID link).
-4. **#475 — systems-language spike (Zig + V)** — follow-on to #471; repeat the
-   key_encoding + intersectPostings parity slice in Zig and V (toolchains on
-   Mac + Utility-01), measuring compile/size/ergonomics vs the Odin findings.
 
 ### Closed this pass
 
@@ -76,9 +73,15 @@ Indexes: `^BM25(term,src,docId)=tf` (posting), `^BM25DF`, `^BM25LEN`,
   ranking policy, already specified by `entry_term_expansion.dfy`).
 - **#468 — Boolean search** (closed): AND/OR/NOT + parens + phrases + named
   result sets (Dialog `S1`/`S2`) all landed; `^BMPOS` backfilled; suite 86.
-- **#471 — Odin experiment** (closed): negative result — no port win, 4 concrete
-  port costs found; spike deliverable recorded in `~/odinm-spike/`.
 - **#472 / #473 — Theory of Operation** (closed): `docs/theory-of-operation-{nimm,fst}.md`.
+- **Systems-language spike series** (all closed, all "no port"): **#471** Odin,
+  **#475** Zig/V, **#476** FreePascal, **#477** Rust. Six-way scoreboard
+  (compile opt / binary opt): Odin 0.55s/350KB · FreePascal 0.92s/1.1MB · Rust
+  1.22s/378KB · Nim 1.27s/46KB · V 3.77s/162KB · Zig 16.2s/440KB. Nim stays the
+  default; **Rust was the one positive result** (borrow checker statically
+  excludes the Odin-class slice/aliasing bugs), flagged for reuse if a static
+  memory-safety guarantee is ever wanted on the framing path. Spikes out-of-tree
+  in `~/odinm-spike/`.
 
 ---
 
