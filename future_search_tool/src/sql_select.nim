@@ -34,18 +34,27 @@ type
     op*: PredOp
     val*: string
 
+  JoinInfo* = object
+    table*: string        # the joined relation's table name
+    alias*: string        # its alias (e.g. "p" in "pubmed p")
+    leftCol*: string      # qualified col on the driving side, e.g. "l.to_id"
+    rightCol*: string     # qualified col on the joined side, e.g. "p.pmid"
+
   SelectStmt* = object
     table*: string
-    cols*: seq[string]   # empty = SELECT *
+    alias*: string        # "" if none (M2)
+    cols*: seq[string]    # empty = SELECT * (may be qualified, e.g. "p.title")
     preds*: seq[Predicate]
-    orderBy*: string     # "" = none
+    joins*: seq[JoinInfo]
+    orderBy*: string      # "" = none (may be qualified)
     orderDesc*: bool
-    limit*: int          # 0 = no limit
+    limit*: int           # 0 = no limit
 
   TableDef* = object
     global*: string
     keyCols*: seq[string]  # leading key subscripts, in order
-    valCol*: string        # the stored value's column name
+    valCol*: string        # the stored value's column name ("" for record tables)
+    fields*: seq[string]   # record-table field subscripts (e.g. ^PUBMED "title"/"abstract")
 
   QueryPlan* = object
     def*: TableDef
@@ -57,6 +66,11 @@ type
     rangeVal*: string
     cols*: seq[string]    # resolved projection (empty = *)
     limit*: int           # 0 = no limit
+    # M2 nested-index join: driving table `def` (e.g. ^LINK) + one joined table
+    # whose leading key column is looked up per driving row.
+    join*: TableDef         # joined table def (zero-value when no join)
+    joinAlias*: string      # driven-side alias of the joined table ("" = table)
+    joinRightCol*: string   # joined side's column being fed the driving value
 
   SqlError* = object of CatchableError
 
@@ -72,6 +86,20 @@ proc catalog*(): Table[string, TableDef] =
       keyCols: @["term", "src"], valCol: "df")
   result["bm25meta"] = TableDef(global: "^BM25META",
       keyCols: @["src", "name"], valCol: "value")
+  # Record tables (the JOIN's second relation): id-keyed globals whose "columns"
+  # are field subscripts, not a single leaf value (#462 M2).
+  result["pubmed"] = TableDef(global: "^PUBMED", keyCols: @["pmid"],
+      fields: @["title", "abstract", "journal", "authors", "nlmUniqueID"])
+  result["catline"] = TableDef(global: "^CATLINE", keyCols: @["nlm_id"],
+      fields: @["title", "issn"])
+  result["serline"] = TableDef(global: "^SERLINE", keyCols: @["nlm_id"],
+      fields: @["title", "issn"])
+  result["mesh"] = TableDef(global: "^MESH", keyCols: @["dui"],
+      fields: @["name", "scopeNote"])
+  result["supp"] = TableDef(global: "^SUPP", keyCols: @["scrui"],
+      fields: @["name", "class", "note", "frequency"])
+  result["ctrial"] = TableDef(global: "^CTRIAL", keyCols: @["nct"],
+      fields: @["title", "status"])
 
 # --- tokenizer ---
 
@@ -85,6 +113,9 @@ const SqlWs = {' ', '\t', '\n', '\r'}
 
 proc isIdentChar(c: char): bool =
   c in {'a'..'z', 'A'..'Z', '0'..'9', '_'}
+
+proc isIdentStart(c: char): bool =
+  c in {'a'..'z', 'A'..'Z', '_'}
 
 proc tokenize(sql: string): seq[Token] =
   var i = 0
@@ -132,10 +163,10 @@ proc tokenize(sql: string): seq[Token] =
         inc i
     elif isIdentChar(c):
       var s = ""
-      while i < sql.len and isIdentChar(sql[i]):
+      while i < sql.len and (isIdentChar(sql[i]) or sql[i] == '.'):
         s.add(sql[i])
         inc i
-      if s.allCharsInSet({'0'..'9'}):
+      if s.allCharsInSet({'0'..'9', '.'}):
         result.add(Token(kind: tkNum, text: s))
       else:
         result.add(Token(kind: tkIdent, text: s))
@@ -172,23 +203,58 @@ proc parseSelect*(sql: string): SelectStmt =
     raise newException(SqlError, "expected SELECT")
   discard p.next()
 
+  var star = false
   if p.peek().kind == tkStar:
     discard p.next()
+    star = true
   else:
     while true:
       let c = p.next()
+      if c.kind == tkStar:
+        star = true
+        break
       if c.kind != tkIdent:
         raise newException(SqlError, "expected column name")
-      result.cols.add(c.text.toLowerAscii)
+      let name = c.text.toLowerAscii
+      # "<alias>.*" lexes as ident "alias." followed by tkStar
+      if name.endsWith("."):
+        if p.peek().kind == tkStar:
+          discard p.next()
+          star = true
+          break
+      result.cols.add(name)
       if p.peek().kind == tkComma:
         discard p.next()
         continue
       break
+  if star:
+    result.cols = @[]   # SELECT * semantics (possibly qualified)
 
   if not p.isKw("from"):
     raise newException(SqlError, "expected FROM")
   discard p.next()
   result.table = p.expectIdent()
+  # optional alias: FROM pubmed p
+  if p.peek().kind == tkIdent and not p.isKw("join") and not p.isKw("where") and
+     not p.isKw("order") and not p.isKw("limit"):
+    result.alias = p.expectIdent()
+
+  while p.isKw("join"):
+    discard p.next()
+    var j: JoinInfo
+    j.table = p.expectIdent()
+    # optional alias for the joined table
+    if p.peek().kind == tkIdent and not p.isKw("on"):
+      j.alias = p.expectIdent()
+    if not p.isKw("on"):
+      raise newException(SqlError, "expected ON after JOIN")
+    discard p.next()
+    j.leftCol = p.expectIdent()
+    if p.peek().kind != tkEq:
+      raise newException(SqlError, "expected = in JOIN ON")
+    discard p.next()
+    j.rightCol = p.expectIdent()
+    result.joins.add(j)
 
   if p.isKw("where"):
     discard p.next()
@@ -358,12 +424,157 @@ proc execSelect*(g: var Globals, plan: QueryPlan): seq[seq[string]] =
         break
     cur = g.order(plan.def.global, plan.bound & @[cur], forward = true)
 
+proc niSqlJoin*(g: var Globals, stmt: SelectStmt): string
+
 proc niSql*(g: var Globals, sql: string): string =
   ## Parse + plan + execute a SELECT and return rows as TSV lines (one per row).
   let stmt = parseSelect(sql)
+  if stmt.joins.len > 0:
+    return niSqlJoin(g, stmt)
   let plan = planSelect(stmt)
   var res = ""
   for row in execSelect(g, plan):
     res.add(row.join("\t"))
     res.add("\n")
+  return res
+
+# ---------------------------------------------------------------------------
+# M2 — nested-index join over ^LINK (the #462 worked example)
+# ---------------------------------------------------------------------------
+#
+#   SELECT p.title FROM pubmed p
+#   JOIN link l ON l.to_id = p.pmid
+#   WHERE l.from_type='MESH' AND l.from_id='D000001' AND l.to_type='PUBMED'
+#
+# The driving table (`link`) is walked by an $ORDER over its leading bound
+# subscripts (from_type/from_id/to_type all EQ-bound); each row yields a value
+# for its ON column (`to_id`). That value is used as the leading-key point lookup
+# into the joined table (`pubmed`), whose leading key column is the ON's right
+# column (`pmid`). This is the O(k) walk + O(1) lookups shape from #462 — the
+# join is baked into subscript order, no hash/nested-loop.
+
+proc qualAlias(col: string): (string, string) =
+  ## Split "a.b" into (alias, col); unqualified -> ("", col).
+  let dot = col.find('.')
+  if dot < 0: return ("", col)
+  return (col[0 ..< dot], col[dot + 1 .. ^1])
+
+proc stripQual(col: string, alias: string): string =
+  ## "a.b" -> "b" when alias=="a"; unqualified passes through unchanged.
+  let (a, c) = qualAlias(col)
+  if a.len > 0 and a == alias: return c
+  return col
+
+proc niSqlJoin*(g: var Globals, stmt: SelectStmt): string =
+  let cat = catalog()
+  if stmt.joins.len != 1:
+    raise newException(SqlError, "M2 supports exactly one JOIN")
+  let j = stmt.joins[0]
+
+  # Two relations: the FROM table and the JOIN table. The *driver* is the one
+  # whose WHERE = predicates pin a prefix of its leading key subscripts (the
+  # scan root, per #462). The other is the *joined* table, looked up point-wise.
+  let fromDef = cat[stmt.table]
+  let joinDef = cat[j.table]
+  let fromAlias = stmt.alias
+  let joinAlias = j.alias
+
+  # Group WHERE = predicates by (alias -> eqVals on that table's columns).
+  var fromEq = initTable[string, string]()
+  var joinEq = initTable[string, string]()
+  for pred in stmt.preds:
+    if pred.op != opEq:
+      raise newException(SqlError, "M2 JOIN supports only = predicates")
+    let (a, c) = qualAlias(pred.col)
+    if a == fromAlias or (a.len == 0 and c in fromDef.keyCols):
+      fromEq[c] = pred.val
+    elif a == joinAlias or (a.len == 0 and c in joinDef.keyCols):
+      joinEq[c] = pred.val
+    else:
+      raise newException(SqlError, "M2 cannot bind " & pred.col)
+
+  proc boundPrefix(t: TableDef, eq: Table[string, string]): int =
+    var n = 0
+    while n < t.keyCols.len and t.keyCols[n] in eq:
+      inc n
+    return n
+
+  let fromBound = boundPrefix(fromDef, fromEq)
+  let joinBound = boundPrefix(joinDef, joinEq)
+
+  var driveDef: TableDef
+  var joinedDef: TableDef
+  var driveEq: Table[string, string]
+  var walkCol: string   # the driving column that the ON feeds into the joined side
+  var joinedAlias: string
+
+  # The ON columns tell us the join key. l.to_id = p.pmid: the driving column is
+  # whichever side of the `=` lives on the table that is being *walked*.
+  let (leftA, leftC) = qualAlias(j.leftCol)
+  let (rightA, rightC) = qualAlias(j.rightCol)
+
+  # The side whose other key columns are EQ-bound (>0 bound prefix, or more bound)
+  # is the driver. The driver walks the ON column (leftC if left side wins).
+  if joinBound > fromBound:
+    driveDef = joinDef; joinedDef = fromDef
+    driveEq = joinEq
+    # ON: drvCol = joinedCol. The ON references join alias on one side and from alias on the other.
+    if leftA == joinAlias: walkCol = leftC
+    else: walkCol = rightC
+    joinedAlias = fromAlias
+  else:
+    driveDef = fromDef; joinedDef = joinDef
+    driveEq = fromEq
+    if leftA == fromAlias: walkCol = leftC
+    else: walkCol = rightC
+    joinedAlias = joinAlias
+
+  # walkCol must be the driver's final key column we scan (all earlier cols bound).
+  var bound: seq[string] = @[]
+  for kc in driveDef.keyCols:
+    if kc == walkCol:
+      break
+    if kc notin driveEq:
+      raise newException(SqlError, "M2 requires binding " & kc & " before walking " & walkCol)
+    bound.add(driveEq[kc])
+  if walkCol.len == 0 or not driveDef.keyCols.contains(walkCol):
+    raise newException(SqlError, "M2 JOIN ON must name the driving walk column")
+
+  # Projection: SELECT cols resolve against the joined table.
+  var outCols: seq[string] = @[]
+  if stmt.cols.len == 0:
+    if joinedDef.fields.len > 0:
+      outCols = joinedDef.fields
+    else:
+      outCols = joinedDef.keyCols & @[joinedDef.valCol]
+  else:
+    for c in stmt.cols:
+      outCols.add(stripQual(c, joinedAlias))
+
+  proc readField(g: var Globals, def: TableDef, key: string, col: string): string =
+    if col == def.keyCols[0]:
+      return key
+    if def.fields.len > 0:
+      return g.get(def.global, @[key, col])
+    if col == def.valCol:
+      return g.get(def.global, @[key])
+    return g.get(def.global, @[key, col])
+
+  var res = ""
+  var cur = g.order(driveDef.global, bound & @[""], forward = true)
+  var emitted = 0
+  while cur.len > 0:
+    let hasRow = (joinedDef.fields.len > 0 and
+                  g.get(joinedDef.global, @[cur, joinedDef.fields[0]]).len > 0) or
+                 (joinedDef.fields.len == 0 and g.get(joinedDef.global, @[cur]).len > 0)
+    if hasRow:
+      var row: seq[string] = @[]
+      for c in outCols:
+        row.add(readField(g, joinedDef, cur, c))
+      res.add(row.join("\t"))
+      res.add("\n")
+      inc emitted
+      if stmt.limit > 0 and emitted >= stmt.limit:
+        break
+    cur = g.order(driveDef.global, bound & @[cur], forward = true)
   return res

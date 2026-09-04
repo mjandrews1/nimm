@@ -325,6 +325,12 @@ query_semantics.dfy|ScanAllPreservesOrder|test|tests/test_ni_sql.nim
 query_semantics.dfy|TakeIsPrefix|test|tests/test_ni_sql.nim
 query_semantics.dfy|TakeBounded|test|tests/test_ni_sql.nim
 query_semantics.dfy|PointLookupCount|test|tests/test_ni_sql.nim
+query_semantics.dfy|JoinSoundness|test|tests/test_ni_sql.nim
+query_semantics.dfy|JoinCompleteness|test|tests/test_ni_sql.nim
+query_semantics.dfy|JoinIsIntersection|test|tests/test_ni_sql.nim
+query_semantics.dfy|JoinRowsFromDriving|support|-
+query_semantics.dfy|HeadBelowSet|support|-
+query_semantics.dfy|JoinPreservesOrder|test|tests/test_ni_sql.nim
 supp_concepts.dfy|StripStarIdempotent|test|tests/test_supp_concepts.nim
 supp_concepts.dfy|BareDui|test|tests/test_supp_concepts.nim
 supp_concepts.dfy|MappedSound|test|tests/test_supp_concepts.nim

@@ -89,6 +89,32 @@ proc main() =
   assert pointLookup("d2") == 1, "present -> 1"
   assert pointLookup("zz") == 0, "absent -> 0"
 
+  # JoinSoundness/Completeness/IsIntersection/PreservesOrder (#462 M2 mirror).
+  proc joinRows(driving: seq[string], present: HashSet[string]): seq[string] =
+    result = @[]
+    for d in driving:
+      if d in present: result.add(d)
+  proc drivingSet(driving: seq[string]): HashSet[string] =
+    result = initHashSet[string]()
+    for d in driving: result.incl(d)
+
+  let drv = @["100", "200", "300"]   # sorted ON-key walk
+  var present = initHashSet[string]()
+  present.incl("100"); present.incl("300")   # 200 has no record
+  let jr = joinRows(drv, present)
+  # JoinSoundness: every emitted key is present
+  for k in jr: assert k in present, "join soundness: " & k
+  # JoinCompleteness: every present-and-driving key is emitted
+  for k in drv:
+    if k in present: assert k in jr, "join completeness: " & k
+  # JoinIsIntersection: result == driving ∩ present
+  var expect = drivingSet(drv) * present
+  assert drivingSet(jr) == expect, "join is intersection"
+  # JoinPreservesOrder: emitted keys stay in walk order
+  assert sortedKeys(jr), "join preserves order"
+  # 200 (in driving but not present) is excluded, 100/300 included
+  assert jr == @["100", "300"], "join concrete, got " & $jr
+
   echo "  model mirrors hold"
 
   # --- Part 2: executor over an in-memory store ---
@@ -129,6 +155,26 @@ proc main() =
   # The ^LINK traversal that motivates the layer.
   let link = g.niSql("SELECT to_id FROM link WHERE from_type='MESH' AND from_id='D000001' AND to_type='PUBMED' ORDER BY to_id")
   assert link == "100\n200\n", "link traversal, got:\n" & link
+
+  # --- M2: nested-index JOIN over ^LINK (#462) ---
+  g.set("^PUBMED", @["100", "title"], "Title of 100")
+  g.set("^PUBMED", @["200", "title"], "Title of 200")
+  let joinRes = g.niSql(
+    "SELECT p.title FROM pubmed p JOIN link l ON l.to_id = p.pmid " &
+    "WHERE l.from_type='MESH' AND l.from_id='D000001' AND l.to_type='PUBMED'")
+  assert joinRes == "Title of 100\nTitle of 200\n", "M2 join, got:\n" & joinRes
+
+  # M2: key-col + field projection.
+  let joinKey = g.niSql(
+    "SELECT p.pmid, p.title FROM pubmed p JOIN link l ON l.to_id = p.pmid " &
+    "WHERE l.from_type='MESH' AND l.from_id='D000001' AND l.to_type='PUBMED' LIMIT 1")
+  assert joinKey == "100\tTitle of 100\n", "M2 key+field, got:\n" & joinKey
+
+  # M2: CATLINE never joins into a PUBMED lookup (wrong to_type skips).
+  let noCat = g.niSql(
+    "SELECT p.title FROM pubmed p JOIN link l ON l.to_id = p.pmid " &
+    "WHERE l.from_type='MESH' AND l.from_id='D000001' AND l.to_type='CATLINE'")
+  assert noCat == "", "M2 wrong to_type yields empty, got:\n" & noCat
 
   # Error gates.
   proc expectErr(sql: string, needle: string) =

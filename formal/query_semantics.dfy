@@ -158,4 +158,133 @@ module QuerySemantics {
   {
   }
 
+  // ---------------------------------------------------------------------------
+  // M2: nested-index join (driving walk × joined point-lookup)
+  // ---------------------------------------------------------------------------
+  //
+  // The driving table is walked in ascending Cmp order over the ON column; each
+  // driving key is looked up as the joined table's leading key. A row is emitted
+  // iff the joined key is present. Modeled over the sorted driving-key sequence
+  // and a `present: set<Sub>` of joined keys that exist.
+
+  // Rows emitted by the join: the driving keys whose joined record exists, in
+  // walk order.
+  function JoinRows(driving: seq<Sub>, present: set<Sub>): seq<Sub>
+    decreases |driving|
+  {
+    if driving == [] then []
+    else if driving[0] in present then [driving[0]] + JoinRows(driving[1..], present)
+    else JoinRows(driving[1..], present)
+  }
+
+  // Soundness: every emitted row's joined key exists.
+  lemma JoinSoundness(driving: seq<Sub>, present: set<Sub>)
+    ensures forall i | 0 <= i < |JoinRows(driving, present)| ::
+              JoinRows(driving, present)[i] in present
+    decreases |driving|
+  {
+    if driving == [] {
+    } else {
+      JoinSoundness(driving[1..], present);
+    }
+  }
+
+  // Completeness: every driving key whose joined record exists is emitted.
+  lemma JoinCompleteness(driving: seq<Sub>, present: set<Sub>)
+    ensures forall i | 0 <= i < |driving| ::
+              driving[i] in present ==> driving[i] in JoinRows(driving, present)
+    decreases |driving|
+  {
+    if driving == [] {
+    } else {
+      JoinCompleteness(driving[1..], present);
+    }
+  }
+
+  // The join result is exactly the set intersection of the driving keys and the
+  // joined relation — i.e. the nested-index join and a merge join agree, so the
+  // M2 planner may choose either without changing results.
+  ghost function DrivingSet(driving: seq<Sub>): set<Sub>
+    decreases |driving|
+  {
+    if driving == [] then {} else {driving[0]} + DrivingSet(driving[1..])
+  }
+
+  lemma JoinIsIntersection(driving: seq<Sub>, present: set<Sub>)
+    ensures DrivingSet(JoinRows(driving, present)) == DrivingSet(driving) * present
+    decreases |driving|
+  {
+    reveal DrivingSet; reveal JoinRows;
+    if driving == [] {
+    } else if driving[0] in present {
+      JoinIsIntersection(driving[1..], present);
+    } else {
+      JoinIsIntersection(driving[1..], present);
+    }
+  }
+
+  // The join preserves walk order (free ORDER BY on the ON column).
+  lemma JoinRowsFromDriving(driving: seq<Sub>, present: set<Sub>)
+    ensures forall i | 0 <= i < |JoinRows(driving, present)| ::
+              JoinRows(driving, present)[i] in DrivingSet(driving)
+    decreases |driving|
+  {
+    reveal DrivingSet;
+    if driving == [] {
+    } else if driving[0] in present {
+      JoinRowsFromDriving(driving[1..], present);
+    } else {
+      JoinRowsFromDriving(driving[1..], present);
+    }
+  }
+
+  // In a sorted sequence, the head is strictly below every element of the tail,
+  // stated over set membership (DrivingSet) rather than sequence membership.
+  lemma HeadBelowSet(driving: seq<Sub>, x: Sub)
+    requires SortedKeys(driving)
+    requires driving != []
+    requires x in DrivingSet(driving[1..])
+    ensures Cmp(driving[0], x) < 0
+    decreases |driving|
+  {
+    reveal DrivingSet;
+    if driving == [] {
+    } else if |driving| == 1 {
+    } else {
+      if x == driving[1] {
+        assert Cmp(driving[0], driving[1]) < 0;
+      } else {
+        assert x in DrivingSet(driving[2..]);
+        assert SortedKeys(driving[1..]);
+        // reuse the head-vs-tail fact on the tail sequence
+        HeadBelowSet(driving[1..], x);
+        assert Cmp(driving[1], x) < 0;
+        assert Cmp(driving[0], driving[1]) < 0;
+        CmpStrictTrans(driving[0], driving[1], x);
+      }
+    }
+  }
+
+  lemma JoinPreservesOrder(driving: seq<Sub>, present: set<Sub>)
+    requires SortedKeys(driving)
+    ensures SortedKeys(JoinRows(driving, present))
+    decreases |driving|
+  {
+    reveal DrivingSet;
+    if driving == [] {
+    } else if driving[0] in present {
+      JoinPreservesOrder(driving[1..], present);
+      JoinRowsFromDriving(driving[1..], present);
+      forall i | 0 <= i < |JoinRows(driving[1..], present)|
+        ensures Cmp(driving[0], JoinRows(driving[1..], present)[i]) < 0
+      {
+        HeadBelowSet(driving, JoinRows(driving[1..], present)[i]);
+      }
+    } else {
+      JoinPreservesOrder(driving[1..], present);
+    }
+  }
+
 }
+
+

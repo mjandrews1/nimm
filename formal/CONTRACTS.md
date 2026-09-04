@@ -38,7 +38,7 @@ listed, no stale rows, every mirror present).
 | `link_consistency.dfy` | FST ^LINK forward/reverse consistency, idempotent dedup, name→UI soundness (exact→synonym preference), query duality | `tests/test_link_consistency.nim` |
 | `readonly_path.dfy` | read-only handle is pure, views agree, write-then-read, absent-key default | `tests/test_lmdb_readonly.nim` |
 | `reference_loaders.dfy` | standalone loaders (Medicare/CDC/FAERS): idempotent + commutative record fields, fold idempotency, distinct keys | `tests/test_reference_loaders.nim` |
-| `query_semantics.dfy` | SELECT scan soundness/completeness, order-preservation (free ORDER BY), LIMIT prefix/bound, point-lookup count | `tests/test_ni_sql.nim` |
+| `query_semantics.dfy` | SELECT scan soundness/completeness, order-preservation (free ORDER BY), LIMIT prefix/bound, point-lookup count, nested-index JOIN soundness/completeness/intersection/order | `tests/test_ni_sql.nim` |
 | `reporter_link.dfy` | PUBMED→REPORTER funding-link consistency, idempotent dedup, query duality | `tests/test_reporter_link.nim` |
 | `supp_concepts.dfy` | SCR star-strip normalization (bare DUI), MESH→SUPP link/unlink consistency + idempotency + query duality | `tests/test_supp_concepts.nim` |
 | `search_engine.dfy` | FST index consistency + docId↔vecId bijection | `tests/test_fst_consistency.nim` |
