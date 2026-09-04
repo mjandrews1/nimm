@@ -31,6 +31,7 @@ listed, no stale rows, every mirror present).
 | `entry_term_expansion.dfy` | FST dict+BM25 merge dedup/dict-first | `tests/test_semantic_eval.sh` |
 | `engine_execution.dfy` | DO/QUIT call-stack + $ETRAP cap + label dispatch | `tests/test_etrap.sh`, `tests/test_bytecode_conformance.sh` |
 | `for_loop_bisim.dfy` | FOR loop bytecode ≡ AST (body + step + back-edge) | `tests/test_bytecode_conformance.sh` |
+| `bioxiv_link.dfy` | BioArxiv/medRxiv preprint→published DOI link: NA join-gate, consistency, idempotency, duality | `tests/test_biorxiv_link.nim` |
 | `bm25.dfy` | BM25 idf/tfNorm + `$NI_SEARCH` top-K | `tests/test_global_bm25.nim` |
 | `build_index.dfy` | df-batching == recompute, re-run idempotency, high-water-mark monotonicity | `tests/test_bm25_build_nim.nim` |
 | `hybrid_merge.dfy` | RRF fusion positive/monotone rerank | `tests/test_hybrid_rrf.nim` |

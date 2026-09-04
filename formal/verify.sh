@@ -20,6 +20,7 @@ dafny verify numeric_prefix.dfy functions_more.dfy
 dafny verify readonly_path.dfy
 dafny verify reference_loaders.dfy
 # Standalone models, alphabetically sorted (progress indicator).
+dafny verify bioxiv_link.dfy
 dafny verify bm25.dfy
 dafny verify bool_sets.dfy
 dafny verify boolean_search.dfy

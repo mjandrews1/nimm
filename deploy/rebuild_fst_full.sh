@@ -91,6 +91,11 @@ log "load FAERS"
 BUILD_FAERS=./bin/build_faers
 "$BUILD_FAERS" "$DB" "$DATA_DIR/faers-staging" >> "$LOG" 2>&1
 
+# 3h. BioArxiv/medRxiv preprints (^BIORXIV, published-DOI gate; #469)
+log "load BioArxiv (medRxiv)"
+BUILD_BX=./bin/build_biorxiv
+"$BUILD_BX" "$DB" medrxiv 2013-01-01 2026-01-01 >> "$LOG" 2>&1
+
 # 4. BM25 index build (Nim buildIndex; batched flush, #457)
 log "build BM25 MESH"
 "$BUILD_BM25" "$DB" MESH "^MESH" "name^scopeNote" >> "$LOG" 2>&1

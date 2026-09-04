@@ -373,3 +373,8 @@ bool_sets.dfy|SaveReadIdentity|test|tests/test_boolean_engine.nim
 bool_sets.dfy|KillReadEmpty|test|tests/test_boolean_engine.nim
 bool_sets.dfy|KillIdempotent|test|tests/test_boolean_engine.nim
 bool_sets.dfy|SaveIndependent|test|tests/test_boolean_engine.nim
+bioxiv_link.dfy|NaGate|test|tests/test_biorxiv_link.nim
+bioxiv_link.dfy|PublishedGate|test|tests/test_biorxiv_link.nim
+bioxiv_link.dfy|LinkBothPreserves|test|tests/test_biorxiv_link.nim
+bioxiv_link.dfy|LinkBothIdempotent|test|tests/test_biorxiv_link.nim
+bioxiv_link.dfy|QueryDuality|test|tests/test_biorxiv_link.nim

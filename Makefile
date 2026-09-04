@@ -16,6 +16,7 @@ fst-build:
 	nim c -d:release --path:. -o:bin/build_medicare future_search_tool/src/build_medicare.nim
 	nim c -d:release --path:. -o:bin/build_cdc future_search_tool/src/build_cdc.nim
 	nim c -d:release --path:. -o:bin/build_faers future_search_tool/src/build_faers.nim
+	nim c -d:release -d:ssl --path:. -o:bin/build_biorxiv future_search_tool/src/build_biorxiv.nim
 
 # Full fast test suite (rebuilds the binary, then runs all shell + .nim tests).
 test: build
