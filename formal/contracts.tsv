@@ -48,10 +48,10 @@ entry_term_expansion.dfy|SetOfContains|support|-
 entry_term_expansion.dfy|FilterSeenGood|support|-
 entry_term_expansion.dfy|ConcatNoDup|support|-
 entry_term_expansion.dfy|MergeDisjoint|support|-
-entry_term_expansion.dfy|MergeNoDup|test|tests/test_semantic_eval.sh
-entry_term_expansion.dfy|MergeDictFirst|test|tests/test_semantic_eval.sh
+entry_term_expansion.dfy|MergeNoDup|test|tests/test_dict_bm25_merge.nim
+entry_term_expansion.dfy|MergeDictFirst|test|tests/test_dict_bm25_merge.nim
 entry_term_expansion.dfy|TruncateCapped|support|-
-entry_term_expansion.dfy|MergeCapped|test|tests/test_semantic_eval.sh
+entry_term_expansion.dfy|MergeCapped|test|tests/test_dict_bm25_merge.nim
 engine_execution.dfy|DoQuitBalanced|test|tests/test_bytecode_conformance.sh
 engine_execution.dfy|QuitNoUnderflow|test|tests/test_bytecode_conformance.sh
 engine_execution.dfy|DoIncrementsDepth|test|tests/test_bytecode_conformance.sh
